@@ -36,3 +36,40 @@ Klaxon is an AI on-call engineer for a payments system. When an alert fires, it 
 - **Money is integer cents, in STRICT tables.** No floats anywhere near money; even raw SQL cannot store 100.5 cents.
 - **How you know it ran.** `pytest` passes (91 tests on 2026-10-09), and each demo run writes a dated JSON evidence file with the exact deliveries, the dashboard, the money report, the ledger and a SHA-256 of the code that produced it.
 - **How you know the tests mean something.** Claude broke the code on purpose 21 ways (for example: stop deduping, accept a truncated signature, commit the dedupe row separately, count reversed postings) and the tests caught every one.
+
+## The project explained simply (2026-10-09)
+
+**In one sentence.** Klaxon will be a robot helper that gets called when a payment website breaks. It will figure out what went wrong, suggest a fix, ask a human for permission, and then double-check that the money adds up, not just that the website looks okay.
+
+**The lemonade stand.** You run an online lemonade stand. A payment company (like Stripe) collects the money. Each time someone pays, it sends your computer a message, "Ana paid $5" (a **webhook**). Your computer writes it into the money notebook (the **ledger**). A screen counts the messages and whether each arrived okay (the **dashboard**). If the "got it" reply gets lost, the payment company sends the same message again. If your computer writes it down twice, the notebook claims $5 you never got, and the dashboard still looks perfect.
+
+**What the full Klaxon will do (later).** When an alarm goes off, it will (1) investigate the clues: metrics (numbers over time), logs (the system's diary), traces (the path each request took); (2) write a diagnosis with proof; (3) suggest a fix and wait for a human's yes; (4) apply it, then check that the system is healthy and the money is right; (5) write the report (postmortem).
+
+**Why it's needed.** Finding the cause of an outage is slow and stressful. The scariest bugs are quiet: money goes wrong while every screen looks fine. Today's AI helpers mostly verify with the same screens; HolmesGPT's deployment check compares "error rates, latency, restarts, and logs", which are exactly the signals that stayed green in the demo. Klaxon's job is the money check.
+
+**Why it was a good idea.** A real, unsolved problem that companies pay for (AI on-call startups have reportedly raised large rounds; on the ITBench research benchmark the best agents fixed 11.4% of problems). Small enough for one person to rebuild at small scale. It uses the skills in the backend and infrastructure jobs I'm applying for, it counts for both courses, and it connects to the webhook and money bugs I caught in code review at my co-op.
+
+**Where it could be used.** Anywhere money moves through software: online stores, payment providers, banks and fintech apps, subscriptions, marketplaces and delivery apps that pay sellers or drivers, ticketing, payroll, insurance. The same idea fits anywhere records must match reality: inventory, airline seats, hotel bookings.
+
+**The six breakdowns Klaxon will practice on.** A payment message arrives twice (counted twice); a message gets stuck in the queue (payments stuck "pending"); the payment company goes down and nothing stops the waiting (the site crawls); a bad update mixes up cents and dollars ($5 becomes $500 or 5 cents); a secret key is rotated wrong (every payment message rejected); the database runs out of connections (errors pile up).
+
+**What the demo shows.** Five payments and one refund (6 events) were sent as 7 messages, because payment #3's "got it" reply was "lost" on purpose, so #7 is its retry.
+- *Naive handler:* writes every message, so payment 3 ($69.68) went in twice. Dashboard GREEN (7 of 7 arrived fine). Ledger "balanced", because each entry has two matching halves ("money we're holding" and "sales"), and doubling both keeps them equal. Money check FAILED: the payment company says we hold $252.97, our notebook says $322.65, and the $69.68 difference is exactly payment 3 ("evt_0003 posted 2 times, expected 1").
+- *Idempotent handler (the fix):* "idempotent" means doing it twice is the same as doing it once. It stamps each message id DONE. When #7 arrived, it saw the stamp, wrote nothing, and still replied "got it" so the retries stop. Notebook = $252.97; every check passes. The DONE stamp and the entry are saved in one step (one database transaction), so a crash in the middle cannot leave a stamp without an entry, which would lose the payment.
+- *The lesson:* the dashboard looked the same in both runs. Only the money check told them apart. That is the check Klaxon will run after every fix.
+
+## Why does Stripe send the same message twice? (2026-10-09)
+
+**It's not a mistake. It's on purpose.** Over a network, a sender cannot know for sure whether the other side got a message. If no "got it" comes back, either the message was lost or the reply was lost, and the two look identical from the sender's side (in computer science this is the Two Generals' Problem). The provider has two choices:
+- *Send once and never retry ("at most once"):* some payments would simply never be recorded. A lost payment cannot be recovered by the receiver.
+- *Retry until it hears "got it" ("at least once"):* nothing is lost, but sometimes a message arrives twice. The receiver can spot a repeat by its event id and skip it.
+
+For money, "at least once" is the right choice, so the job of ignoring repeats belongs to the receiver. Stripe's docs say it directly: endpoints "might occasionally receive the same event more than once", and they recommend logging processed event ids, which is exactly what the idempotent handler does.
+
+**How a duplicate actually happens:** our server saves the payment but answers too slowly, so the provider gives up waiting and retries; the network drops our "200 OK" on the way back; our server crashes or restarts during a deploy after saving but before answering; a proxy in front of our server times out; someone resends an event by hand from the provider's dashboard.
+
+**It's everywhere, not just Stripe.** AWS SQS standard queues deliver "at least once". Kafka (week 1) does it too: a consumer that processes a message and crashes before saving its place (committing its offset) will read that message again after it restarts.
+
+**How often?** Providers don't publish a rate; Stripe says "occasionally". But a payment system handles huge numbers of messages, so even something rare per message happens regularly in total. That's why every serious payment system is built to be idempotent.
+
+**So what does Klaxon add, honestly?** The duplicate fix itself is well known (idempotency keys and unique constraints). Comparing your books with the provider's records (reconciliation) is standard practice at payment companies, often as a daily batch job. What Klaxon adds is joining the two worlds: the AI on-call agent proposes a fix, and a reconciliation-style money check right after the fix decides whether it's really fixed, across many kinds of breakdown, with a published score of how often the agent is right. Limits to admit: real reconciliation also handles fees, currencies, settlement timing and disputes; the demo's version is simplified.
