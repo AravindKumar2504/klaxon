@@ -21,3 +21,7 @@ Newest at the bottom. Each entry: date, decision, who decided, why.
 - **Evidence is tied to the code by a SHA-256 of `src/klaxon`**, so a run is traceable even before the first commit. The demo's exit code mirrors the money check (0 pass, 1 fail).
 - **Pitch film alternatives: HolmesGPT and the manual process** (Claude's draft; Aravind must confirm he looked at them). K8sGPT was dropped from the film to keep only claims he can defend. HolmesGPT's own deployment verification compares "error rates, latency, restarts, and logs" (its docs, read 2026-10-09); the film says that, and says "in its docs I didn't find a built-in money check", never "it has none".
 - **Film outro is a drawn Manim title, not the toolkit's ClaudeTitleOutro** (Claude). That component hard-codes the instructor's handle, which the assignment forbids. The toolkit's separate bookend check will report this; the reason is recorded in the film's FRICTIONAL.md.
+
+## 2026-10-09 (after the pitch film was posted)
+
+- **The pitch film stays course-only; it is not posted for recruiters** (Aravind). It stays in the course submission (PR #13), which the assignment requires. The recruiter-facing video will be the December demo of the working system.
