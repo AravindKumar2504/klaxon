@@ -19,7 +19,7 @@ Last updated: 2026-10-09, end of pitch-weekend session 1. The pitch is submitted
 
 ## Needs Aravind
 
-1. Run both demo commands yourself and read the first piece (`src/klaxon/checks/money.py`, `src/klaxon/patient/ledger.py`); `docs/STUDY-NOTES.md` explains the concepts. You ran the tests yourself on 2026-10-09: 91 passed.
+1. Read the first piece (`src/klaxon/checks/money.py`, `src/klaxon/patient/ledger.py`); `docs/STUDY-NOTES.md` explains the concepts. On 2026-10-09 you ran the tests yourself (91 passed) and the naive demo (16:46 PDT, same result: off by +$69.68; evidence `2026-10-09T234653Z_..._naive_seed7.json`).
 2. Week 1 decision: Docker Desktop (installer, GUI) or Colima (Homebrew, command line) as the container runtime.
 
 ## Next: week 1 (Oct 13-19), the patient system in Docker Compose
