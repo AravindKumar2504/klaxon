@@ -1,0 +1,198 @@
+# Klaxon's patient: a small payments system, running on this Mac.
+# Synthetic data and a fake provider; nothing talks to a real payment company.
+# Local development only: the passwords below are not secrets, and every port
+# listens on 127.0.0.1 only.
+#
+#   make up      build, start everything, wait until healthy
+#   make down    stop, keep the data
+#   make reset   stop and delete all data
+#
+# Ports on this Mac: payments API 8080, fake provider 8081, webhook receiver 8082,
+# PostgreSQL 5432, Redis 6379, Kafka 9094.
+
+name: klaxon
+
+x-patient-service: &patient-service
+  image: klaxon-patient:dev
+  build:
+    context: .
+    dockerfile: docker/patient.Dockerfile
+  restart: unless-stopped
+  init: true # a small PID 1 that passes SIGTERM on, so `docker compose stop` shuts services down cleanly
+
+x-http-health: &http-health
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+  interval: 10s
+  timeout: 5s
+  retries: 3
+  start_period: 30s
+  start_interval: 1s
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: klaxon
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres-dev-only
+      # Read by docker/postgres/initdb/10-roles.sh on first start.
+      LEDGER_WRITER_PASSWORD: ledger-writer-dev-only
+      PAYMENTS_API_PASSWORD: payments-api-dev-only
+      KLAXON_READONLY_PASSWORD: klaxon-readonly-dev-only
+    volumes:
+      - pgdata:/var/lib/postgresql # PostgreSQL 18 images keep their data under /var/lib/postgresql/18/docker
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      # Over TCP: during first-time setup the image runs a temporary server on the Unix socket only,
+      # and a socket check would call it ready before the real server listens.
+      test: ["CMD-SHELL", "pg_isready --host 127.0.0.1 --username postgres --dbname klaxon"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+
+  redis:
+    image: redis:8.8.3-alpine
+    # No persistence on purpose: Redis is the fast path for idempotency keys, and a
+    # restart that forgets every key must still be safe (PostgreSQL guards them).
+    # noeviction: never drop a key silently to make room.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+      start_interval: 1s
+
+  kafka:
+    image: apache/kafka:4.3.1
+    environment:
+      # One node that is both broker and controller. KRaft mode: no ZooKeeper.
+      CLUSTER_ID: xAezRtFwTCi18RbNJqimUQ
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # INTERNAL is for the other containers (kafka:9092), EXTERNAL for this Mac (127.0.0.1:9094;
+      # not "localhost", which tries IPv6 first while the port listens on IPv4 only).
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://127.0.0.1:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # A single broker can only keep one copy of each partition.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Topics come from kafka-init, so a typo in a topic name fails instead of creating a topic.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    ports:
+      - "127.0.0.1:9094:9094"
+    healthcheck:
+      # A small heap for the check's own JVM, or every check would reserve another 256 MB.
+      test: ["CMD-SHELL", "KAFKA_HEAP_OPTS=-Xmx64m /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 90s
+      start_interval: 3s
+
+  kafka-init:
+    image: apache/kafka:4.3.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: "no"
+    environment:
+      KAFKA_HEAP_OPTS: -Xmx64m
+    entrypoint: ["/bin/bash", "-euo", "pipefail", "-c"]
+    command:
+      - |
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic provider-events --partitions 3 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic provider-events-dlq --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe
+
+  fake-provider:
+    <<: *patient-service
+    command: ["python", "-m", "klaxon.patient.services.provider_app"]
+    environment:
+      PROVIDER_DB_PATH: /data/provider.sqlite3
+      WEBHOOK_URL: http://webhook-receiver:8000/webhooks/provider
+      WEBHOOK_SECRET: klaxon-dev-webhook-secret-not-real
+    volumes:
+      - providerdata:/data # its own volume: the provider's books never share our database
+    ports:
+      - "127.0.0.1:8081:8000"
+    healthcheck: *http-health
+
+  webhook-receiver:
+    <<: *patient-service
+    command: ["python", "-m", "klaxon.patient.services.receiver_app"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      WEBHOOK_SECRETS: klaxon-dev-webhook-secret-not-real # comma-separated: two secrets during a rotation
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8082:8000"
+    healthcheck: *http-health
+
+  payments-api:
+    <<: *patient-service
+    command: ["python", "-m", "klaxon.patient.services.payments_api"]
+    environment:
+      DATABASE_URL: postgresql://payments_api:payments-api-dev-only@postgres:5432/klaxon
+      REDIS_URL: redis://redis:6379/0
+      PROVIDER_URL: http://fake-provider:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fake-provider:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8000"
+    healthcheck: *http-health
+
+  ledger-consumer:
+    <<: *patient-service
+    command: ["python", "-m", "klaxon.patient.services.ledger_consumer"]
+    environment:
+      DATABASE_URL: postgresql://ledger_writer:ledger-writer-dev-only@postgres:5432/klaxon
+      KAFKA_BOOTSTRAP: kafka:9092
+      # idempotent (default) or naive, the known-bad baseline: make up HANDLER=naive
+      LEDGER_HANDLER: ${LEDGER_HANDLER:-idempotent}
+      HEARTBEAT_PATH: /tmp/ledger-consumer.heartbeat
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # Healthy while the poll loop keeps touching its heartbeat file. That means "the loop is alive",
+      # not "it is consuming": the loop also runs while Kafka is unreachable. Lag is the consuming signal.
+      test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/ledger-consumer.heartbeat') > 15)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+
+volumes:
+  pgdata:
+  kafkadata:
+  providerdata:

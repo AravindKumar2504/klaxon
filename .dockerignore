@@ -1,0 +1,14 @@
+# The image needs only pyproject.toml, requirements/ and src/.
+.git
+.venv
+**/__pycache__
+**/*.pyc
+*.egg-info
+.pytest_cache
+.ruff_cache
+.env
+.env.*
+docs
+evidence
+media
+tests
