@@ -1,8 +1,10 @@
 """Small pieces every service uses: settings from the environment, JSON logs, a heartbeat.
 
 Logs are one JSON object per line on stdout, so Docker keeps them and a log
-search (week 3) can filter by field. Treat log content as untrusted input:
-anything that reached a request body can end up in a log line.
+search (week 3) can filter by field. Klaxon will read these logs, so they are
+untrusted input (prompt-injection text can hide in them). To keep that surface
+small, request lines record the route template ("/payments/{payment_id}"), never
+the raw path a caller sent, and every logged string is cut at 300 characters.
 """
 
 from __future__ import annotations
@@ -36,6 +38,15 @@ def env_list(name: str, default: str | None = None) -> list[str]:
     return [item.strip() for item in env_str(name, default).split(",") if item.strip()]
 
 
+MAX_LOGGED_CHARS = 300
+
+
+def _capped(value: object) -> object:
+    if isinstance(value, str) and len(value) > MAX_LOGGED_CHARS:
+        return f"{value[:MAX_LOGGED_CHARS]}...[{len(value) - MAX_LOGGED_CHARS} more characters cut]"
+    return value
+
+
 class JsonFormatter(logging.Formatter):
     def __init__(self, service: str) -> None:
         super().__init__()
@@ -47,11 +58,11 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": self.service,
             "logger": record.name,
-            "msg": record.getMessage(),
+            "msg": _capped(record.getMessage()),
         }
-        line.update(getattr(record, "fields", {}))
+        line.update({name: _capped(value) for name, value in getattr(record, "fields", {}).items()})
         if record.exc_info:
-            line["exc"] = self.formatException(record.exc_info)
+            line["exc"] = self.formatException(record.exc_info)[-2000:]  # the end of a traceback says the most
         return json.dumps(line, default=str)
 
 
@@ -61,6 +72,8 @@ def configure_logging(service: str, level: str | None = None) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level or os.environ.get("LOG_LEVEL", "INFO"))
+    # httpx logs every request at INFO with its full URL; our own lines already say what happened.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def log(logger: logging.Logger, level: int, msg: str, **fields: object) -> None:
@@ -68,8 +81,13 @@ def log(logger: logging.Logger, level: int, msg: str, **fields: object) -> None:
     logger.log(level, msg, extra={"fields": fields})
 
 
+def _route(request: Any) -> str:
+    """The matched route's template, never the raw path (which the caller chose)."""
+    return getattr(request.scope.get("route"), "path", None) or "(no matching route)"
+
+
 def add_request_logging(app: Any, logger: logging.Logger) -> None:
-    """One log line per HTTP request: method, path, status and duration. Health checks are skipped."""
+    """One log line per HTTP request: method, route, status and duration. Health checks are skipped."""
 
     @app.middleware("http")
     async def _log_request(request: Any, call_next: Any) -> Any:
@@ -77,19 +95,33 @@ def add_request_logging(app: Any, logger: logging.Logger) -> None:
         try:
             response = await call_next(request)
         except Exception:
-            logger.exception("unhandled error", extra={"fields": {"method": request.method, "path": request.url.path}})
+            logger.exception("unhandled error", extra={"fields": {"method": request.method, "route": _route(request)}})
             raise
-        if request.url.path != "/healthz":
+        route = _route(request)
+        if route != "/healthz":
             log(
                 logger,
                 logging.INFO,
                 "request",
                 method=request.method,
-                path=request.url.path,
+                route=route,
                 status=response.status_code,
                 ms=round((time.perf_counter() - start) * 1000, 1),
             )
         return response
+
+
+def add_trusted_hosts(app: Any, *service_names: str) -> None:
+    """Answer only requests addressed to this machine or to the service's Compose name.
+
+    The ports listen on 127.0.0.1 only, but a web page can still aim a browser at
+    127.0.0.1 through DNS rebinding. Such a request carries the attacker's host name
+    in its Host header, so it is refused (400).
+    """
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+    allowed = ["127.0.0.1", "localhost", "testserver", *service_names]  # testserver: FastAPI's test client
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed)
 
 
 class Heartbeat:

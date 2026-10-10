@@ -3,7 +3,7 @@
 Same accounts, same posting rules (`klaxon.patient.ledger.posting_lines` and
 `check_lines`), and the same table and column names as the first piece's
 SQLite ledger, so the money check runs unchanged on both. The schema is in
-docker/postgres/schema.sql.
+docker/postgres/initdb/20-schema.sql.
 
 The consumer connects as ledger_writer, a role that may SELECT and INSERT
 ledger rows but has no UPDATE or DELETE. "Ledger rows are never edited or

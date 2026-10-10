@@ -7,13 +7,15 @@ then commit the offset. Read twice + idempotent booking = booked once.
 
 What happens to each message:
 - booked, or already booked (a duplicate): commit the offset, move on.
-- not bookable as it is (bad JSON, missing fields, wrong currency, a value the
-  database refuses): send it to the dead-letter topic with the reason, commit,
-  move on. Never drop it silently.
-- any other database problem (down, permissions, a broken schema): retry the
-  same message with backoff, without committing, until it works. A money event
-  is never skipped because something on our side is broken; the growing lag is
-  what an alert watches (week 2).
+- not bookable as it is (no body, bad JSON, missing or malformed fields, wrong
+  currency, an absurd amount), or values the database refuses (DataError,
+  IntegrityError, ProgramLimitExceeded, a string it cannot encode): send it to
+  the dead-letter topic with the reason, commit, move on. Never drop it
+  silently, and never let one bad message block the partition behind it.
+- any other problem (the database is down, a permission or schema problem, a
+  bug in our booking rules): retry the same message with backoff, without
+  committing, until it works. A money event is never skipped because something
+  on our side is broken; the growing lag is what an alert watches (week 2).
 
 Run: python -m klaxon.patient.services.ledger_consumer
 """
@@ -39,6 +41,8 @@ from klaxon.patient.services.pg_ledger import PgLedger
 logger = logging.getLogger("klaxon.ledger_consumer")
 
 RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0, 4.0, 8.0, 15.0)
+# The database refuses these values; retrying the same message cannot change that.
+REFUSED_VALUES = (psycopg.DataError, psycopg.IntegrityError, psycopg.errors.ProgramLimitExceeded, UnicodeError)
 
 
 class Booker(Protocol):
@@ -92,9 +96,10 @@ class LedgerConsumer:
         while True:
             try:
                 outcome = self.booker.book(event, source)
-            except psycopg.DataError as exc:  # this value cannot be stored; retrying will not change that
-                return self._dead_letter(msg, source, f"database refused the values: {exc}", stop)
-            except Exception as exc:  # down, permissions, schema: ours to fix, so wait and retry
+            except REFUSED_VALUES as exc:
+                reason = f"database refused the values: {type(exc).__name__}: {exc}"
+                return self._dead_letter(msg, source, reason, stop)
+            except Exception as exc:  # down, permissions, schema, a bug: ours to fix, so wait and retry
                 delay = self.retry_delays[min(attempt, len(self.retry_delays) - 1)]
                 attempt += 1
                 log(
@@ -160,7 +165,14 @@ def main() -> None:
     bootstrap = env_str("KAFKA_BOOTSTRAP", "kafka:9092")
     topic = env_str("KAFKA_TOPIC", EVENTS_TOPIC)
     pool = ConnectionPool(
-        env_str("DATABASE_URL"), min_size=1, max_size=2, kwargs={"autocommit": True}, name="ledger", open=True
+        env_str("DATABASE_URL"),
+        min_size=1,
+        max_size=2,
+        kwargs={"autocommit": True},
+        name="ledger",
+        timeout=5.0,  # with the database down, fail within 5 s and go through the logged retry loop
+        check=ConnectionPool.check_connection,  # after a PostgreSQL restart, drop dead connections first
+        open=True,
     )
     consumer = make_consumer(
         bootstrap, env_str("KAFKA_GROUP", LEDGER_GROUP), client_id=f"ledger-{socket.gethostname()}"

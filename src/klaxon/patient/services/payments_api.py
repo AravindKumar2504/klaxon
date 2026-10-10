@@ -36,7 +36,15 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
-from klaxon.patient.services.common import add_request_logging, configure_logging, env_float, env_int, env_str, log
+from klaxon.patient.services.common import (
+    add_request_logging,
+    add_trusted_hosts,
+    configure_logging,
+    env_float,
+    env_int,
+    env_str,
+    log,
+)
 from klaxon.patient.services.events import MAX_AMOUNT_CENTS
 from klaxon.patient.services.idempotency import RedisIdempotency
 from klaxon.patient.services.payments_store import PaymentRow, PaymentsStore, PgPaymentsStore, RefundRow
@@ -116,6 +124,7 @@ def _respond(outcome: Outcome, headers: dict[str, str] | None = None) -> JSONRes
 def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: ProviderClient) -> FastAPI:
     app = FastAPI(title="Payments API")
     add_request_logging(app, logger)
+    add_trusted_hosts(app, "payments-api")
 
     def run_once(scope: str, key: str | None, request_fingerprint: str, work: Callable[[], Outcome]) -> JSONResponse:
         """Layer 1: the Redis claim around the work. The work itself goes through layers 2 and 3."""
@@ -130,17 +139,16 @@ def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: Pr
             message = "a request with this Idempotency-Key is still running"
             return _respond(refused(409, "request_in_progress", message, final=False), {"Retry-After": "1"})
 
-        ours = claim.kind == "new"  # "unavailable" means Redis is down: the database alone guards the key
+        # claim.kind is "new" (ours) or "unavailable" (Redis is down: the database alone guards the key).
         try:
             outcome = work()
         except BaseException:
-            if ours:
-                idempotency.release(scope, key)
+            idempotency.release(scope, key, claim)
             raise
         if outcome.final:
-            idempotency.complete(scope, key, request_fingerprint, outcome.status, outcome.body)
-        elif ours:
-            idempotency.release(scope, key)  # not finished: let a retry run
+            idempotency.complete(scope, key, claim, request_fingerprint, outcome.status, outcome.body)
+        else:
+            idempotency.release(scope, key, claim)  # not finished: let a retry run
         return _respond(outcome)
 
     @app.post("/payments", status_code=201)
@@ -269,6 +277,8 @@ def main() -> None:
         max_size=env_int("DB_POOL_SIZE", 10),
         kwargs={"autocommit": True, "row_factory": dict_row},
         name="payments",
+        timeout=env_float("DB_POOL_TIMEOUT_SECONDS", 5.0),  # fail fast instead of queueing for 30 s
+        check=ConnectionPool.check_connection,  # after a PostgreSQL restart, drop dead connections first
         open=True,
     )
     redis_client = redis.Redis.from_url(

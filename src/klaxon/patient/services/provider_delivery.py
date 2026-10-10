@@ -1,7 +1,8 @@
 """The fake provider's webhook sender: at least once, signed, retried with backoff.
 
 Like a real provider, it keeps retrying an event until our endpoint answers
-2xx, so no event is lost. The price is duplicates: if an acknowledgement gets
+2xx, for up to three days (Stripe's window), so an outage on our side shorter
+than that loses nothing. The price is duplicates: if an acknowledgement gets
 lost, the provider cannot tell "never arrived" from "arrived, answer lost", so
 it sends the event again. Our side must ignore the repeat.
 

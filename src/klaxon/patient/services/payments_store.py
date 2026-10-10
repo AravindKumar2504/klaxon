@@ -73,6 +73,10 @@ class PgPaymentsStore:
     ) -> tuple[PaymentRow, bool]:
         """(row, created). A repeated key returns the row that already exists, whatever Redis knows."""
         with self.pool.connection() as conn:
+            # Look first, so a repeat does not use up an id; ON CONFLICT still settles a race between two inserts.
+            row = conn.execute("SELECT * FROM payments WHERE idempotency_key = %s", (idempotency_key,)).fetchone()
+            if row is not None:
+                return PaymentRow(**row), False
             row = conn.execute(
                 "INSERT INTO payments (idempotency_key, request_fingerprint, customer, amount_cents, currency, status)"
                 " VALUES (%s, %s, %s, %s, %s, 'pending') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *",
@@ -101,6 +105,9 @@ class PgPaymentsStore:
         self, idempotency_key: str, fingerprint: str, payment_id: str, amount_cents: int
     ) -> tuple[RefundRow, bool]:
         with self.pool.connection() as conn:
+            row = conn.execute("SELECT * FROM refunds WHERE idempotency_key = %s", (idempotency_key,)).fetchone()
+            if row is not None:
+                return RefundRow(**row), False
             row = conn.execute(
                 "INSERT INTO refunds (idempotency_key, request_fingerprint, payment_id, amount_cents, status)"
                 " VALUES (%s, %s, %s, %s, 'pending') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *",

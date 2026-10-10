@@ -4,7 +4,7 @@ Topics (created by the kafka-init container in compose.yaml, never on the fly):
 - provider-events: every webhook the receiver accepted, keyed by payment id,
   3 partitions. One payment's events share a partition, so they stay in order
   relative to each other; different payments are spread across partitions.
-- provider-events.dlq: events the ledger consumer could not book, with the
+- provider-events-dlq: events the ledger consumer could not book, with the
   reason in a header, kept for a human to look at.
 
 Consumer group "ledger": Kafka splits the topic's partitions among the group's
@@ -14,6 +14,7 @@ committed (its place in the log). Lag is how far that place is behind the end.
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections.abc import Mapping
 
@@ -21,14 +22,17 @@ from confluent_kafka import (
     OFFSET_INVALID,
     Consumer,
     ConsumerGroupTopicPartitions,
+    KafkaError,
     KafkaException,
     Producer,
     TopicPartition,
 )
 from confluent_kafka.admin import AdminClient, OffsetSpec
 
+logger = logging.getLogger("klaxon.kafka")
+
 EVENTS_TOPIC = "provider-events"
-DLQ_TOPIC = "provider-events.dlq"
+DLQ_TOPIC = "provider-events-dlq"
 LEDGER_GROUP = "ledger"
 
 
@@ -39,22 +43,24 @@ class PublishError(Exception):
 class KafkaPublisher:
     def __init__(self, bootstrap: str, client_id: str, ack_timeout_seconds: float = 4.0) -> None:
         self.ack_timeout_seconds = ack_timeout_seconds
-        self._producer = Producer(
-            {
-                "bootstrap.servers": bootstrap,
-                "client.id": client_id,
-                # The broker drops duplicates caused by the producer's own internal
-                # retries. (Duplicates from the provider retrying are a different
-                # thing; the ledger consumer handles those.)
-                "enable.idempotence": True,
-                "acks": "all",
-                "linger.ms": 0,
-                "request.timeout.ms": 2000,
-                # Give up within 3 s, so the receiver can answer 503 before the
-                # provider's own 5 s timeout, and the provider retries.
-                "delivery.timeout.ms": 3000,
-            }
-        )
+        self._config = {
+            "bootstrap.servers": bootstrap,
+            "client.id": client_id,
+            # The broker drops duplicates caused by the producer's own internal
+            # retries. (Duplicates from the provider retrying are a different
+            # thing; the ledger consumer handles those.)
+            "enable.idempotence": True,
+            "acks": "all",
+            "linger.ms": 0,
+            "request.timeout.ms": 2000,
+            # Give up within 3 s, so the receiver can answer 503 before the
+            # provider's own 5 s timeout, and the provider retries.
+            "delivery.timeout.ms": 3000,
+            "error_cb": self._on_error,
+        }
+        self._fatal: str | None = None  # set when librdkafka says this producer can never send again
+        self._swap = threading.Lock()
+        self._producer = Producer(self._config)
         self._stop = threading.Event()
         # Delivery reports arrive through poll(); one thread keeps polling.
         self._poller = threading.Thread(target=self._poll, name="kafka-producer-poll", daemon=True)
@@ -64,8 +70,24 @@ class KafkaPublisher:
         while not self._stop.is_set():
             self._producer.poll(0.1)
 
+    def _on_error(self, err: KafkaError) -> None:
+        if err.fatal():
+            # For example an idempotent-producer sequence error. librdkafka's advice: make a new producer.
+            self._fatal = str(err)
+            logger.error("kafka producer hit a fatal error; it will be replaced", extra={"fields": {"error": str(err)}})
+        else:
+            logger.warning("kafka client error", extra={"fields": {"error": str(err)}})
+
+    def _replace_if_fatal(self) -> None:
+        with self._swap:
+            if self._fatal is None:
+                return
+            self._producer = Producer(self._config)  # the poll thread picks up the new one
+            self._fatal = None
+
     def publish(self, topic: str, key: str, value: bytes, headers: Mapping[str, str] | None = None) -> tuple[int, int]:
         """Write one message and wait for the broker's acknowledgement. Returns (partition, offset)."""
+        self._replace_if_fatal()
         done = threading.Event()
         report: dict = {}
 
@@ -90,6 +112,8 @@ class KafkaPublisher:
         return report["msg"].partition(), report["msg"].offset()
 
     def healthy(self, timeout: float = 2.0) -> bool:
+        if self._fatal is not None:
+            return False
         try:
             self._producer.list_topics(timeout=timeout)
         except KafkaException:

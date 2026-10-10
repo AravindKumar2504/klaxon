@@ -6,6 +6,11 @@ each key for 24 hours: a repeat gets the saved response instead of a second
 payment, and a repeat that arrives while the first request is still running
 gets 409 (try again shortly).
 
+Each claim carries a random token. Releasing a claim, or saving the final
+response, happens in a small Lua script that first checks the key still holds
+that token, so a slow request whose claim has expired can never delete or
+overwrite the claim of a newer request with the same key.
+
 Redis is not the guarantee. Keys expire, this stack runs Redis without
 persistence (a restart forgets every key), and Redis can be down. Behind it,
 payments.idempotency_key is UNIQUE in PostgreSQL, so a repeated key always
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass
 
 import redis
@@ -27,9 +33,29 @@ from klaxon.patient.services.common import log
 logger = logging.getLogger("klaxon.idempotency")
 
 KEY_TTL_SECONDS = 24 * 3600  # how long a finished response is replayed (Stripe also keeps keys for 24 hours)
-LOCK_TTL_SECONDS = 30  # how long a running request holds its key if the API dies mid-request
+# How long a running request holds its key. Longer than the slowest request the API allows: up to 5 s
+# waiting for a database connection, plus three provider attempts of 3 s each with backoff (about 15 s).
+LOCK_TTL_SECONDS = 60
 
 KINDS = ("new", "replay", "in_progress", "mismatch", "unavailable")
+
+# Delete the key only if it still holds our claim.
+RELEASE = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+# Save the final response if the key still holds our claim, or if nobody holds it any more.
+COMPLETE = """
+local current = redis.call('GET', KEYS[1])
+if current == false or current == ARGV[1] then
+    redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+    return 1
+end
+return 0
+"""
 
 
 @dataclass(frozen=True)
@@ -37,6 +63,7 @@ class Claim:
     kind: str  # one of KINDS
     status: int | None = None  # for "replay": the saved response
     body: dict | None = None
+    held: str | None = None  # for "new": the exact value we stored, with our token in it
 
 
 class RedisIdempotency:
@@ -50,11 +77,11 @@ class RedisIdempotency:
     def claim(self, scope: str, key: str, fingerprint: str) -> Claim:
         """Try to take the key for this request. "new" means it is ours; release or complete it later."""
         name = self._name(scope, key)
-        running = json.dumps({"state": "in_progress", "fingerprint": fingerprint})
+        running = json.dumps({"state": "in_progress", "fingerprint": fingerprint, "token": uuid.uuid4().hex})
         try:
             for _ in range(2):  # a second pass covers a key that expired between SET and GET
                 if self.client.set(name, running, nx=True, ex=LOCK_TTL_SECONDS):
-                    return Claim("new")
+                    return Claim("new", held=running)
                 saved = self.client.get(name)
                 if saved is not None:
                     break
@@ -70,18 +97,22 @@ class RedisIdempotency:
             return Claim("in_progress")
         return Claim("replay", record["status"], record["body"])
 
-    def complete(self, scope: str, key: str, fingerprint: str, status: int, body: dict) -> None:
-        """Save the final response, so repeats of this key replay it."""
-        record = {"state": "done", "fingerprint": fingerprint, "status": status, "body": body}
+    def complete(self, scope: str, key: str, claim: Claim, fingerprint: str, status: int, body: dict) -> bool:
+        """Save the final response, so repeats of this key replay it. False if a newer request holds the key."""
+        record = json.dumps({"state": "done", "fingerprint": fingerprint, "status": status, "body": body})
         try:
-            self.client.set(self._name(scope, key), json.dumps(record), ex=KEY_TTL_SECONDS)
+            saved = self.client.eval(COMPLETE, 1, self._name(scope, key), claim.held or "", record, KEY_TTL_SECONDS)
         except redis.RedisError as exc:
             log(logger, logging.WARNING, "could not save the response in redis", error=str(exc))
+            return False
+        return bool(saved)
 
-    def release(self, scope: str, key: str) -> None:
-        """Give the key back without a saved response (the request did not finish), so a retry can run."""
+    def release(self, scope: str, key: str, claim: Claim) -> None:
+        """Give our claim back without a saved response (the request did not finish), so a retry can run."""
+        if claim.held is None:
+            return  # we never held the key (Redis was down), so there is nothing of ours to give back
         try:
-            self.client.delete(self._name(scope, key))
+            self.client.eval(RELEASE, 1, self._name(scope, key), claim.held)
         except redis.RedisError as exc:
             log(logger, logging.WARNING, "could not release the key in redis; it expires on its own", error=str(exc))
 

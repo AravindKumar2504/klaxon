@@ -28,7 +28,14 @@ from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
-from klaxon.patient.services.common import add_request_logging, configure_logging, env_float, env_int, env_str
+from klaxon.patient.services.common import (
+    add_request_logging,
+    add_trusted_hosts,
+    configure_logging,
+    env_float,
+    env_int,
+    env_str,
+)
 from klaxon.patient.services.provider_delivery import Behavior, WebhookSender
 from klaxon.patient.services.provider_store import ProviderError, ProviderStore
 
@@ -73,6 +80,7 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
 
     app = FastAPI(title="Fake payment provider (simulator)", lifespan=lifespan)
     add_request_logging(app, logger)
+    add_trusted_hosts(app, "fake-provider")
 
     @app.exception_handler(ProviderError)
     async def provider_error(request: Request, exc: ProviderError) -> JSONResponse:

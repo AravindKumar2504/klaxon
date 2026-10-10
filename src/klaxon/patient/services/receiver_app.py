@@ -3,8 +3,10 @@
 The receiver books no money and does not dedupe. It proves the request came
 from the provider (HMAC, see `klaxon.patient.signatures`) and hands the exact
 signed bytes to Kafka. It answers 200 only after Kafka has acknowledged the
-write, so an event is never acknowledged and then lost. If Kafka is down it
-answers 503 and the provider retries later.
+write, so the provider never hears "got it" for an event Kafka does not have.
+If Kafka is down it answers 503 and the provider retries later. (This stack
+runs one broker with one copy of each partition, so a crash of the whole
+Docker VM could still lose the newest writes; production runs three brokers.)
 
 Duplicates pass straight through on purpose. The ledger consumer drops them
 with a database constraint, in the same transaction as the posting. Deduping
@@ -32,7 +34,15 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from klaxon.patient import signatures
-from klaxon.patient.services.common import add_request_logging, configure_logging, env_int, env_list, env_str, log
+from klaxon.patient.services.common import (
+    add_request_logging,
+    add_trusted_hosts,
+    configure_logging,
+    env_int,
+    env_list,
+    env_str,
+    log,
+)
 from klaxon.patient.services.events import BadEvent, id_and_key
 from klaxon.patient.services.kafka_io import EVENTS_TOPIC, KafkaPublisher, PublishError
 
@@ -95,6 +105,7 @@ def create_app(
 
     app = FastAPI(title="Webhook receiver", lifespan=lifespan)
     add_request_logging(app, logger)
+    add_trusted_hosts(app, "webhook-receiver")
 
     @app.post("/webhooks/provider")
     async def receive(request: Request) -> JSONResponse:
