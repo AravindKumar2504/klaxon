@@ -73,3 +73,21 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 **How often?** Providers don't publish a rate; Stripe says "occasionally". But a payment system handles huge numbers of messages, so even something rare per message happens regularly in total. That's why every serious payment system is built to be idempotent.
 
 **So what does Klaxon add, honestly?** The duplicate fix itself is well known (idempotency keys and unique constraints). Comparing your books with the provider's records (reconciliation) is standard practice at payment companies, often as a daily batch job. What Klaxon adds is joining the two worlds: the AI on-call agent proposes a fix, and a reconciliation-style money check right after the fix decides whether it's really fixed, across many kinds of breakdown, with a published score of how often the agent is right. Limits to admit: real reconciliation also handles fees, currencies, settlement timing and disputes; the demo's version is simplified.
+
+## Where else it applies, and do these bugs really happen? (2026-10-09)
+
+**Two halves.** The on-call part (alarm, investigate, diagnose, fix with a human's yes, report) works for almost any software. The checker is what you swap per business. Payments came first because the truth is easy to check against the provider's records.
+- Money moves: online stores (every payment booked once), delivery and ride-sharing (one payout per trip), marketplaces (payouts = sales minus fees), subscriptions (one charge per billing period), ticketing (tickets match payments; seats sold never exceed seats), money-transfer apps (money out = money in), payroll (one paycheck per pay period).
+- Same pattern, no money: inventory (website stock = warehouse count), airlines and hotels (one booking per seat or room), notifications (each sent once).
+- Interview line: "The agent loop is general and the checker plugs in; I built the payments checker first because there the truth is easy to verify against the provider's records."
+
+**Real incidents (checked 2026-10-09):**
+- Santander UK, 25 Dec 2021: a scheduling glitch sent about 75,000 payments a second time (about £130m); workers at roughly 2,000 businesses were paid twice. https://fortune.com/2021/12/31/santander-bank-accidentally-sent-175-million-payments-christmas-day-wants-money-back
+- NatWest, May 2022: about 112,000 debit card customers saw purchases taken twice; merchants were paid once; overdraft fees were waived. https://www.moneyexpert.com/news/more-than-100-000-natwest-accounts-mistakenly-showing-payments-twice/
+- KeyBank, Nov 2025: a local TV station reported some debit purchases from 3 Nov posted twice, pushing some accounts below zero. https://digital-release.rochesterfirst.com/?p=2440193
+- Citibank, Aug 2020: meant to send about $8m in interest, sent about $900m; lost the first ruling on about $500m, won on appeal in 2022. https://www.bankingdive.com/news/citi-wins-appeal-500-million-revlon-loan-blunder/631536/
+- Citigroup, Apr 2024: a $280 payment entered as $81 trillion, caught about 90 minutes later and reversed; Citi credited its "detective controls". https://www.nbcsandiego.com/news/business/money-report/another-near-miss-citigroup-mistakenly-credited-a-customer-account-with-81-trillion/3766861/
+- Canada's Phoenix pay system, 2016 to now: about 223,000 employees overpaid at least once in its first three years; roughly $5bn spent; 216,000 requests still waiting in Feb 2026. https://www.ctvnews.ca/politics/article/phoenix-pay-errors-continue-to-haunt-public-service-a-decade-after-launch/
+- UK Post Office Horizon: accounting-software bugs made branch accounts look short and hundreds of branch managers were blamed; the 2019 High Court ruling called the system "not remotely robust". https://caselaw.nationalarchives.gov.uk/ewhc/qb/2019/3408
+
+**Why customers rarely see them:** rare per payment, usually caught and reversed fast, and many errors hit the company's own books instead of the customer (Santander covered the extra payments itself). They stay rare because engineers catch them in review, the way I caught a webhook data-loss path in code review at my co-op.
