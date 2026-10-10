@@ -33,6 +33,8 @@ markers = [
     "integration: needs the Compose stack's PostgreSQL and Kafka running (make up)",
     "e2e: resets the whole Compose stack and drives it end to end (make e2e)",
 ]
+# Starlette 1.7 asks for a replacement HTTP client in its test client; httpx still works. Revisit on upgrades.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
 
 [tool.ruff]
 line-length = 120
@@ -40,4 +42,6 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
-ignore = ["UP017"]  # the first piece writes timezone.utc; keep one style
+# UP017: the first piece writes timezone.utc; keep one style.
+# E501: ruff format wraps what it can; a long SQL string literal is clearer left whole.
+ignore = ["UP017", "E501"]

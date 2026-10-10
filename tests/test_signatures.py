@@ -47,7 +47,7 @@ def test_the_tolerance_window_is_inclusive_at_300_seconds():
         f"t={NOW},v1={signatures.compute(SECRET, NOW, BODY)[:32]}",  # half of the right digest
         "v1=00",  # no timestamp
         f"t={'9' * 5000},v1=00",  # int() would raise past 4300 digits
-        f"t=²,v1=00",  # a Unicode digit that int() rejects
+        "t=²,v1=00",  # a Unicode digit that int() rejects
         f"t={NOW},v1=éé",  # non-ASCII: hmac.compare_digest would raise TypeError
         b"t=1,v1=\xff",  # raw header bytes that are not ASCII
         12345,  # not a header at all
