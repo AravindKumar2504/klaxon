@@ -14,7 +14,7 @@ unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PR
 PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
-.PHONY: help venv test lint up down reset ps logs test-integration e2e check demo-live local-docker-only
+.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live local-docker-only
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-17s %s\n", $$1, $$2}'
@@ -27,7 +27,7 @@ test: ## offline tests, no Docker needed
 	$(PY) -m pytest -q
 
 lint: ## ruff: style and common mistakes
-	.venv/bin/ruff check src tests
+	.venv/bin/ruff check src tests scripts
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
 		src/klaxon/demo/live.py tests/services tests/integration tests/e2e tests/test_live_check.py
 
@@ -55,6 +55,9 @@ test-integration: ## tests against the running stack's PostgreSQL and Kafka (mak
 
 e2e: ## reset the stack and drive it end to end (about a minute)
 	$(PY) -m pytest -q -m e2e
+
+mutants: ## break the code on purpose, on a copy, and check the tests notice (make up first)
+	$(PY) scripts/mutation_check.py "$(CURDIR)" "$${TMPDIR:-/tmp}/klaxon-mutants" --with-stack
 
 check: ## run the money check against the running stack
 	$(PY) -m klaxon.checks.live

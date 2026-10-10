@@ -1,0 +1,196 @@
+"""Break the code on purpose, one way at a time, on a copy of the repo, and check the tests notice.
+
+A test suite that still passes when the code is broken proves nothing. Each "mutant" below
+replaces one piece of code with a plausible mistake (commit before booking, answer 200 when
+Kafka did not confirm, trust Redis alone, ...). The copy lives in WORKDIR, so the repo itself
+is never touched. A mutant is "caught" when at least one test fails.
+
+Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack]    (or: make mutants)
+Offline mutants run the offline suite. --with-stack also runs the mutants that need the
+stack's PostgreSQL, Redis and Kafka (pytest -m integration; make up first).
+Exit 0 when every mutant is caught, 1 when one survives, 2 when the unbroken copy fails.
+"""
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+S = "src/klaxon/patient/services/"
+
+# (name, file, old, new, needs_stack)
+MUTANTS = [
+    ("consumer commits before booking", S + "ledger_consumer.py",
+     "            if self.handle(msg, stop):\n                self._commit(msg)",
+     "            self._commit(msg)\n            self.handle(msg, stop)", False),
+    ("consumer gives up on a database outage and commits", S + "ledger_consumer.py",
+     "                if stop.wait(delay):\n                    return False  # shutting down",
+     "                return True\n                if stop.wait(delay):\n                    return False  # shutting down", False),
+    ("consumer dead-letters every database error", S + "ledger_consumer.py",
+     "            except REFUSED_VALUES as exc:", "            except Exception as exc:", False),
+    ("consumer retries refused values forever", S + "ledger_consumer.py",
+     "REFUSED_VALUES = (psycopg.DataError, psycopg.IntegrityError, psycopg.errors.ProgramLimitExceeded, UnicodeError)",
+     "REFUSED_VALUES = (psycopg.DataError,)", False),
+    ("parser lets malformed ids through", S + "events.py",
+     'ID = re.compile(r"[A-Za-z0-9_]{1,64}")', 'ID = re.compile(r"(?s).+")', False),
+    ("parser crashes on a null body", S + "events.py",
+     "    if not isinstance(body, (bytes, bytearray)):\n        raise BadEvent(\"no message body\")",
+     "    if False:\n        raise BadEvent(\"no message body\")", False),
+    ("parser crashes on deep nesting", S + "events.py",
+     "    except RecursionError:\n        raise BadEvent(\"JSON nested too deeply\") from None\n", "", False),
+    ("release deletes whoever holds the key", S + "idempotency.py",
+     "            self.client.eval(RELEASE, 1, self._name(scope, key), claim.held)",
+     "            self.client.delete(self._name(scope, key))", False),
+    ("a crashed request keeps its key", S + "payments_api.py",
+     "        except BaseException:\n            idempotency.release(scope, key, claim)\n            raise",
+     "        except BaseException:\n            raise", False),
+    ("logs record the raw path", S + "common.py",
+     '    return getattr(request.scope.get("route"), "path", None) or "(no matching route)"',
+     "    return request.url.path", False),
+    ("logs keep long strings whole", S + "common.py",
+     "    if isinstance(value, str) and len(value) > MAX_LOGGED_CHARS:", "    if False:", False),
+    ("receiver answers any Host", S + "receiver_app.py", '    add_trusted_hosts(app, "webhook-receiver")\n', "", False),
+    ("settling reads Kafka before the provider", "src/klaxon/checks/live.py",
+     "    waiting = pending()\n    return waiting, lag()", "    behind = lag()\n    return pending(), behind", False),
+    ("publisher keeps a dead producer", S + "kafka_io.py",
+     "            self._producer = Producer(self._config)  # the poll thread picks up the new one", "            pass", False),
+    ("consumer drops unbookable messages instead of dead-lettering", S + "ledger_consumer.py",
+     '            return self._dead_letter(msg, source, f"not bookable: {exc}", stop)', "            return True", False),
+    ("receiver answers 200 when Kafka did not confirm", S + "receiver_app.py",
+     '            return JSONResponse({"error": "queue_unavailable"}, status_code=503, headers={"Retry-After": "5"})',
+     '            return JSONResponse({"received": True, "event_id": event_id})', False),
+    ("receiver skips the signature check", S + "receiver_app.py",
+     "            verify_any(request.headers.get(signatures.HEADER), body, secrets, int(now()), tolerance_seconds)",
+     "            pass", False),
+    ("receiver accepts any timestamp", S + "receiver_app.py",
+     "            verify_any(request.headers.get(signatures.HEADER), body, secrets, int(now()), tolerance_seconds)",
+     "            verify_any(request.headers.get(signatures.HEADER), body, secrets, int(now()), 10**9)", False),
+    ("receiver accepts only the first secret", S + "receiver_app.py",
+     "    for secret in secrets:\n", "    for secret in secrets[:1]:\n", False),
+    ("receiver publishes a re-encoded body, not the signed bytes", S + "receiver_app.py",
+     "publisher.publish, topic, key, body, headers)", "publisher.publish, topic, key, body.strip() + b' ', headers)", False),
+    ("provider treats a lost acknowledgement as delivered", S + "provider_delivery.py",
+     "        if accepted and not ack_lost:", "        if accepted:", False),
+    ("provider never retries a failed delivery", S + "provider_delivery.py",
+     '        elif sent_at - delivery.created > MAX_AGE_SECONDS:', "        elif True:", False),
+    ("provider replays a key for a different request", S + "provider_store.py",
+     '                    if seen["endpoint"] != endpoint or seen["request_hash"] != request_hash:',
+     "                    if False:", False),
+    ("provider forgets the outbox row", S + "provider_store.py",
+     '            "INSERT INTO deliveries (event_id, attempts, next_attempt_at) VALUES (?, 0, ?)", (event_id, self.clock())',
+     '            "SELECT ?, ?", (event_id, self.clock())', False),
+    ("redis claim without NX", S + "idempotency.py",
+     "                if self.client.set(name, running, nx=True, ex=LOCK_TTL_SECONDS):",
+     "                if self.client.set(name, running, ex=LOCK_TTL_SECONDS):", False),
+    ("api marks an unknown provider outcome as failed and final", S + "payments_api.py",
+     '                return refused(503, "provider_unavailable", message, final=False, payment=payment_view(row))',
+     '                return refused(402, "payment_failed", message, final=True, payment=payment_view(row))', False),
+    ("api uses a new provider key on every attempt", S + "payments_api.py",
+     '                    row.customer, row.amount_cents, row.currency, row.id, metadata={"klaxon_payment_id": row.id}',
+     '                    row.customer, row.amount_cents, row.currency, row.id + str(len(str(id(row)))) + str(id(row)), metadata={"klaxon_payment_id": row.id}',
+     False),
+    ("api trusts Redis only: a fresh database key per request", S + "payments_api.py",
+     "                idempotency_key, request_fingerprint, payment.customer, payment.amount_cents, payment.currency",
+     "                idempotency_key + str(id(payment)), request_fingerprint, payment.customer, payment.amount_cents, payment.currency",
+     False),
+    ("api skips the refund limit check", S + "payments_api.py",
+     "                if refunded + row.amount_cents > payment.amount_cents:", "                if False:", False),
+    ("provider client retries refusals", S + "provider_client.py",
+     "                if response.status_code < 500 and response.status_code not in RETRYABLE_STATUSES:",
+     "                if False:", False),
+    ("provider client uses no idempotency key", S + "provider_client.py",
+     'headers={"Idempotency-Key": idempotency_key}', "headers={}", False),
+    ("events accept any currency", S + "events.py",
+     "    if data.get(\"currency\") != CURRENCY:", "    if False:", False),
+    ("settled after one quiet check", "src/klaxon/checks/live.py", "        if quiet >= 2:", "        if quiet >= 1:", False),
+    ("settled while the consumer still lags", "src/klaxon/checks/live.py",
+     "        quiet = quiet + 1 if pending == 0 and behind == 0 else 0", "        quiet = quiet + 1 if pending == 0 else 0", False),
+    # Need the stack's PostgreSQL and Kafka:
+    ("ledger posts a repeated event anyway", S + "pg_ledger.py", "                if inserted == 0:", "                if False:", True),
+    ("dedupe row committed in its own transaction", S + "pg_ledger.py",
+     "        with self.pool.connection() as conn, conn.transaction():\n            if self.mode == \"idempotent\":\n                inserted = conn.execute(",
+     "        with self.pool.connection() as conn:\n            if self.mode == \"idempotent\":\n                inserted = conn.execute(",
+     True),
+    ("money check sum not cast to BIGINT", "src/klaxon/checks/money.py",
+     "        \"SELECT CAST(COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents ELSE -amount_cents END), 0) AS BIGINT)\"",
+     "        \"SELECT COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents ELSE -amount_cents END), 0)\"", True),
+    ("ledger writer may UPDATE entries", "docker/postgres/initdb/20-schema.sql",
+     "GRANT SELECT, INSERT ON ledger.transactions, ledger.entries, ledger.processed_events TO ledger_writer;",
+     "GRANT SELECT, INSERT, UPDATE ON ledger.transactions, ledger.entries, ledger.processed_events TO ledger_writer;", True),
+    ("Klaxon's role may write", "docker/postgres/initdb/20-schema.sql",
+     "GRANT SELECT ON ALL TABLES IN SCHEMA ledger, payments TO klaxon_readonly;",
+     "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ledger, payments TO klaxon_readonly;", True),
+    ("payments API may change amounts", "docker/postgres/initdb/20-schema.sql",
+     "GRANT UPDATE (status, provider_payment_id, updated_at) ON payments.payments TO payments_api;",
+     "GRANT UPDATE ON payments.payments TO payments_api;", True),
+    ("store uses up an id on every repeat", S + "payments_store.py",
+     "            row = conn.execute(\"SELECT * FROM payments WHERE idempotency_key = %s\", (idempotency_key,)).fetchone()\n            if row is not None:\n                return PaymentRow(**row), False\n            row = conn.execute(\n                \"INSERT INTO payments",
+     "            row = conn.execute(\n                \"INSERT INTO payments", True),
+    ("PUBLIC keeps temporary tables", "docker/postgres/initdb/20-schema.sql",
+     "    EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC', current_database());",
+     "    PERFORM 1;", True),
+    ("Lua release replaced by a plain delete (real Redis)", S + "idempotency.py",
+     "            self.client.eval(RELEASE, 1, self._name(scope, key), claim.held)",
+     "            self.client.delete(self._name(scope, key))", True),
+    ("payments without a unique idempotency key", "docker/postgres/initdb/20-schema.sql",
+     "    idempotency_key     text NOT NULL UNIQUE,  -- the database's guarantee behind Redis",
+     "    idempotency_key     text NOT NULL,", True),
+    ("lag treats a group with no commits as caught up", S + "kafka_io.py",
+     "        lag[p] = end[p] - (place if place >= 0 else start[p])", "        lag[p] = end[p] - (place if place >= 0 else end[p])", True),
+]
+
+
+def run_tests(work: Path, python: str, integration: bool) -> subprocess.CompletedProcess:
+    args = [python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"]
+    if integration:
+        args += ["-m", "integration"]
+    env = {"PYTHONPATH": str(work / "src"), "PATH": "/usr/bin:/bin", "HOME": str(Path.home())}
+    return subprocess.run(args, cwd=work, env=env, capture_output=True, text=True, timeout=600)
+
+
+def main() -> int:
+    repo, work = Path(sys.argv[1]), Path(sys.argv[2])
+    with_stack = "--with-stack" in sys.argv
+    python = str(repo / ".venv" / "bin" / "python")
+    if work.exists():
+        shutil.rmtree(work)
+    work.mkdir(parents=True)
+    for item in ("src", "tests", "docker", "pyproject.toml"):
+        src = repo / item
+        (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
+
+    check = subprocess.run(
+        [python, "-c", "import klaxon, sys; print(klaxon.__file__)"],
+        env={"PYTHONPATH": str(work / "src")}, capture_output=True, text=True,
+    )
+    assert str(work) in check.stdout, f"the copy is not the code under test: {check.stdout}"
+
+    selected = [m for m in MUTANTS if with_stack or not m[4]]
+    for integration in sorted({m[4] for m in selected}):
+        baseline = run_tests(work, python, integration)
+        if baseline.returncode != 0:
+            print(f"baseline FAILED ({'integration' if integration else 'offline'}):\n{baseline.stdout[-3000:]}")
+            return 2
+        print(f"baseline passes ({'integration' if integration else 'offline'})")
+
+    survived = []
+    for name, file, old, new, integration in selected:
+        path = work / file
+        original = path.read_text()
+        assert original.count(old) == 1, f"{name}: the text to break is not found exactly once in {file}"
+        path.write_text(original.replace(old, new))
+        try:
+            result = run_tests(work, python, integration)
+        finally:
+            path.write_text(original)
+        killed = result.returncode != 0
+        failing = next((line for line in result.stdout.splitlines() if line.startswith("FAILED")), "")
+        print(f"{'caught  ' if killed else 'SURVIVED'}  {name}  {failing[:150]}")
+        if not killed:
+            survived.append(name)
+    print(f"\n{len(selected) - len(survived)} of {len(selected)} deliberate breaks caught")
+    return 1 if survived else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
