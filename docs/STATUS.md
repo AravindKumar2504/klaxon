@@ -1,42 +1,51 @@
 # Status
 
-Last updated: 2026-10-09, end of pitch-weekend session 1. The pitch is submitted; next is week 1.
+Last updated: 2026-10-09, end of the week 1 session (started early: PLAN has week 1 as Oct 13-19). Week 1 is built, on the branch `week-1-compose`, waiting for Aravind's review. Nothing is pushed.
 
 ## Done
 
-- Project chosen and planned (see `PLAN.md`, `DECISIONS.md`, `RESEARCH.md`).
-- **First piece built and committed** (`801a0bf`, local only, Aravind approved the commit). Synthetic, seeded, in-process demo of the money check: fake provider with HMAC-signed webhooks, double-entry ledger with naive and idempotent handlers, the money check (three invariants with evidence), a dashboard view, and `python -m klaxon.demo duplicate-webhook --handler naive|idempotent`.
-  - Tests: 91 passed (`.venv/bin/python -m pytest -q`, 2026-10-09). 21 deliberate code breaks, all caught by the tests.
-  - An independent Claude review found no wrong behavior; its gaps were fixed (see `DECISIONS.md`, 2026-10-09 evening).
-  - Real runs, 2026-10-09 15:54 PDT, seed 7, code SHA-256 `5cc69830a8d7...`: naive = 7 requests, 0 errors, dashboard GREEN, ledger balanced, money check FAILED (pay_0003 posted twice, off by +$69.68); idempotent = PASSED. Files: `evidence/first-piece/2026-10-09T225438Z_*.json`.
-  - **Do not edit `src/klaxon` without re-running both demo commands**: the evidence records the code's SHA-256.
-- **Pitch film made and posted.** Aravind watched it and approved the narration on 2026-10-09. Master: 3:48, 1080p, SHA-256 `b551f076...`; all gates pass except the toolkit's bookend check (its outro card hard-codes the instructor's handle, so the film ends on its own drawn title, documented in FRICTIONAL.md).
-  - Course repo: branch `final-project-film`, commit `8164179`, folder `fall-2026/aravind-s/final-project-film/` (film, brief, beat sheet, rebuild sources, fact check, gate reports, FRICTIONAL with his own entries, and the two evidence files). No Claude trailer or PR footer (his choice).
-  - PR: https://github.com/nikbearbrown/info-7375-prompt-engineering-for-generative-ai/pull/13 (open; no checks reported yet).
-  - **Submitted on Canvas by Aravind on 2026-10-09** (he reported it). Do not change PR #13 now unless the instructor asks: the GitHub folder must keep matching the Canvas zip.
-  - Canvas zip, built from that commit: `~/Documents/03-School/info7375/submissions/final-project-film/Sundaravadivelu_Aravind_INFO7375_FinalProjectFilm.zip`; paste text in `CANVAS-PASTE.txt` beside it.
-  - Build folder (gitignored): `~/Documents/03-School/info7375/info-7375-prompt-engineering-for-generative-ai/learning-artifacts/final-project-film/`.
+### Week 1: the patient runs for real in Docker Compose (2026-10-09)
+
+- **Runtime:** Docker Desktop (Aravind's choice), engine 29.8.2, Compose 5.5.1. Rosetta is off: all four pinned images have native arm64 builds (checked with `docker manifest inspect`): `postgres:18.6-alpine`, `redis:8.8.3-alpine`, `apache/kafka:4.3.1`, `python:3.12.15-slim`.
+- **The stack:** `compose.yaml` runs 8 containers: PostgreSQL, Redis, Kafka (KRaft, one node), a one-shot topic creator, and our four services: fake provider, webhook receiver, payments API, ledger consumer. Every port listens on 127.0.0.1. `make up` took 13 to 14 s after the first build (measured 2026-10-09).
+- **The flow:** API -> provider -> signed webhook -> receiver -> Kafka `provider-events` (3 partitions, keyed by payment id) -> ledger consumer -> PostgreSQL. Idempotency: Redis claims the API's `Idempotency-Key`, PostgreSQL holds it UNIQUE, the provider gets our payment id as its own key; the ledger dedupes with `processed_events` in the same transaction as the posting and commits the Kafka offset only after that.
+- **The money check against the live stack:** `make check` (`klaxon.checks.live`) waits until nothing is in flight, then runs the first piece's unchanged check through the read-only role `klaxon_readonly`.
+- **Real runs, 2026-10-09 19:13 PDT, commit `408670a` (clean code and stack), seed 7** (`make demo-live HANDLER=naive`, then `HANDLER=idempotent`; files in `evidence/week1/`):
+  - naive consumer: 7 webhook requests, 0 errors, dashboard GREEN, ledger balanced, money check FAILED: `evt_000003` (pay_000003, $69.68) booked twice from Kafka offsets `1@0` and `1@2`, books off by +$69.68. The same numbers as the first piece's in-process demo.
+  - idempotent consumer: the same 7 deliveries and the same GREEN dashboard; all 6 events booked once; ledger and provider both $252.97; PASSED.
+- **Tests** (all measured 2026-10-09):
+  - `make test`: 242 passed, offline, 0.7 s.
+  - `make test-integration` (stack up): 33 passed in 13 s. Real PostgreSQL, Redis and Kafka: booking once under a race, rollback of the dedupe row, every role's permissions, the money check's SQL, Kafka offsets and lag, the Redis Lua scripts.
+  - `make e2e`: 8 passed in 61 s. Resets the stack, then: the first piece's scenario; 20 payments each sent twice with 30% of acknowledgements lost; 8 concurrent copies of one request (one charge); Redis stopped (no second charge); the whole topic replayed from offset 0 (nothing booked twice); Kafka stopped (webhooks wait at the provider, booked once after); PostgreSQL stopped (the consumer retries, books all 3 after); the naive consumer caught (+$69.68, dashboard GREEN).
+  - `make mutants` (stack up): 45 of 45 deliberate breaks caught, 132 s. Each one replaces a piece of code with a plausible mistake, on a copy of the repo (`scripts/mutation_check.py`).
+- **Independent review:** a separate Claude review found no way to book twice, charge twice, or acknowledge without a durable write in idempotent mode. Its other findings were fixed before the runs above (see `DECISIONS.md`), except the two "known gaps" below.
+- The first piece still reproduces: both `python -m klaxon.demo duplicate-webhook` runs print exactly their saved evidence (checked 2026-10-09 after the last `src/klaxon` change).
+
+### Before week 1
+
+- Project chosen and planned (`PLAN.md`, `DECISIONS.md`, `RESEARCH.md`).
+- First piece built and committed (`801a0bf`): the in-process money check demo, 91 tests then, evidence in `evidence/first-piece/`. Aravind ran the tests and both demos himself on 2026-10-09.
+- Pitch film made, approved and submitted on Canvas by Aravind (2026-10-09); course PR https://github.com/nikbearbrown/info-7375-prompt-engineering-for-generative-ai/pull/13 (commit `8164179`). Do not change PR #13 unless the instructor asks: the GitHub folder must keep matching the Canvas zip.
+
+## Known gaps (found in review, not fixed yet)
+
+1. **Payment status never catches up.** `payments.status` comes only from the provider's synchronous answer. If every attempt times out after the provider has already charged, our row stays `pending` (and refunds are refused), and the money check cannot see it because it compares only the ledger. This is also why two planned incidents ("payments stuck pending", "never confirmed") would show no symptom yet. Needs Aravind's decision below.
+2. **Kafka is a trusted zone.** Any process on this Mac or in the Compose network can publish to Kafka without the provider's signature. The money check would flag a forged event as "posted, but the provider never sent it", but nothing stops it. Planned for the week 9 safety pass: forward the signature in Kafka headers and check it again in the consumer.
+3. Smaller limits, documented where they live: no circuit breaker on provider calls (deliberate, a week 2 incident); no OpenTelemetry yet (week 2); one Kafka broker with one copy, so a crash of the whole Docker VM could lose the newest writes; the APIs have no authentication (local only, Host-checked); provider event ids are sequential per provider volume, so reset all volumes together (`make reset`).
 
 ## Needs Aravind
 
-1. Read the first piece (`src/klaxon/checks/money.py`, `src/klaxon/patient/ledger.py`); `docs/STUDY-NOTES.md` explains the concepts. On 2026-10-09 you ran the tests yourself (91 passed) and both demos (16:46 and 16:47 PDT: naive off by +$69.68, idempotent passed; evidence `2026-10-09T234653Z_..._naive_seed7.json` and `2026-10-09T234752Z_..._idempotent_seed7.json`).
-2. Week 1 decision: Docker Desktop (installer, GUI) or Colima (Homebrew, command line) as the container runtime.
+1. **Review week 1** (30-45 min). With Docker Desktop open: `make up`, `make check`, `make demo-live HANDLER=naive`, `make e2e`. Read, in this order: `compose.yaml`, `docker/postgres/initdb/20-schema.sql`, `src/klaxon/patient/services/ledger_consumer.py`, `pg_ledger.py`, `payments_api.py`, `idempotency.py`. `docs/STUDY-NOTES.md` (week 1 section) explains the concepts. Then decide: merge `week-1-compose` into `main`?
+2. **Decide how a payment gets confirmed** (known gap 1). Claude's recommendation: (a) confirm payments from the provider's webhooks (a second consumer group updates `payments.status`), so the "stuck pending" and "never confirmed" incidents have a real symptom, and (b) add a fourth money-check invariant that compares our payments table with the provider's payments. Alternative: a sweeper that retries pending payments with the same provider key.
+3. Optional: `docker` is not on this Claude session's PATH (Docker Desktop added it to `~/.zprofile`, which only new login shells read). A new Terminal window works; adding `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc` fixes every shell. The Makefile works either way. Docker Desktop is set not to start at login, so open it before `make up`.
+4. Still open from before: keep the name Klaxon? (default yes); make the repo public, and when? (default: ask before pushing); a few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
-## Next: week 1 (Oct 13-19), the patient system in Docker Compose
+## Next: week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
-Goal: the payments system runs for real on this Mac, and the money check from the first piece passes against it.
-
-1. Install the container runtime Aravind picks; confirm `docker compose version` and that the images run on arm64 (`docker manifest inspect <image>`).
-2. `compose.yaml` with official images only: PostgreSQL, Redis, Kafka (`apache/kafka`, KRaft mode, no ZooKeeper), plus our Python services: the fake provider, the webhook receiver, the payments API and the ledger consumer.
-3. The flow: create a payment through the API; the provider sends a signed webhook; the receiver verifies it and publishes to Kafka; the ledger consumer books it in PostgreSQL. Idempotency moves from the SQLite `processed_events` table to a database constraint plus Redis, as planned.
-4. The money check runs against PostgreSQL through a read-only database role.
-5. Tests: the unit tests stay offline and fast; one end-to-end test brings the stack up, sends traffic and asserts the money check passes. One command each (for example `make up`, `make test`, `make e2e`).
-6. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 1 concepts: Kafka topics, partitions, consumer groups and offsets; Compose networking; Redis as an idempotency store).
+1. Aravind's decision on payment confirmation (above), then build it.
+2. OpenTelemetry in all four services, into `grafana/otel-lgtm` (one container: collector, metrics, traces, logs, Grafana). Metrics to have: webhook status codes, Kafka consumer lag, booking outcomes, dead letters, provider latency.
+3. A traffic generator (a service or a make target) using the seeded `lose_ack_rate`.
+4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumer now dead-letters poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker.
+5. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 2 concepts: OpenTelemetry traces, metrics and logs; what Grafana shows).
 
 Course tie-in: CSYE 7374 on 10/14 covers an agent working in a real project, and this repo is that project.
-
-## Open questions for Aravind (longer term)
-
-- Keep the name Klaxon? (default yes)
-- Make this repo public on GitHub, and when? (default: ask before pushing)
-- Later: a few dollars of Anthropic API credit for the HolmesGPT comparison?

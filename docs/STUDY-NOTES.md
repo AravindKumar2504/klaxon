@@ -91,3 +91,47 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 - UK Post Office Horizon: accounting-software bugs made branch accounts look short and hundreds of branch managers were blamed; the 2019 High Court ruling called the system "not remotely robust". https://caselaw.nationalarchives.gov.uk/ewhc/qb/2019/3408
 
 **Why customers rarely see them:** rare per payment, usually caught and reversed fast, and many errors hit the company's own books instead of the customer (Santander covered the extra payments itself). They stay rare because engineers catch them in review, the way I caught a webhook data-loss path in code review at my co-op.
+
+## Week 1 (built 2026-10-09): the patient runs for real
+
+**The flow, in one breath.** A client asks our payments API for a payment. The API charges the fake provider. The provider sends a signed webhook. Our webhook receiver checks the signature and writes the event to Kafka. The ledger consumer reads it from Kafka and books it in PostgreSQL. The money check then compares our ledger with the provider's own records. Eight containers: PostgreSQL, Redis, Kafka, a one-shot topic creator, and our four Python services.
+
+**Kafka, the words to own.**
+- *Topic:* a named, append-only log of messages. Ours is `provider-events`. A message is never edited; readers just move forward.
+- *Partition:* a topic is split into partitions (ours has 3) so several consumers can share the work. Order is guaranteed only inside one partition. I saw this happen: the ledger booked `evt_000003` (partition 1) before `evt_000001` (partition 0).
+- *Key:* decides the partition. We key by payment id, so one payment's events stay in order relative to each other.
+- *Offset:* a message's position in its partition, like a line number. The ledger keeps it on every posting (`source = provider-events/1@0`), so a posting can be traced to the exact message.
+- *Consumer group:* consumers that share a topic. Kafka gives each partition to one member and remembers, per partition, the offset the group has committed: its bookmark. Our group is `ledger`.
+- *Lag:* how far the bookmark is behind the end of the log. Lag 0 means everything has been booked. Lag that keeps growing is what an alert will watch in week 2.
+- *KRaft:* Kafka runs without ZooKeeper now. One container is both broker and controller.
+
+**Commit after the database, never before.** If the consumer commits its offset first and then crashes, the event is skipped forever: a lost payment. If it books first and crashes before committing, it reads the event again after a restart, and the idempotent booking turns the second read into a no-op. At-least-once delivery plus idempotent processing gives "effectively once". The end-to-end test resets the group's bookmark to the start of the topic, the same as a crash before every single commit, and the ledger books nothing twice.
+
+**Where the dedupe lives.** In the same database transaction as the posting (`processed_events` primary key). Deduping earlier, for example in the receiver, opens a gap: an event can be marked "seen" and then never booked if the next step fails. That is a data-loss path, the bug class I caught in code review at my co-op.
+
+**The receiver only says 200 after Kafka says yes.** It waits for the broker's acknowledgement. If Kafka does not confirm within 3 seconds it answers 503, and the provider retries later. A 200 that is not backed by a durable write is how webhooks get lost.
+
+**Dead letters.** A message that can never be booked as it is goes to `provider-events-dlq` with the reason, so a human can look: no body at all, bad JSON, a malformed id, a wrong currency, an absurd amount, or a value the database refuses. One bad message must not block the partition behind it (that is the "poison message" incident). Anything else, like the database being down or a permission problem, is retried forever without committing. A money event is never skipped because something on our side is broken. The independent review caught that my first version crashed in a loop on a message with no value; the tests now feed it that on purpose.
+
+**Redis as an idempotency store, and why it is not the guarantee.** A client that times out retries with the same `Idempotency-Key`. The API claims the key in Redis with `SET NX` (set only if not there). A repeat gets the saved response (header `Idempotent-Replayed: true`); a repeat that arrives while the first is still running gets 409; the same key with a different request gets 422. But Redis keys expire, our Redis keeps nothing on disk, and Redis can be down. So PostgreSQL has `payments.idempotency_key UNIQUE` behind it, and the provider gets our payment id as its own idempotency key. Three layers. I tested it by stopping Redis: the retried request still found the existing payment and the provider charged once. One more detail: each claim carries a random token, and releasing or finishing a claim runs as a small Lua script that first checks the token. Otherwise a slow request whose lock had expired could delete the lock of a newer request with the same key.
+
+**Transactional outbox (in the provider).** Creating a payment writes the payment, its event and a "to deliver" row in one transaction. The provider can never charge without sending the webhook. The webhook sender then works through the outbox and retries with backoff (0.5 s, 1 s, 2 s, ... up to a minute) until it gets a 2xx.
+
+**Least privilege in the database.** One login role per service:
+- `ledger_writer` can SELECT and INSERT ledger rows but has no UPDATE or DELETE. "Ledger rows are never edited" is enforced by the database.
+- `payments_api` can change a payment's status, never its amount (a column-level grant).
+- `klaxon_readonly` can read everything and write nothing, its transactions are read-only, and its queries stop after 5 seconds. The money check uses it, and Klaxon's tools will too. Even with read-only switched off, the grants refuse a write: the grants are the real guard.
+
+**Docker Compose networking.** Every service is reachable by its name inside the Compose network (`postgres:5432`, `kafka:9092`). From the Mac, the same services are on 127.0.0.1 ports (API 8080, provider 8081, receiver 8082, PostgreSQL 5432, Redis 6379, Kafka 9094). Kafka needs two listeners for that, because it tells clients which address to use next: `kafka:9092` for containers and `127.0.0.1:9094` for the Mac. Every port listens on 127.0.0.1 only, so nothing is reachable from the network. Health checks plus `depends_on` start things in the right order, and named volumes keep data until `make reset`.
+
+**How the live money check knows the system has settled.** It waits until the provider has no webhook left to deliver and the ledger consumer's lag is 0, twice in a row. Then it reads the ledger in one snapshot (REPEATABLE READ). Checking earlier would make an event still in flight look lost.
+
+**What I can say ran (2026-10-09; STATUS has the commands).** The first piece's scenario, replayed through the real stack, gave the same numbers: the naive consumer booked `evt_000003` twice, the dashboard stayed GREEN, the ledger balanced, and the money check failed, off by +$69.68. The idempotent consumer passed. 242 offline tests, 33 integration tests against the real PostgreSQL, Redis and Kafka, and 8 end-to-end tests that stop Redis, Kafka and PostgreSQL in the middle of traffic. And 45 deliberate breaks of the code, every one caught by a test.
+
+**How do you know your tests mean something?** Mutation testing: break the code on purpose in a plausible way (commit before booking, answer 200 when Kafka did not confirm, trust Redis alone) and check that a test fails. `make mutants` does 45 of these on a copy of the repo. Two survived at first, and each exposed a weak test of mine, which I fixed. That is the point of the exercise.
+
+**Likely questions.**
+- *Why Kafka between the receiver and the ledger?* The receiver can answer the provider fast, the ledger can be down for a while without losing anything, and later more consumers (fraud checks, analytics) can read the same events without touching the receiver.
+- *Is your system exactly-once?* No. Delivery is at least once everywhere. Booking is idempotent, so the effect is once. That is the honest wording.
+- *What if Redis is down?* The API logs it, reports itself "degraded", and keeps working with the database's unique key alone. It fails open to the database, never open to nothing.
+- *What is not handled yet?* No circuit breaker on provider calls (planned as a week 2 incident), no OpenTelemetry yet, single currency, and the provider is a simulator.
