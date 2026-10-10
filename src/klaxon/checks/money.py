@@ -16,15 +16,16 @@ Invariant 2 alone is not enough: a double posting is itself balanced.
 
 The check reads the ledger with its own SELECT queries, not through the Ledger
 class or the handler, so it does not depend on their bookkeeping being right.
-(In week 1 it will connect through a read-only database role.)
+The same queries run on the first piece's SQLite ledger and on the live
+PostgreSQL ledger (week 1), where the check connects through a read-only role
+(see `klaxon.checks.live`). Sums are cast to BIGINT so both return plain ints.
 """
 
 from __future__ import annotations
 
-import sqlite3
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED, Event
 
@@ -38,6 +39,12 @@ class ProviderRecords(Protocol):
     events: list[Event]
 
     def balance_cents(self) -> int: ...
+
+
+class SqlConnection(Protocol):
+    """What the check needs from a database connection. sqlite3 and psycopg connections both fit."""
+
+    def execute(self, query: str) -> Any: ...
 
 
 @dataclass
@@ -68,7 +75,7 @@ def format_cents(cents: int, signed: bool = False) -> str:
     return f"{sign}${abs(cents) // 100:,}.{abs(cents) % 100:02d}"
 
 
-def check_money(provider: ProviderRecords, ledger: sqlite3.Connection) -> MoneyReport:
+def check_money(provider: ProviderRecords, ledger: SqlConnection) -> MoneyReport:
     events = [e for e in provider.events if e.type in MONEY_EFFECT]
     provider_balance = provider.balance_cents()
     ledger_clearing = _clearing_net_debit(ledger)
@@ -86,7 +93,7 @@ def check_money(provider: ProviderRecords, ledger: sqlite3.Connection) -> MoneyR
     )
 
 
-def _live_postings(ledger: sqlite3.Connection) -> dict[str, list[int]]:
+def _live_postings(ledger: SqlConnection) -> dict[str, list[int]]:
     """Transaction ids per event that still count: they have lines, are not
     reversals, and have not been reversed."""
     rows = ledger.execute(
@@ -102,7 +109,7 @@ def _live_postings(ledger: sqlite3.Connection) -> dict[str, list[int]]:
     return out
 
 
-def _posted_exactly_once(events: list[Event], ledger: sqlite3.Connection) -> InvariantResult:
+def _posted_exactly_once(events: list[Event], ledger: SqlConnection) -> InvariantResult:
     postings = _live_postings(ledger)
     evidence = []
     for e in events:
@@ -147,17 +154,20 @@ def _posted_exactly_once(events: list[Event], ledger: sqlite3.Connection) -> Inv
     return InvariantResult("posted_exactly_once", False, "; ".join(parts), evidence)
 
 
-def _ledger_balanced(ledger: sqlite3.Connection) -> InvariantResult:
+def _ledger_balanced(ledger: SqlConnection) -> InvariantResult:
     debits, credits = ledger.execute(
-        "SELECT COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents END), 0),"
-        "       COALESCE(SUM(CASE side WHEN 'credit' THEN amount_cents END), 0) FROM entries"
+        "SELECT CAST(COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents END), 0) AS BIGINT),"
+        "       CAST(COALESCE(SUM(CASE side WHEN 'credit' THEN amount_cents END), 0) AS BIGINT) FROM entries"
     ).fetchone()
+    # PostgreSQL does not allow column aliases in HAVING, so filter in an outer query.
     bad = ledger.execute(
-        "SELECT t.id, COUNT(e.id),"
-        "       COALESCE(SUM(CASE e.side WHEN 'debit' THEN e.amount_cents END), 0) AS d,"
-        "       COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_cents END), 0) AS c"
-        " FROM transactions t LEFT JOIN entries e ON e.transaction_id = t.id"
-        " GROUP BY t.id HAVING COUNT(e.id) < 2 OR d != c ORDER BY t.id"
+        "SELECT id, n, d, c FROM ("
+        "  SELECT t.id AS id, COUNT(e.id) AS n,"
+        "         CAST(COALESCE(SUM(CASE e.side WHEN 'debit' THEN e.amount_cents END), 0) AS BIGINT) AS d,"
+        "         CAST(COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_cents END), 0) AS BIGINT) AS c"
+        "  FROM transactions t LEFT JOIN entries e ON e.transaction_id = t.id"
+        "  GROUP BY t.id"
+        ") per_transaction WHERE n < 2 OR d != c ORDER BY id"
     ).fetchall()
 
     evidence = [
@@ -179,14 +189,15 @@ def _ledger_balanced(ledger: sqlite3.Connection) -> InvariantResult:
 
 
 def _matches_provider(
-    events: list[Event], provider_balance: int, ledger_clearing: int, ledger: sqlite3.Connection
+    events: list[Event], provider_balance: int, ledger_clearing: int, ledger: SqlConnection
 ) -> InvariantResult:
     provider_net: dict[str, int] = defaultdict(int)
     for e in events:
         provider_net[e.payment_id] += MONEY_EFFECT[e.type] * e.amount_cents
     ledger_net = dict(
         ledger.execute(
-            "SELECT t.payment_id, SUM(CASE e.side WHEN 'debit' THEN e.amount_cents ELSE -e.amount_cents END)"
+            "SELECT t.payment_id,"
+            "       CAST(SUM(CASE e.side WHEN 'debit' THEN e.amount_cents ELSE -e.amount_cents END) AS BIGINT)"
             " FROM transactions t JOIN entries e ON e.transaction_id = t.id"
             " WHERE e.account = 'provider_clearing' GROUP BY t.payment_id"
         )
@@ -223,9 +234,9 @@ def _matches_provider(
     return InvariantResult("matches_provider", False, summary, evidence)
 
 
-def _clearing_net_debit(ledger: sqlite3.Connection) -> int:
+def _clearing_net_debit(ledger: SqlConnection) -> int:
     (net,) = ledger.execute(
-        "SELECT COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents ELSE -amount_cents END), 0)"
+        "SELECT CAST(COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents ELSE -amount_cents END), 0) AS BIGINT)"
         " FROM entries WHERE account = 'provider_clearing'"
     ).fetchone()
     return net

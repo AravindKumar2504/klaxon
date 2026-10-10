@@ -97,7 +97,8 @@ def _is_cents(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
-def _check_lines(event_id: str, lines: list[Line]) -> None:
+def check_lines(event_id: str, lines: list[Line]) -> None:
+    """Refuse bad lines: unknown account or side, non-cents amounts, fewer than two lines, or unbalanced."""
     for line in lines:
         if line.account not in ACCOUNTS or line.side not in SIDES or not _is_cents(line.amount_cents):
             raise ValueError(f"bad line for {event_id}: {line}")
@@ -141,7 +142,7 @@ class Ledger:
         dedupe: bool = False,
     ) -> bool:
         """Write one balanced transaction. Return False if dedupe found the event already posted."""
-        _check_lines(event_id, lines)
+        check_lines(event_id, lines)
         with self._atomic():
             if dedupe:
                 inserted = self.conn.execute(
@@ -173,7 +174,7 @@ class Ledger:
                     (transaction_id,),
                 )
             ]
-            _check_lines(event_id, flipped)
+            check_lines(event_id, flipped)
             # The UNIQUE constraint on reverses_transaction_id refuses a second reversal.
             return self._insert(
                 event_id, payment_id, f"reversal of #{transaction_id}: {reason}", flipped, posted_at, transaction_id

@@ -5,15 +5,39 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "klaxon"
 version = "0.0.1"
-description = "An AI on-call engineer for a payments system (in progress). First piece: a synthetic payments patient and the money check."
+description = "An AI on-call engineer for a payments system (in progress). So far: a synthetic payments patient, live in Docker Compose, and the money check."
 requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff>=0.16"]
+# The live patient services (week 1). Exact versions for the image: requirements/services.lock.txt
+services = [
+    "fastapi>=0.142",
+    "uvicorn>=0.53",
+    "httpx>=0.28",
+    "psycopg[binary]>=3.3",
+    "psycopg-pool>=3.3",
+    "redis>=8.1",
+    "confluent-kafka>=2.15",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Plain `pytest` runs only the offline tests. The others need Docker: make test-integration, make e2e.
+addopts = "-m 'not integration and not e2e'"
+markers = [
+    "integration: needs the Compose stack's PostgreSQL and Kafka running (make up)",
+    "e2e: resets the whole Compose stack and drives it end to end (make e2e)",
+]
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["UP017"]  # the first piece writes timezone.utc; keep one style
