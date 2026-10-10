@@ -52,6 +52,10 @@ HANDLERS = {
 }
 
 
+# What a run depends on: if any of these differ from the commit, the run's git_commit does not describe it.
+CODE_AND_STACK = ("src", "compose.yaml", "docker", "requirements", "Makefile", "pyproject.toml")
+
+
 class DemoError(RuntimeError):
     """The demo could not run as designed. Nothing it printed should be read as a result."""
 
@@ -257,7 +261,8 @@ def evidence(run: LiveRun, command: str, now: datetime) -> dict:
         done = subprocess.run(["git", *args], cwd=stack.REPO, capture_output=True, text=True, timeout=5)
         return done.stdout.strip() if done.returncode == 0 else None
 
-    status = git("status", "--porcelain", "--", ".", ":!evidence")
+    # Clean means the code and the stack's definition match the commit; notes in docs/ cannot change a run.
+    status = git("status", "--porcelain", "--", *CODE_AND_STACK)
     return {
         "label": LABEL,
         "scenario": SCENARIO,
@@ -273,7 +278,7 @@ def evidence(run: LiveRun, command: str, now: datetime) -> dict:
         "code_sha256": code_fingerprint(),
         "stack_files_sha256": stack_fingerprint(),
         "git_commit": git("rev-parse", "HEAD"),
-        "git_clean_outside_evidence": None if status is None else status == "",
+        "git_clean_code_and_stack": None if status is None else status == "",
         "stack": stack.describe(),
         "money_check_passed": run.report.passed,
         "scenario_from_first_piece": asdict(run.scenario) | {"lost_ack_event_id": run.scenario.lost_ack_event_id},
