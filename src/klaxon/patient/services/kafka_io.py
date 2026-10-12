@@ -4,8 +4,8 @@ Topics (created by the kafka-init container in compose.yaml, never on the fly):
 - provider-events: every webhook the receiver accepted, keyed by payment id,
   3 partitions. One payment's events share a partition, so they stay in order
   relative to each other; different payments are spread across partitions.
-- provider-events-dlq: events the ledger consumer could not book, with the
-  reason in a header, kept for a human to look at.
+- provider-events-dlq: events a consumer could not use, with the reason and
+  the consumer's name in headers, kept for a human to look at.
 
 Consumer group "ledger": Kafka splits the topic's partitions among the group's
 running consumers and remembers, per partition, the offset the group has
@@ -132,7 +132,7 @@ def make_consumer(bootstrap: str, group_id: str, client_id: str) -> Consumer:
             "bootstrap.servers": bootstrap,
             "group.id": group_id,
             "client.id": client_id,
-            # We commit after the database commit, never before (see ledger_consumer).
+            # We commit after the database commit, never before (see consumer).
             "enable.auto.commit": False,
             # A group with no saved place starts at the beginning, so nothing is skipped.
             "auto.offset.reset": "earliest",

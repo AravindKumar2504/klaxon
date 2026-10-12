@@ -1,4 +1,7 @@
-"""The ledger consumer's message handling: book first, commit second, never skip a money event."""
+"""The loop both consumers share: apply first, commit second, never skip a money event.
+
+Tested here with the ledger's verb ("book"); the payment confirmer runs the same loop.
+"""
 
 import json
 import threading
@@ -8,8 +11,8 @@ import pytest
 from confluent_kafka import KafkaException
 
 from klaxon.patient.services.common import Heartbeat
-from klaxon.patient.services.kafka_io import DLQ_TOPIC
-from klaxon.patient.services.ledger_consumer import LedgerConsumer
+from klaxon.patient.services.consumer import EventConsumer
+from klaxon.patient.services.kafka_io import DLQ_TOPIC, LEDGER_GROUP
 from tests.services.fakes import FakeConsumer, FakeMessage, FakePublisher
 
 
@@ -46,7 +49,9 @@ def consumer_for(messages, errors=None, dead_letters=None, heartbeat=None):
     booker = Booker(log, errors)
     kafka = FakeConsumer(messages, stop, log)
     dead_letters = dead_letters or FakePublisher()
-    worker = LedgerConsumer(kafka, booker, dead_letters, heartbeat=heartbeat, retry_delays=(0.0,))
+    worker = EventConsumer(
+        kafka, booker.book, dead_letters, name=LEDGER_GROUP, verb="book", heartbeat=heartbeat, retry_delays=(0.0,)
+    )
     return worker, kafka, booker, dead_letters, stop, log
 
 
@@ -63,7 +68,7 @@ def test_an_unbookable_message_goes_to_the_dead_letter_topic_with_its_reason_the
     [letter] = dead_letters.messages
     assert letter["topic"] == DLQ_TOPIC and letter["value"] == b"{not json"
     assert letter["headers"]["source"] == "provider-events/0@3"
-    assert letter["headers"]["reason"].startswith("not bookable")
+    assert letter["headers"]["reason"].startswith("cannot book this event")
     assert booker.booked == [] and kafka.committed == [3]
 
 
@@ -135,7 +140,7 @@ def test_amounts_the_ledger_must_not_book_are_held_for_a_human(value):
 def test_odd_messages_are_dead_lettered_instead_of_crashing_the_consumer(value):
     worker, kafka, booker, dead_letters, stop, _ = consumer_for([FakeMessage(value, 1), FakeMessage(event(2), 2)])
     worker.run(stop)  # does not raise
-    assert dead_letters.messages[0]["headers"]["reason"].startswith("not bookable")
+    assert dead_letters.messages[0]["headers"]["reason"].startswith("cannot book this event")
     assert [e for e, _ in booker.booked] == ["evt_000002"]  # the partition keeps moving
     assert kafka.committed == [1, 2]
 
@@ -154,3 +159,25 @@ def test_values_the_database_refuses_are_dead_lettered_not_retried_forever(error
     worker.run(stop)
     assert dead_letters.messages[0]["headers"]["reason"].startswith("database refused the values")
     assert kafka.committed == [4]
+
+
+def test_a_dead_letter_names_the_consumer_that_refused_it():
+    # Both consumer groups read the same topic, so a poison message can be refused by each; the header tells them apart.
+    worker, kafka, booker, dead_letters, stop, _ = consumer_for([FakeMessage(b"{not json", 3)])
+    worker.run(stop)
+    assert dead_letters.messages[0]["headers"]["consumer"] == LEDGER_GROUP
+
+
+def test_the_logs_say_what_the_consumer_was_trying_to_do(caplog):
+    stop = threading.Event()
+    kafka = FakeConsumer([FakeMessage(event(1), 1)], stop)
+    confirmer = Booker([], errors=[psycopg.OperationalError("connection refused")])
+    worker = EventConsumer(
+        kafka, confirmer.book, FakePublisher(), name="payment-confirmer", verb="confirm", retry_delays=(0.0,)
+    )
+    with caplog.at_level("WARNING"):
+        worker.run(stop)
+    [line] = [r for r in caplog.records if r.name == "klaxon.consumer"]
+    assert line.getMessage() == "could not confirm; will retry the same message"
+    assert line.fields["consumer"] == "payment-confirmer"
+    assert kafka.committed == [1]  # retried, then applied, then committed
