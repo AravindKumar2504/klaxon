@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-11, after Aravind's week 1 review. Week 1 is done and merged into `main` (on his Mac only; nothing is pushed). Next: week 2.
+Last updated: 2026-10-11, after Aravind's week 1 review. Week 1 is done and merged into `main`, and the repository is public: https://github.com/AravindKumar2504/klaxon (first pushed 2026-10-11, `main` only, no license). Next: week 2.
 
 Commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -41,7 +41,7 @@ Commit IDs quoted below were written before the one-time history rewrite of 2026
 Nothing blocking. Week 1 is reviewed and merged.
 
 1. Optional: `docker` is not on the PATH of shells that started before Docker was installed (Docker Desktop added it to `~/.zprofile`, which only new login shells read). A new Terminal window works; adding `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc` fixes every shell. The Makefile works either way. Docker Desktop is set not to start at login, so open it before `make up`.
-2. Still open from before: keep the name Klaxon? (default yes); make the repo public, and when? (default: ask before pushing); a few dollars of Anthropic API credit later for the HolmesGPT comparison?
+2. Still open from before: keep the name Klaxon? (default yes); a few dollars of Anthropic API credit later for the HolmesGPT comparison? (Making the repo public is decided: public since 2026-10-11. CLAUDE.md still says to ask before every push.)
 
 ## Next: week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
