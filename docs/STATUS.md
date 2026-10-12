@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-11, late evening. Week 2 has started on the branch `week-2-payment-confirmation` (from `main`). Item 1, payment confirmation, is built, tested and recorded, and waits for Aravind's review. It is not merged, and nothing is pushed. `main` holds week 1 and is public: https://github.com/AravindKumar2504/klaxon (first pushed 2026-10-11, `main` only, no license).
+Last updated: 2026-10-12, after Aravind's review runs. Week 2 has started on the branch `week-2-payment-confirmation` (from `main`). Item 1, payment confirmation, is built, tested and recorded; Aravind ran it himself on 2026-10-12, and it waits for his reading and merge decision. It is not merged, and nothing is pushed. `main` holds week 1 and is public: https://github.com/AravindKumar2504/klaxon (first pushed 2026-10-11, `main` only, no license).
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -23,6 +23,7 @@ Aravind's decision of 2026-10-11, built as he decided it. Commits on the branch:
   - `make test-integration` (stack up): 56 passed in 15 s. New: what the confirmer changes and what it never does, its permissions, a race with the API's own update, and the fourth invariant's SQL.
   - `make e2e`: 10 passed in 85 s. New: a charge whose answer is lost is confirmed by its webhook, and a later client retry gets 201 with no new charge; replaying the whole topic changes nothing for either consumer; both consumers wait out a PostgreSQL outage and catch up; the known-bad confirmer leaves the payment pending, and only the fourth invariant sees it.
   - `make mutants` (stack up): 67 of 67 deliberate breaks caught, 206 s. One mutant first survived and exposed a weak test of mine (its INSERT was refused by the id sequence, not by the missing grant); the test was fixed.
+- **Aravind's runs, 2026-10-12:** on the branch at `cc6fad7`, after `make reset`, he ran `make test` (287 passed), `make up` (all 9 containers healthy), `make check` (passed, four invariants), `make demo-lost-answer CONFIRMER=by_provider_id` (failed as designed: only `payments_match_provider`), `make demo-lost-answer CONFIRMER=by_our_id` (passed) and `make e2e` (10 passed, 88 s) himself. His two demo runs are in `evidence/week2/` (`2026-10-12T215323Z_...by_provider_id...` and `2026-10-12T215353Z_...by_our_id...`), with the same numbers as Claude's runs.
 - **Independent review:** a separate Claude review of the branch found no way to book twice, charge twice, mark a payment succeeded without a charge, or overwrite a final status. Fixed after it: the fourth invariant reports every problem with a payment and shows the charged amount; it matches a charge through our stored link when its metadata names none of ours; the metadata id the check reads is validated; a second claim on one charge is a logged conflict, not a dead letter; the confirmer reads only four columns; both consumers now go through the live database-outage test; five docstrings. Two of its scenarios rested on false premises (week 1 already sent the metadata). The rest is in the known gaps below and in `DECISIONS.md`.
 
 ### Week 1: the patient runs for real in Docker Compose (2026-10-09)
@@ -59,8 +60,7 @@ Aravind's decision of 2026-10-11, built as he decided it. Commits on the branch:
 
 ## Needs Aravind
 
-1. **Review week 2, item 1** (about 30-45 minutes), on the branch `week-2-payment-confirmation`:
-   - Run `make reset` once first: the new database role exists only in a freshly created database volume. Then `make test`, `make up`, `make check`, `make demo-lost-answer CONFIRMER=by_provider_id` (fails as designed), `make demo-lost-answer CONFIRMER=by_our_id` (passes) and `make e2e`.
+1. **Finish the review of week 2, item 1**, on the branch `week-2-payment-confirmation`. The runs are done (2026-10-12, above). Still to do:
    - Read the week 2 section of `docs/STUDY-NOTES.md`, then `payment_confirmer.py`, `consumer.py`, and `_payments_match_provider` in `src/klaxon/checks/money.py`.
    - If you accept it, merge the branch into `main`. Nothing is pushed until you say so.
 2. **Decide: refunds now or later?** Confirm refunds the same way (known gap 1) now, or after the first 3 faults? Claude's default: later.

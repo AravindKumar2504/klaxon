@@ -74,3 +74,7 @@ Built on the branch `week-2-payment-confirmation`, from `main`: `500a8d9`, `0bab
 - **The money check still assumes no client traffic while it runs** (recorded after the review). A request in flight between the provider snapshot and the database read can look like a mismatch. To decide with the traffic generator (week 2, item 3): pause traffic before a check, or give the check a cutoff.
 - **Refunds are left out for now** (Claude's default; Aravind to confirm). A refund whose answer is lost stays pending, and nothing confirms it. The same fix would apply: our refund id as metadata, a `refund.succeeded` confirmation, refunds in the fourth invariant.
 - **Independent review** (Claude): a separate Claude review of the branch found no way to book twice, charge twice, mark a payment succeeded without a charge, or overwrite a final status. Its fixed findings are listed in STATUS. Two of its scenarios rested on false premises: week 1 already sent the metadata, so the API's request to the provider did not change, and week 1's charges already carry it.
+
+## 2026-10-12 (Aravind's review runs of week 2, item 1)
+
+- **His two demo runs are committed as evidence** (Claude, as for week 1): `evidence/week2/2026-10-12T215323Z_live-lost-answer_by_provider_id_seed7.json` and `2026-10-12T215353Z_live-lost-answer_by_our_id_seed7.json`, at commit `cc6fad7` with clean code and stack. On 2026-10-12 he also ran `make reset`, `make test` (287 passed), `make up`, `make check` (passed) and `make e2e` (10 passed, 88 s). Reading the code and the merge decision are still his.
