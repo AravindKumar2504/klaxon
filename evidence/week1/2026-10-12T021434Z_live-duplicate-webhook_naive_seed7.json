@@ -1,0 +1,471 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack: payments API, fake provider, webhook receiver, Kafka, ledger consumer, PostgreSQL and Redis. Synthetic data and a simulated provider: no real money, no real payment company. It shows the money check Klaxon will use to verify fixes; it is not the Klaxon agent.",
+  "scenario": "live-duplicate-webhook",
+  "handler": "naive",
+  "handler_description": "posts every delivery it receives",
+  "container_ledger_handler": "naive",
+  "seed": 7,
+  "rerun_command": "python -m klaxon.demo live-duplicate-webhook --handler naive",
+  "ran_at_utc": "2026-10-12T02:14:34+00:00",
+  "ran_at_local": "2026-10-11T19:14:34-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "71e34169a275c86e8dcc6295faaf956e637207e39296dfdccbdbc5752fa79b30",
+  "stack_files_sha256": "ebbdbbba9afcff435855861cf3422f112e53a265941a0ad8997e0921d7e9d2a6",
+  "git_commit": "bba21687e29dbd75180b0a640d3f0fdc543c1c31",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:14305c27797e8c2adbf17557f6e8ff194f5c952638e9f69bd6209a85c9b4f726"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:14305c27797e8c2adbf17557f6e8ff194f5c952638e9f69bd6209a85c9b4f726"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:14305c27797e8c2adbf17557f6e8ff194f5c952638e9f69bd6209a85c9b4f726"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:14305c27797e8c2adbf17557f6e8ff194f5c952638e9f69bd6209a85c9b4f726"
+      }
+    ]
+  },
+  "money_check_passed": false,
+  "scenario_from_first_piece": {
+    "seed": 7,
+    "payments": [
+      [
+        "cus_001",
+        5805
+      ],
+      [
+        "cus_002",
+        2971
+      ],
+      [
+        "cus_003",
+        6968
+      ],
+      [
+        "cus_004",
+        11164
+      ],
+      [
+        "cus_005",
+        1291
+      ]
+    ],
+    "refund_of": 1,
+    "refund_cents": 2902,
+    "lost_ack_position": 3,
+    "lost_ack_event_id": "evt_000003"
+  },
+  "requests": [
+    {
+      "call": "POST /payments",
+      "idempotency_key": "demo-seed7-payment-1",
+      "status": 201,
+      "body": {
+        "id": "pmt_000001",
+        "status": "succeeded",
+        "customer": "cus_001",
+        "amount_cents": 5805,
+        "currency": "usd",
+        "provider_payment_id": "pay_000001",
+        "created_at": "2026-10-12T02:14:31.645773+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "demo-seed7-payment-2",
+      "status": 201,
+      "body": {
+        "id": "pmt_000002",
+        "status": "succeeded",
+        "customer": "cus_002",
+        "amount_cents": 2971,
+        "currency": "usd",
+        "provider_payment_id": "pay_000002",
+        "created_at": "2026-10-12T02:14:31.653301+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "demo-seed7-payment-3",
+      "status": 201,
+      "body": {
+        "id": "pmt_000003",
+        "status": "succeeded",
+        "customer": "cus_003",
+        "amount_cents": 6968,
+        "currency": "usd",
+        "provider_payment_id": "pay_000003",
+        "created_at": "2026-10-12T02:14:31.659858+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "demo-seed7-payment-4",
+      "status": 201,
+      "body": {
+        "id": "pmt_000004",
+        "status": "succeeded",
+        "customer": "cus_004",
+        "amount_cents": 11164,
+        "currency": "usd",
+        "provider_payment_id": "pay_000004",
+        "created_at": "2026-10-12T02:14:31.666387+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "demo-seed7-payment-5",
+      "status": 201,
+      "body": {
+        "id": "pmt_000005",
+        "status": "succeeded",
+        "customer": "cus_005",
+        "amount_cents": 1291,
+        "currency": "usd",
+        "provider_payment_id": "pay_000005",
+        "created_at": "2026-10-12T02:14:31.672356+00:00"
+      }
+    },
+    {
+      "call": "POST /payments/pmt_000001/refunds",
+      "idempotency_key": "demo-seed7-refund-1",
+      "status": 201,
+      "body": {
+        "id": "rfd_000001",
+        "payment_id": "pmt_000001",
+        "status": "succeeded",
+        "amount_cents": 2902,
+        "provider_refund_id": "re_000001",
+        "created_at": "2026-10-12T02:14:31.677844+00:00"
+      }
+    }
+  ],
+  "settling": {
+    "settled": true,
+    "waited_seconds": 2.43,
+    "pending_deliveries": 0,
+    "ledger_lag": 0,
+    "lag_by_partition": {
+      "0": 0,
+      "1": 0,
+      "2": 0
+    }
+  },
+  "dashboard": {
+    "requests": 7,
+    "status_counts": {
+      "200": 7
+    },
+    "ok": 7,
+    "client_errors": 0,
+    "server_errors": 0,
+    "error_rate": 0.0,
+    "status": "GREEN"
+  },
+  "money_check": {
+    "passed": false,
+    "ledger_clearing_cents": 32265,
+    "provider_balance_cents": 25297,
+    "money_off_cents": 6968,
+    "invariants": [
+      {
+        "name": "posted_exactly_once",
+        "passed": false,
+        "summary": "evt_000003 (payment.succeeded, pay_000003, $69.68) posted 2 times, expected 1",
+        "evidence": [
+          {
+            "event_id": "evt_000003",
+            "type": "payment.succeeded",
+            "payment_id": "pay_000003",
+            "amount_cents": 6968,
+            "times_posted": 2,
+            "expected": 1,
+            "problem": "counted twice",
+            "transaction_ids": [
+              1,
+              3
+            ]
+          }
+        ]
+      },
+      {
+        "name": "ledger_balanced",
+        "passed": true,
+        "summary": "debits $380.69 = credits $380.69",
+        "evidence": []
+      },
+      {
+        "name": "matches_provider",
+        "passed": false,
+        "summary": "ledger says $322.65, provider says $252.97: off by +$69.68",
+        "evidence": [
+          {
+            "scope": "provider_clearing, all payments",
+            "ledger_cents": 32265,
+            "provider_cents": 25297,
+            "difference_cents": 6968
+          },
+          {
+            "scope": "pay_000003",
+            "ledger_cents": 13936,
+            "provider_cents": 6968,
+            "difference_cents": 6968
+          }
+        ]
+      }
+    ]
+  },
+  "provider": {
+    "balance_cents": 25297,
+    "events": [
+      {
+        "id": "evt_000001",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000001",
+        "amount_cents": 5805,
+        "created": 1791771271
+      },
+      {
+        "id": "evt_000002",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000002",
+        "amount_cents": 2971,
+        "created": 1791771271
+      },
+      {
+        "id": "evt_000003",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000003",
+        "amount_cents": 6968,
+        "created": 1791771271
+      },
+      {
+        "id": "evt_000004",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000004",
+        "amount_cents": 11164,
+        "created": 1791771271
+      },
+      {
+        "id": "evt_000005",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000005",
+        "amount_cents": 1291,
+        "created": 1791771271
+      },
+      {
+        "id": "evt_000006",
+        "type": "refund.succeeded",
+        "payment_id": "pay_000001",
+        "amount_cents": 2902,
+        "created": 1791771271
+      }
+    ],
+    "delivery_stats": {
+      "events": 6,
+      "pending": 0,
+      "delivered": 6,
+      "abandoned": 0,
+      "attempts": 7,
+      "answered_2xx": 7,
+      "answered_4xx": 0,
+      "answered_5xx": 0,
+      "no_answer": 0,
+      "acks_lost_on_purpose": 1,
+      "duplicate_deliveries": 1
+    },
+    "delivery_attempts": [
+      {
+        "id": 1,
+        "event_id": "evt_000001",
+        "attempt": 1,
+        "sent_at": 1791771271.6497393,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 2,
+        "event_id": "evt_000002",
+        "attempt": 1,
+        "sent_at": 1791771271.6653922,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 3,
+        "event_id": "evt_000003",
+        "attempt": 1,
+        "sent_at": 1791771271.6700006,
+        "status": 200,
+        "error": "acknowledgement lost on purpose (simulated timeout)",
+        "ack_lost": true
+      },
+      {
+        "id": 4,
+        "event_id": "evt_000004",
+        "attempt": 1,
+        "sent_at": 1791771271.6725755,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 5,
+        "event_id": "evt_000005",
+        "attempt": 1,
+        "sent_at": 1791771271.6751666,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 6,
+        "event_id": "evt_000006",
+        "attempt": 1,
+        "sent_at": 1791771271.680619,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 7,
+        "event_id": "evt_000003",
+        "attempt": 2,
+        "sent_at": 1791771272.175525,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      }
+    ]
+  },
+  "ledger_transactions": [
+    {
+      "id": 1,
+      "event_id": "evt_000003",
+      "payment_id": "pay_000003",
+      "source": "provider-events/1@0"
+    },
+    {
+      "id": 2,
+      "event_id": "evt_000005",
+      "payment_id": "pay_000005",
+      "source": "provider-events/1@1"
+    },
+    {
+      "id": 3,
+      "event_id": "evt_000003",
+      "payment_id": "pay_000003",
+      "source": "provider-events/1@2"
+    },
+    {
+      "id": 4,
+      "event_id": "evt_000001",
+      "payment_id": "pay_000001",
+      "source": "provider-events/0@0"
+    },
+    {
+      "id": 5,
+      "event_id": "evt_000002",
+      "payment_id": "pay_000002",
+      "source": "provider-events/0@1"
+    },
+    {
+      "id": 6,
+      "event_id": "evt_000004",
+      "payment_id": "pay_000004",
+      "source": "provider-events/0@2"
+    },
+    {
+      "id": 7,
+      "event_id": "evt_000006",
+      "payment_id": "pay_000001",
+      "source": "provider-events/0@3"
+    }
+  ],
+  "printed_output": [
+    "Klaxon week 1: the first piece's scenario, through the live stack",
+    "REAL RUN on this Mac's Docker Compose stack (seed 7). Synthetic data, simulated provider, no real money.",
+    "Real software in between: payments API, webhook receiver, Kafka, ledger consumer, PostgreSQL, Redis.",
+    "It shows the money check Klaxon will use to verify fixes. It is not the agent.",
+    "",
+    "Ledger consumer: naive (posts every delivery it receives)",
+    "  the running container has LEDGER_HANDLER=naive",
+    "",
+    "Requests, client -> payments API -> fake provider",
+    "  pmt_000001  cus_001                $58.05  -> 201 succeeded  (pay_000001)",
+    "  pmt_000002  cus_002                $29.71  -> 201 succeeded  (pay_000002)",
+    "  pmt_000003  cus_003                $69.68  -> 201 succeeded  (pay_000003)",
+    "  pmt_000004  cus_004               $111.64  -> 201 succeeded  (pay_000004)",
+    "  pmt_000005  cus_005                $12.91  -> 201 succeeded  (pay_000005)",
+    "  rfd_000001  refund of pmt_000001   $29.02  -> 201 succeeded  (re_000001)",
+    "",
+    "Webhook deliveries, fake provider -> webhook receiver -> Kafka",
+    "  #1  evt_000001  payment.succeeded  pay_000001    $58.05  -> 200",
+    "  #2  evt_000002  payment.succeeded  pay_000002    $29.71  -> 200",
+    "  #3  evt_000003  payment.succeeded  pay_000003    $69.68  -> 200  acknowledgement lost on purpose (simulated timeout)",
+    "  #4  evt_000004  payment.succeeded  pay_000004   $111.64  -> 200",
+    "  #5  evt_000005  payment.succeeded  pay_000005    $12.91  -> 200",
+    "  #6  evt_000006  refund.succeeded   pay_000001    $29.02  -> 200",
+    "  #7  evt_000003  payment.succeeded  pay_000003    $69.68  -> 200  retry, attempt 2",
+    "",
+    "Ledger transactions, as the read-only role sees them (source = Kafka topic/partition@offset)",
+    "  #1  evt_000003  pay_000003  provider-events/1@0",
+    "  #2  evt_000005  pay_000005  provider-events/1@1",
+    "  #3  evt_000003  pay_000003  provider-events/1@2",
+    "  #4  evt_000001  pay_000001  provider-events/0@0",
+    "  #5  evt_000002  pay_000002  provider-events/0@1",
+    "  #6  evt_000004  pay_000004  provider-events/0@2",
+    "  #7  evt_000006  pay_000001  provider-events/0@3",
+    "",
+    "Dashboard, what HTTP monitoring sees (the status codes our webhook endpoint answered)",
+    "  requests          7",
+    "  2xx / 4xx / 5xx   7 / 0 / 0",
+    "  error rate        0.0%",
+    "  status            GREEN",
+    "",
+    "Money check, ledger vs the provider's own records (settled after 2.43 s)",
+    "  FAIL  posted_exactly_once  evt_000003 (payment.succeeded, pay_000003, $69.68) posted 2 times, expected 1",
+    "  PASS  ledger_balanced      debits $380.69 = credits $380.69",
+    "  FAIL  matches_provider     ledger says $322.65, provider says $252.97: off by +$69.68",
+    "",
+    "RESULT: money check FAILED (dashboard GREEN, ledger balanced, money off by +$69.68)"
+  ]
+}
