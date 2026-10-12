@@ -82,3 +82,10 @@ A UK company sells "Klaxon", a major-incident and mass-notification platform htt
 ## 9. Claude model facts used in planning (cached 2026-10-06)
 
 API prices per million tokens: Opus 5.5 $4 in / $20 out; Sonnet 5.5 $2 / $10; Haiku 5.5 $0.10 / $0.50. Claude Code aliases: `opusplan` uses Opus in plan mode and Sonnet for execution; Opus 5.5 and Sonnet 5.5 default to `medium` effort. https://code.claude.com/docs/en/model-config.md
+
+## 10. Payment confirmation (read 2026-10-11)
+
+Claude read these Stripe pages on 2026-10-11, for the week 2 payment confirmation. They back the design: match a webhook to our own payment through metadata, and treat a 500 as "outcome unknown".
+- Idempotent requests: Stripe saves the first answer for an idempotency key, and retries with the same key "return the saved response, including `500` errors". https://docs.stripe.com/api/idempotent_requests
+- Advanced error handling: treat the outcome of a 500 as indeterminate, and use webhook events to reconcile what happened. To match an object received through a webhook to your own records, include a local identifier in its metadata. https://docs.stripe.com/error-low-level
+- Payment Intents lifecycle: a payment with an asynchronous method, such as a bank debit, stays `processing` until it settles, which can take up to a few days. (Considered and not copied: our API keeps answering "succeeded" when the provider does.) https://docs.stripe.com/payments/paymentintents/lifecycle
