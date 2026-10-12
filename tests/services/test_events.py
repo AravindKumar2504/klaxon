@@ -109,3 +109,26 @@ def test_malformed_payment_ids_are_refused(payment_id):
 def test_malformed_event_types_are_refused(event_type):
     with pytest.raises(BadEvent):
         parse_event(body(type=event_type))
+
+
+def test_our_payment_id_comes_from_the_metadata_we_sent_with_the_charge():
+    event = parse_event(body(data={"metadata": {"klaxon_payment_id": "pmt_000001"}}))
+    assert (event.payment_id, event.klaxon_payment_id) == ("pay_000001", "pmt_000001")
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        None,
+        {},
+        [],
+        "pmt_000001",
+        {"klaxon_payment_id": 7},
+        {"klaxon_payment_id": "pmt 1"},
+        {"klaxon_payment_id": "p" * 65},
+    ],
+)
+def test_missing_or_malformed_metadata_still_books_but_matches_no_payment_of_ours(metadata):
+    """The provider moved the money either way: the ledger books it; the confirmer cannot match it and says so."""
+    event = parse_event(body(data={"metadata": metadata}))
+    assert event.amount_cents == 1999 and event.klaxon_payment_id is None

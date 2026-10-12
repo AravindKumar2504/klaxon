@@ -1,8 +1,9 @@
 """python -m klaxon.demo duplicate-webhook --handler naive|idempotent
 python -m klaxon.demo live-duplicate-webhook --handler naive|idempotent
+python -m klaxon.demo live-lost-answer --confirmer by_our_id|by_provider_id
 
 Exit status: 0 when the money check passes, 1 when it fails, 2 for bad arguments
-(or, for the live demo, when it could not run as designed).
+(or, for the live demos, when they could not run as designed).
 """
 
 from __future__ import annotations
@@ -44,9 +45,21 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--payments", type=_positive_int, default=5)
     live.add_argument("--evidence-dir", type=Path, default=Path("evidence/week1"))
     live.add_argument("--no-evidence", action="store_true", help="print only; write no evidence file")
+    lost = scenarios.add_parser(
+        "live-lost-answer",
+        help="the provider charges a payment but its answer is lost: is it confirmed? (needs a clean stack)",
+    )
+    lost.add_argument(
+        "--confirmer", choices=("by_our_id", "by_provider_id"), required=True, help="must match the running confirmer"
+    )
+    lost.add_argument("--seed", type=int, default=7)
+    lost.add_argument("--evidence-dir", type=Path, default=Path("evidence/week2"))
+    lost.add_argument("--no-evidence", action="store_true", help="print only; write no evidence file")
     args = parser.parse_args(argv)
     if args.scenario == "live-duplicate-webhook":
         return _live(args, argv)
+    if args.scenario == "live-lost-answer":
+        return _lost_answer(args, argv)
 
     result = duplicate_webhook.run(args.handler, seed=args.seed, payments=args.payments)
     print(duplicate_webhook.render(result))
@@ -70,5 +83,21 @@ def _live(args: argparse.Namespace, argv: list[str]) -> int:
     if not args.no_evidence:
         command = shlex.join(["python", "-m", "klaxon.demo", *argv])
         path = live.write_evidence(run, args.evidence_dir, command)
+        print(f"\nEvidence written: {path}")
+    return 0 if run.report.passed else 1
+
+
+def _lost_answer(args: argparse.Namespace, argv: list[str]) -> int:
+    from klaxon.demo import lost_answer
+
+    try:
+        run = lost_answer.run_live(args.confirmer, seed=args.seed)
+    except Exception as exc:  # anything before a result exists means "could not run" (2), never "failed" (1)
+        print(f"The live demo could not run as designed, so there is no result: {exc!r}", file=sys.stderr)
+        return 2
+    print(lost_answer.render(run))
+    if not args.no_evidence:
+        command = shlex.join(["python", "-m", "klaxon.demo", *argv])
+        path = lost_answer.write_evidence(run, args.evidence_dir, command)
         print(f"\nEvidence written: {path}")
     return 0 if run.report.passed else 1

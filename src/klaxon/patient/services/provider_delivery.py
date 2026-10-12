@@ -6,11 +6,18 @@ than that loses nothing. The price is duplicates: if an acknowledgement gets
 lost, the provider cannot tell "never arrived" from "arrived, answer lost", so
 it sends the event again. Our side must ignore the repeat.
 
-Simulator controls (a real provider has none of these):
+Simulator controls (a real provider has none of these). They live in Behavior,
+which the provider's HTTP API reads too:
 - lose_ack_rate: the share of 2xx answers the provider pretends it never got.
   Seeded per (event, attempt), so the same seed loses the same acknowledgements.
 - lose_ack_event_ids: lose the acknowledgement of these events' first delivery,
   the way the first piece's demo lost delivery #3's.
+- fail_after_charge_rate: the share of payment requests the provider charges
+  and then answers with a 500, as if it crashed after saving the charge.
+  Seeded per idempotency key, and the same key always gets the same 500, the
+  way Stripe replays the first answer for a key, errors included. Our side
+  cannot tell whether the customer was charged; only the webhook can say.
+- fail_after_charge_keys: do that for these idempotency keys.
 """
 
 from __future__ import annotations
@@ -40,10 +47,13 @@ class Behavior:
     lose_ack_rate: float = 0.0
     seed: int = 0
     lose_ack_event_ids: frozenset[str] = field(default_factory=frozenset)
+    fail_after_charge_rate: float = 0.0
+    fail_after_charge_keys: frozenset[str] = field(default_factory=frozenset)
 
     def __post_init__(self) -> None:
-        if not 0.0 <= self.lose_ack_rate <= 1.0:
-            raise ValueError("lose_ack_rate must be between 0 and 1")
+        for name in ("lose_ack_rate", "fail_after_charge_rate"):
+            if not 0.0 <= getattr(self, name) <= 1.0:
+                raise ValueError(f"{name} must be between 0 and 1")
 
     def ack_lost(self, event_id: str, attempt: int) -> bool:
         if attempt == 1 and event_id in self.lose_ack_event_ids:
@@ -52,11 +62,20 @@ class Behavior:
             return False
         return random.Random(f"{self.seed}:{event_id}:{attempt}").random() < self.lose_ack_rate
 
+    def fails_after_charge(self, idempotency_key: str) -> bool:
+        if idempotency_key in self.fail_after_charge_keys:
+            return True
+        if self.fail_after_charge_rate <= 0.0:
+            return False
+        return random.Random(f"{self.seed}:answer:{idempotency_key}").random() < self.fail_after_charge_rate
+
     def to_dict(self) -> dict:
         return {
             "lose_ack_rate": self.lose_ack_rate,
             "seed": self.seed,
             "lose_ack_event_ids": sorted(self.lose_ack_event_ids),
+            "fail_after_charge_rate": self.fail_after_charge_rate,
+            "fail_after_charge_keys": sorted(self.fail_after_charge_keys),
         }
 
 

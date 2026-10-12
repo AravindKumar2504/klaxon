@@ -1,9 +1,9 @@
-"""The money check: does our ledger agree with what really happened at the provider?
+"""The money check: do our books agree with what really happened at the provider?
 
 Klaxon will run this after every fix, next to the health checks, because a
 system can look healthy while the money is wrong.
 
-Three invariants, each with evidence:
+Four invariants, each with evidence:
 1. posted_exactly_once: every provider money event is in the ledger exactly
    once (0 times = lost, 2 or more = counted twice), and the ledger has nothing
    the provider never sent. A posting cancelled by a reversal does not count.
@@ -11,14 +11,25 @@ Three invariants, each with evidence:
    has at least two lines and balances on its own.
 3. matches_provider: the ledger's provider_clearing balance equals what the
    provider says it holds, overall and per payment.
+4. payments_match_provider: our payments table agrees with the provider's
+   payments. Each of our payments the provider charged is succeeded, for the
+   same amount, linked to that charge, and charged exactly once; one we call
+   succeeded was charged; and the provider charged nothing that is not ours.
+   A pending or failed payment with no charge is fine: no money moved.
 
-Invariant 2 alone is not enough: a double posting is itself balanced.
+Invariant 2 alone is not enough: a double posting is itself balanced. And
+invariants 1-3 compare the ledger with the provider, so they pass whenever
+the ledger copies the provider faithfully, even when the provider charged a
+customer twice for one payment, or charged the wrong amount. Only invariant
+4 compares the provider with what we asked for.
 
-The check reads the ledger with its own SELECT queries, not through the Ledger
-class or the handler, so it does not depend on their bookkeeping being right.
-The same queries run on the first piece's SQLite ledger and on the live
-PostgreSQL ledger (week 1), where the check connects through a read-only role
-(see `klaxon.checks.live`). Sums are cast to BIGINT so both return plain ints.
+The check reads the ledger and our payments with its own SELECT queries, not
+through the Ledger class, the handlers or the payments API, so it does not
+depend on their bookkeeping being right. Invariants 1-3 run on the first
+piece's SQLite ledger and on the live PostgreSQL ledger (week 1), where the
+check connects through a read-only role (see `klaxon.checks.live`). Sums are
+cast to BIGINT so both return plain ints. Invariant 4 needs a payments table
+and the provider's payment records, which only the live stack has (week 2).
 """
 
 from __future__ import annotations
@@ -39,6 +50,19 @@ class ProviderRecords(Protocol):
     events: list[Event]
 
     def balance_cents(self) -> int: ...
+
+
+@dataclass(frozen=True)
+class ProviderPayment:
+    """One payment as the provider records it. Every payment at this provider is captured at once.
+
+    klaxon_payment_id is our own payment id, which the payments API sends with every charge as
+    metadata; None when the metadata holds none.
+    """
+
+    id: str
+    amount_cents: int
+    klaxon_payment_id: str | None
 
 
 class SqlConnection(Protocol):
@@ -75,7 +99,11 @@ def format_cents(cents: int, signed: bool = False) -> str:
     return f"{sign}${abs(cents) // 100:,}.{abs(cents) % 100:02d}"
 
 
-def check_money(provider: ProviderRecords, ledger: SqlConnection) -> MoneyReport:
+def check_money(
+    provider: ProviderRecords, ledger: SqlConnection, provider_payments: list[ProviderPayment] | None = None
+) -> MoneyReport:
+    """Invariants 1-3; and invariant 4 when the provider's payments are given (ledger must then reach a
+    payments table too, as the live stack's read-only role does)."""
     events = [e for e in provider.events if e.type in MONEY_EFFECT]
     provider_balance = provider.balance_cents()
     ledger_clearing = _clearing_net_debit(ledger)
@@ -84,6 +112,8 @@ def check_money(provider: ProviderRecords, ledger: SqlConnection) -> MoneyReport
         _ledger_balanced(ledger),
         _matches_provider(events, provider_balance, ledger_clearing, ledger),
     ]
+    if provider_payments is not None:
+        invariants.append(_payments_match_provider(provider_payments, ledger))
     return MoneyReport(
         passed=all(i.passed for i in invariants),
         ledger_clearing_cents=ledger_clearing,
@@ -232,6 +262,123 @@ def _matches_provider(
             f" off by {format_cents(ledger_clearing - provider_balance, signed=True)}"
         )
     return InvariantResult("matches_provider", False, summary, evidence)
+
+
+def _payments_match_provider(provider_payments: list[ProviderPayment], db: SqlConnection) -> InvariantResult:
+    ours = {
+        payment_id: (status, amount, provider_id)
+        for payment_id, status, amount, provider_id in db.execute(
+            "SELECT id, status, amount_cents, provider_payment_id FROM payments ORDER BY id"
+        ).fetchall()
+    }
+    linked = {provider_id: payment_id for payment_id, (_, _, provider_id) in ours.items() if provider_id is not None}
+    named = {charge.id: charge.klaxon_payment_id for charge in provider_payments}
+    # Our payment id -> the provider's charges for it: each charge goes to the payment its metadata names, or,
+    # when the metadata names none of ours, to the payment our records link it to.
+    charges: dict[str, list[ProviderPayment]] = defaultdict(list)
+    strangers = []
+    for charge in provider_payments:
+        if charge.klaxon_payment_id in ours:
+            charges[charge.klaxon_payment_id].append(charge)
+        elif charge.id in linked:
+            charges[linked[charge.id]].append(charge)
+        else:
+            strangers.append(charge)
+
+    evidence = []
+    never_charged = 0
+    for payment_id, (status, amount, provider_id) in ours.items():
+        found = charges.get(payment_id, [])
+        if len(found) > 1:
+            problems = ["charged twice" if len(found) == 2 else f"charged {len(found)} times"]
+        elif not found:
+            if status != "succeeded":
+                never_charged += 1  # pending or failed, and no money moved: our records and the provider agree
+                continue
+            if provider_id in named:  # the charge exists, but its metadata gives it to another payment of ours
+                problems = ["linked to another payment's charge"]
+            else:
+                problems = ["succeeded but never charged"]
+        else:
+            # Every way this payment disagrees with its one charge, not only the first: a stuck payment that was
+            # also charged the wrong amount must not read as "just confirm it".
+            [charge] = found
+            problems = []
+            if status != "succeeded":
+                problems.append(f"{status} but charged")
+            if charge.amount_cents != amount:
+                problems.append("amount differs")
+            if status == "succeeded" and provider_id != charge.id:
+                problems.append("linked to another charge")
+            if charge.klaxon_payment_id != payment_id:
+                problems.append("not named in its charge's metadata")
+            if not problems:
+                continue
+        evidence.append(
+            {
+                "payment_id": payment_id,
+                "status": status,
+                "amount_cents": amount,
+                "provider_payment_id": provider_id,
+                "provider_charges": [{"id": c.id, "amount_cents": c.amount_cents} for c in found],
+                "problem": ", ".join(problems),
+            }
+        )
+    for charge in strangers:
+        evidence.append(
+            {
+                "payment_id": charge.klaxon_payment_id,
+                "status": None,
+                "amount_cents": None,
+                "provider_payment_id": None,
+                "provider_charges": [{"id": charge.id, "amount_cents": charge.amount_cents}],
+                "problem": "charged but not ours",
+            }
+        )
+
+    if not evidence:
+        charged = len(ours) - never_charged
+        summary = (
+            f"all {len(ours)} of our payments agree with the provider ({charged} charged once, {never_charged} never charged)"
+            if ours
+            else "no payments yet, ours or the provider's"
+        )
+        return InvariantResult("payments_match_provider", True, summary)
+    summary = "; ".join(_describe_payment(item, named) for item in evidence)
+    return InvariantResult("payments_match_provider", False, summary, evidence)
+
+
+def _describe_payment(item: dict, named: dict[str, str | None]) -> str:
+    """One evidence item of invariant 4, as a sentence."""
+    found, payment_id, problem = item["provider_charges"], item["payment_id"], item["problem"]
+    if item["status"] is None:
+        charged = f"the provider charged {found[0]['id']} ({format_cents(found[0]['amount_cents'])})"
+        if payment_id is None:
+            return f"{charged}, and its metadata names no payment of ours"
+        return f"{charged} for {payment_id}, which is not in our payments table"
+    ours = f"{payment_id} ({format_cents(item['amount_cents'])})"
+    if len(found) > 1:
+        return f"{ours} was charged {len(found)} times at the provider ({', '.join(c['id'] for c in found)})"
+    if problem == "succeeded but never charged":
+        return f"{ours} is succeeded in our records, but the provider has no charge for it"
+    if problem == "linked to another payment's charge":
+        other = named[item["provider_payment_id"]]
+        return f"{ours} is linked to {item['provider_payment_id']}, but the provider's metadata gives that charge to {other}"
+    [charge] = found
+    sentences = []
+    if item["status"] != "succeeded":
+        sentences.append(
+            f"is {item['status']} in our records, but the provider charged it"
+            f" ({charge['id']}, {format_cents(charge['amount_cents'])})"
+        )
+    elif "amount differs" in problem:
+        sentences.append(f"was charged {format_cents(charge['amount_cents'])} at the provider ({charge['id']})")
+    if "linked to another charge" in problem:
+        linked = item["provider_payment_id"] or "no charge"
+        sentences.append(f"is linked to {linked}, but the provider's charge for it is {charge['id']}")
+    if "not named in its charge's metadata" in problem:
+        sentences.append(f"is not named in the metadata of its charge {charge['id']}")
+    return f"{ours} " + ", and ".join(sentences)
 
 
 def _clearing_net_debit(ledger: SqlConnection) -> int:

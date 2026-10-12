@@ -165,7 +165,7 @@ class ProviderStore:
                 " VALUES (?, ?, ?, ?, ?, ?)",
                 (payment_id, customer, amount_cents, currency, _canonical(metadata), created),
             )
-            self._add_event(PAYMENT_SUCCEEDED, payment_id, amount_cents, created)
+            self._add_event(PAYMENT_SUCCEEDED, payment_id, amount_cents, created, metadata)
             return self._payment(payment_id)
 
         return self._idempotent("POST /v1/payments", idempotency_key, request, create)
@@ -257,10 +257,16 @@ class ProviderStore:
         (seq,) = self.conn.execute(f"SELECT COALESCE(MAX(seq), 0) + 1 FROM {table}").fetchone()
         return seq
 
-    def _add_event(self, event_type: str, payment_id: str, amount_cents: int, created: int) -> str:
+    def _add_event(
+        self, event_type: str, payment_id: str, amount_cents: int, created: int, metadata: dict | None = None
+    ) -> str:
         event_id = f"evt_{self._next_seq('events'):06d}"
-        # The first piece's payload shape, byte for byte.
-        body = _canonical(Event(event_id, event_type, payment_id, amount_cents, created).payload()).encode()
+        # The first piece's payload shape. A payment's event also carries the metadata it was created with,
+        # as Stripe's do: ours holds our own payment id, so our side can match the event to its payment.
+        payload = Event(event_id, event_type, payment_id, amount_cents, created).payload()
+        if metadata is not None:
+            payload["data"]["metadata"] = metadata
+        body = _canonical(payload).encode()
         self.conn.execute(
             "INSERT INTO events (id, type, payment_id, amount_cents, created, body) VALUES (?, ?, ?, ?, ?, ?)",
             (event_id, event_type, payment_id, amount_cents, created, body),
@@ -285,6 +291,23 @@ class ProviderStore:
                 "SELECT body FROM events WHERE seq > ? ORDER BY seq LIMIT ?", (after_seq, limit + 1)
             ).fetchall()
         return [json.loads(row["body"]) for row in rows[:limit]], len(rows) > limit
+
+    def list_payments(self, limit: int = 100, starting_after: str | None = None) -> tuple[list[dict], bool]:
+        """Payments oldest first, paged like the events."""
+        with self._lock:
+            after_seq = 0
+            if starting_after is not None:
+                row = self.conn.execute("SELECT seq FROM payments WHERE id = ?", (starting_after,)).fetchone()
+                if row is None:
+                    raise ProviderError(400, "no_such_payment", f"no payment {starting_after}")
+                after_seq = row["seq"]
+            ids = [
+                row["id"]
+                for row in self.conn.execute(
+                    "SELECT id FROM payments WHERE seq > ? ORDER BY seq LIMIT ?", (after_seq, limit + 1)
+                )
+            ]
+            return [self._payment(payment_id) for payment_id in ids[:limit]], len(ids) > limit
 
     def balance_cents(self) -> int:
         """What the provider holds for us: captured minus refunded."""

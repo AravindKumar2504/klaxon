@@ -43,8 +43,9 @@ SCENARIO = "live-duplicate-webhook"
 API_URL = "http://127.0.0.1:8080"
 LABEL = (
     "Real run on this Mac's Docker Compose stack: payments API, fake provider, webhook receiver, Kafka,"
-    " ledger consumer, PostgreSQL and Redis. Synthetic data and a simulated provider: no real money, no real"
-    " payment company. It shows the money check Klaxon will use to verify fixes; it is not the Klaxon agent."
+    " ledger consumer, payment confirmer, PostgreSQL and Redis. Synthetic data and a simulated provider: no real"
+    " money, no real payment company. It shows the money check Klaxon will use to verify fixes; it is not the"
+    " Klaxon agent."
 )
 HANDLERS = {
     "naive": "posts every delivery it receives",
@@ -93,6 +94,7 @@ class LiveRun:
     handler: str
     scenario: Scenario
     container_handler: str
+    container_confirmer: str
     requests: list[dict]  # what we sent the payments API, and what it answered
     settling: Settling
     delivery_stats: dict
@@ -101,6 +103,7 @@ class LiveRun:
     report: MoneyReport
     dashboard: Dashboard
     ledger_transactions: list[dict]
+    our_payments: list[dict]
 
 
 def _readonly_rows(query: str) -> list[tuple]:
@@ -125,6 +128,7 @@ def run_live(handler: str, seed: int = 7, payments: int = 5, settle_timeout: flo
         raise DemoError(
             f"the running ledger consumer uses {container_handler!r}, not {handler!r}: make up HANDLER={handler}"
         )
+    container_confirmer = stack.container_env("payment-confirmer").get("CONFIRMER_HANDLER", "by_our_id")
     scenario = scenario_from_first_piece(seed, payments)
 
     with (
@@ -163,6 +167,7 @@ def run_live(handler: str, seed: int = 7, payments: int = 5, settle_timeout: flo
         handler=handler,
         scenario=scenario,
         container_handler=container_handler,
+        container_confirmer=container_confirmer,
         requests=requests,
         settling=settling,
         delivery_stats=deliveries["stats"],
@@ -175,13 +180,29 @@ def run_live(handler: str, seed: int = 7, payments: int = 5, settle_timeout: flo
             for a in deliveries["attempts"]
             if a["status"] is not None
         ),
-        ledger_transactions=[
-            {"id": tx, "event_id": event, "payment_id": payment, "source": source}
-            for tx, event, payment, source in _readonly_rows(
-                "SELECT id, event_id, payment_id, source FROM transactions ORDER BY id"
-            )
-        ],
+        ledger_transactions=ledger_transactions(),
+        our_payments=our_payments(),
     )
+
+
+def ledger_transactions() -> list[dict]:
+    """The ledger's transactions, as the read-only role sees them."""
+    return [
+        {"id": tx, "event_id": event, "payment_id": payment, "source": source}
+        for tx, event, payment, source in _readonly_rows(
+            "SELECT id, event_id, payment_id, source FROM transactions ORDER BY id"
+        )
+    ]
+
+
+def our_payments() -> list[dict]:
+    """Our payments table, as the read-only role sees it."""
+    return [
+        {"id": payment, "status": status, "amount_cents": amount, "provider_payment_id": provider_id}
+        for payment, status, amount, provider_id in _readonly_rows(
+            "SELECT id, status, amount_cents, provider_payment_id FROM payments ORDER BY id"
+        )
+    ]
 
 
 def verdict(run: LiveRun) -> str:
@@ -202,11 +223,13 @@ def render(run: LiveRun) -> str:
         "Klaxon week 1: the first piece's scenario, through the live stack",
         f"REAL RUN on this Mac's Docker Compose stack (seed {run.scenario.seed})."
         " Synthetic data, simulated provider, no real money.",
-        "Real software in between: payments API, webhook receiver, Kafka, ledger consumer, PostgreSQL, Redis.",
+        "Real software in between: payments API, webhook receiver, Kafka, ledger consumer, payment confirmer,"
+        " PostgreSQL, Redis.",
         "It shows the money check Klaxon will use to verify fixes. It is not the agent.",
         "",
         f"Ledger consumer: {run.handler} ({HANDLERS[run.handler]})",
         f"  the running container has LEDGER_HANDLER={run.container_handler}",
+        f"Payment confirmer: the running container has CONFIRMER_HANDLER={run.container_confirmer}",
         "",
         "Requests, client -> payments API -> fake provider",
     ]
@@ -241,7 +264,7 @@ def render(run: LiveRun) -> str:
         f"Money check, ledger vs the provider's own records (settled after {run.settling.waited_seconds} s)",
     ]
     for inv in run.report.invariants:
-        out.append(f"  {'PASS' if inv.passed else 'FAIL'}  {inv.name:<20} {inv.summary}")
+        out.append(f"  {'PASS' if inv.passed else 'FAIL'}  {inv.name:<24} {inv.summary}")
     out += ["", verdict(run)]
     return "\n".join(out)
 
@@ -256,7 +279,9 @@ def stack_fingerprint() -> str:
     return digest.hexdigest()
 
 
-def evidence(run: LiveRun, command: str, now: datetime) -> dict:
+def provenance(command: str, now: datetime) -> dict:
+    """When, where and from exactly which code a run came: the fields every live evidence file starts with."""
+
     def git(*args: str) -> str | None:
         done = subprocess.run(["git", *args], cwd=stack.REPO, capture_output=True, text=True, timeout=5)
         return done.stdout.strip() if done.returncode == 0 else None
@@ -264,12 +289,6 @@ def evidence(run: LiveRun, command: str, now: datetime) -> dict:
     # Clean means the code and the stack's definition match the commit; notes in docs/ cannot change a run.
     status = git("status", "--porcelain", "--", *CODE_AND_STACK)
     return {
-        "label": LABEL,
-        "scenario": SCENARIO,
-        "handler": run.handler,
-        "handler_description": HANDLERS[run.handler],
-        "container_ledger_handler": run.container_handler,
-        "seed": run.scenario.seed,
         "rerun_command": command,
         "ran_at_utc": now.astimezone(timezone.utc).isoformat(timespec="seconds"),
         "ran_at_local": now.astimezone().isoformat(timespec="seconds"),
@@ -280,6 +299,19 @@ def evidence(run: LiveRun, command: str, now: datetime) -> dict:
         "git_commit": git("rev-parse", "HEAD"),
         "git_clean_code_and_stack": None if status is None else status == "",
         "stack": stack.describe(),
+    }
+
+
+def evidence(run: LiveRun, command: str, now: datetime) -> dict:
+    return {
+        "label": LABEL,
+        "scenario": SCENARIO,
+        "handler": run.handler,
+        "handler_description": HANDLERS[run.handler],
+        "container_ledger_handler": run.container_handler,
+        "container_confirmer_handler": run.container_confirmer,
+        "seed": run.scenario.seed,
+        **provenance(command, now),
         "money_check_passed": run.report.passed,
         "scenario_from_first_piece": asdict(run.scenario) | {"lost_ack_event_id": run.scenario.lost_ack_event_id},
         "requests": run.requests,
@@ -289,10 +321,12 @@ def evidence(run: LiveRun, command: str, now: datetime) -> dict:
         "provider": {
             "balance_cents": run.provider.balance_cents(),
             "events": [asdict(e) for e in run.provider.events],
+            "payments": [asdict(p) for p in run.provider.payments],
             "delivery_stats": run.delivery_stats,
             "delivery_attempts": run.attempts,
         },
         "ledger_transactions": run.ledger_transactions,
+        "our_payments": run.our_payments,
         "printed_output": render(run).splitlines(),
     }
 

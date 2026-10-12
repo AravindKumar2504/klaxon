@@ -18,6 +18,7 @@ PASSWORDS = {
     "postgres": "postgres-dev-only",
     "ledger_writer": "ledger-writer-dev-only",
     "payments_api": "payments-api-dev-only",
+    "payment_confirmer": "payment-confirmer-dev-only",
     "klaxon_readonly": "klaxon-readonly-dev-only",
 }
 SCHEMA_SQL = (REPO / "docker" / "postgres" / "initdb" / "20-schema.sql").read_text()
@@ -36,6 +37,12 @@ def database() -> Iterator[str]:
     except psycopg.OperationalError as exc:
         pytest.fail(f"the stack's PostgreSQL is not reachable (make up): {exc}")
     with admin:
+        missing = [
+            r for r in PASSWORDS if not admin.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (r,)).fetchone()
+        ]
+        if missing:
+            # The roles are made once, when the stack's database volume is first created (10-roles.sh).
+            pytest.fail(f"the stack's database has no role {missing}: it predates them. Run make reset, then make up")
         admin.execute(f'CREATE DATABASE "{name}"')
     try:
         with psycopg.connect(dsn("postgres", name), autocommit=True) as conn:

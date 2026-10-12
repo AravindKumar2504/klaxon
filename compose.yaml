@@ -38,6 +38,7 @@ services:
       # Read by docker/postgres/initdb/10-roles.sh on first start.
       LEDGER_WRITER_PASSWORD: ledger-writer-dev-only
       PAYMENTS_API_PASSWORD: payments-api-dev-only
+      PAYMENT_CONFIRMER_PASSWORD: payment-confirmer-dev-only
       KLAXON_READONLY_PASSWORD: klaxon-readonly-dev-only
     volumes:
       - pgdata:/var/lib/postgresql # PostgreSQL 18 images keep their data under /var/lib/postgresql/18/docker
@@ -186,6 +187,31 @@ services:
       # Healthy while the poll loop keeps touching its heartbeat file. That means "the loop is alive",
       # not "it is consuming": the loop also runs while Kafka is unreachable. Lag is the consuming signal.
       test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/ledger-consumer.heartbeat') > 15)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+
+  # A second consumer group on the same topic: marks our payments succeeded from the provider's
+  # webhooks, so a payment whose provider answer was lost does not stay pending forever.
+  payment-confirmer:
+    <<: *patient-service
+    command: ["python", "-m", "klaxon.patient.services.payment_confirmer"]
+    environment:
+      DATABASE_URL: postgresql://payment_confirmer:payment-confirmer-dev-only@postgres:5432/klaxon
+      KAFKA_BOOTSTRAP: kafka:9092
+      # by_our_id (default) or by_provider_id, the known-bad baseline: make up CONFIRMER=by_provider_id
+      CONFIRMER_HANDLER: ${CONFIRMER_HANDLER:-by_our_id}
+      HEARTBEAT_PATH: /tmp/payment-confirmer.heartbeat
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # Like the ledger consumer's: the loop is alive. Its lag says whether it keeps up.
+      test: ["CMD", "python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/payment-confirmer.heartbeat') > 15)"]
       interval: 10s
       timeout: 5s
       retries: 3

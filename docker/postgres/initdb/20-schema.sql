@@ -50,7 +50,9 @@ CREATE TABLE ledger.processed_events (
 
 -- Payments -----------------------------------------------------------------
 -- Our own record of what clients asked for. The money is booked in the ledger,
--- from the provider's webhooks, never from here.
+-- from the provider's webhooks, never from here. A payment's status comes from
+-- the provider's answer to the payments API, or, when that answer is lost,
+-- from the provider's webhook (the payment confirmer).
 
 -- MAXVALUE keeps the six-digit ids from ever being cut short. A number is used up only when a new
 -- row is inserted (the store looks a key up before inserting), and past 999,999 inserts fail loudly.
@@ -91,7 +93,7 @@ DO $$ BEGIN
 END $$;
 
 GRANT USAGE ON SCHEMA ledger TO ledger_writer, klaxon_readonly;
-GRANT USAGE ON SCHEMA payments TO payments_api, klaxon_readonly;
+GRANT USAGE ON SCHEMA payments TO payments_api, payment_confirmer, klaxon_readonly;
 
 -- The ledger consumer: read and add. No UPDATE, no DELETE: ledger rows are
 -- never edited or deleted, and a wrong posting is repaired by a reversal.
@@ -103,6 +105,13 @@ GRANT SELECT, INSERT ON payments.payments, payments.refunds TO payments_api;
 GRANT UPDATE (status, provider_payment_id, updated_at) ON payments.payments TO payments_api;
 GRANT UPDATE (status, provider_refund_id, updated_at) ON payments.refunds TO payments_api;
 GRANT USAGE ON SEQUENCE payments.payment_number, payments.refund_number TO payments_api;
+
+-- The payment confirmer: marks payments succeeded from the provider's webhooks.
+-- It reads the four columns it compares (not customers or idempotency keys)
+-- and may change a status and the provider's id, nothing else: no new rows,
+-- no amounts, no refunds, no ledger.
+GRANT SELECT (id, status, amount_cents, provider_payment_id) ON payments.payments TO payment_confirmer;
+GRANT UPDATE (status, provider_payment_id, updated_at) ON payments.payments TO payment_confirmer;
 
 -- Klaxon and the money check: read everything, write nothing.
 GRANT SELECT ON ALL TABLES IN SCHEMA ledger, payments TO klaxon_readonly;

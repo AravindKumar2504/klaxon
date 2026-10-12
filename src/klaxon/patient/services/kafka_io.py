@@ -7,9 +7,12 @@ Topics (created by the kafka-init container in compose.yaml, never on the fly):
 - provider-events-dlq: events a consumer could not use, with the reason and
   the consumer's name in headers, kept for a human to look at.
 
-Consumer group "ledger": Kafka splits the topic's partitions among the group's
-running consumers and remembers, per partition, the offset the group has
-committed (its place in the log). Lag is how far that place is behind the end.
+Consumer groups: Kafka splits the topic's partitions among a group's running
+consumers and remembers, per partition, the offset the group has committed
+(its place in the log). Lag is how far that place is behind the end. Two
+groups read provider-events, each with its own place: "ledger" books the
+money, "payment-confirmer" marks our payments succeeded. One can fall behind
+or stop while the other keeps going.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ logger = logging.getLogger("klaxon.kafka")
 EVENTS_TOPIC = "provider-events"
 DLQ_TOPIC = "provider-events-dlq"
 LEDGER_GROUP = "ledger"
+CONFIRMER_GROUP = "payment-confirmer"
 
 
 class PublishError(Exception):

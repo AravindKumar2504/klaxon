@@ -1,16 +1,25 @@
-"""Provider event payloads: one parser for the webhook receiver and the ledger consumer.
+"""Provider event payloads: one parser for the webhook receiver and both consumers.
 
 The shape is the first piece's (`klaxon.patient.provider.Event.payload`):
 
     {"id": "evt_000001", "type": "payment.succeeded", "created": 1791504000,
-     "data": {"payment_id": "pay_000001", "amount_cents": 1999, "currency": "usd"}}
+     "data": {"payment_id": "pay_000001", "amount_cents": 1999, "currency": "usd",
+              "metadata": {"klaxon_payment_id": "pmt_000001"}}}
+
+A payment's events also carry the metadata the payment was created with, as
+Stripe's do. Ours holds our own payment id, which the payments API sends with
+every charge. It is how the payment confirmer finds our payment even when the
+provider's answer never reached us, so we never learned the provider's id.
 
 The receiver only needs the event id and a partition key, so it uses
-`id_and_key`. The consumer books money, so it uses `parse_event`, which checks
-every field the ledger depends on. Anything either refuses raises BadEvent:
-the receiver answers 400, the consumer dead-letters the message. Ids must be
-short plain ASCII, so no value that reaches the database can be refused there
-(a lone surrogate cannot be encoded, a 3 KB id does not fit in an index row).
+`id_and_key`. The consumers use `parse_event`, which checks every field the
+ledger depends on. Anything either refuses raises BadEvent: the receiver
+answers 400, a consumer dead-letters the message. Ids must be short plain
+ASCII, so no value that reaches the database can be refused there (a lone
+surrogate cannot be encoded, a 3 KB id does not fit in an index row). Missing
+or malformed metadata is not refused: the provider moved the money either
+way, so the ledger still books it, and the confirmer reports that it cannot
+match the event to a payment of ours.
 """
 
 from __future__ import annotations
@@ -36,9 +45,10 @@ class ProviderEvent:
     id: str
     type: str
     created: int
-    payment_id: str
+    payment_id: str  # the provider's payment id
     amount_cents: int
     currency: str
+    klaxon_payment_id: str | None = None  # our own payment id, from the metadata; None if it holds none
 
 
 def _is_cents(value: object) -> bool:
@@ -93,6 +103,8 @@ def parse_event(body: bytes) -> ProviderEvent:
         raise BadEvent(f"amount {data['amount_cents']} cents is above the {MAX_AMOUNT_CENTS} cents limit")
     if data.get("currency") != CURRENCY:
         raise BadEvent(f"unsupported currency {data.get('currency')!r}")
+    metadata = data.get("metadata")
+    ours = metadata.get("klaxon_payment_id") if isinstance(metadata, dict) else None
     return ProviderEvent(
         id=event["id"],
         type=event["type"],
@@ -100,4 +112,5 @@ def parse_event(body: bytes) -> ProviderEvent:
         payment_id=data["payment_id"],
         amount_cents=data["amount_cents"],
         currency=data["currency"],
+        klaxon_payment_id=ours if _is_id(ours) else None,
     )

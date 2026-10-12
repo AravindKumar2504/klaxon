@@ -1,8 +1,9 @@
-"""The Kafka consumer loop: read an event, apply it in PostgreSQL, then commit the offset.
+"""The loop both Kafka consumers share: read an event, apply it in PostgreSQL, then commit the offset.
 
-The ledger consumer runs it (ledger_consumer), where "apply" means "book the
-money". The loop lives here, apart from the ledger, so a second consumer can
-follow the same rules.
+Two consumer groups read the provider-events topic, each with its own place in
+the log: "ledger" books the money (ledger_consumer), "payment-confirmer" marks
+our payments succeeded (payment_confirmer). Each plugs in what "apply" means;
+the rules below are the same for both.
 
 Kafka delivers at least once too. If a consumer applies an event and crashes
 before it saves its place (commits its offset), it reads that event again

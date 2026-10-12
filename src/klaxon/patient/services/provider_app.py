@@ -2,6 +2,7 @@
 
     POST /v1/payments        create and capture a payment (Idempotency-Key honored)
     POST /v1/refunds         refund part or all of a payment (Idempotency-Key honored)
+    GET  /v1/payments        every payment, oldest first, paginated (limit, starting_after)
     GET  /v1/payments/{id}
     GET  /v1/events          every event, oldest first, paginated (limit, starting_after)
     GET  /v1/balance         what the provider holds for us: captured minus refunded
@@ -9,7 +10,8 @@
 Simulator controls, not part of any real provider:
 
     GET  /admin/deliveries   delivery counts; ?attempts=true lists every attempt
-    PUT  /admin/behavior     lose acknowledgements on purpose, to cause duplicates
+    PUT  /admin/behavior     lose acknowledgements on purpose, to cause duplicates; answer a
+                             charge with a 500, to leave our side not knowing it went through
     GET  /healthz
 
 Run: python -m klaxon.patient.services.provider_app
@@ -35,6 +37,7 @@ from klaxon.patient.services.common import (
     env_float,
     env_int,
     env_str,
+    log,
 )
 from klaxon.patient.services.provider_delivery import Behavior, WebhookSender
 from klaxon.patient.services.provider_store import ProviderError, ProviderStore
@@ -63,6 +66,8 @@ class BehaviorIn(BaseModel):
     lose_ack_rate: float = Field(0.0, ge=0.0, le=1.0)
     seed: int = 0
     lose_ack_event_ids: list[str] = Field(default_factory=list)
+    fail_after_charge_rate: float = Field(0.0, ge=0.0, le=1.0)
+    fail_after_charge_keys: list[str] = Field(default_factory=list)
 
 
 def _respond(body: dict, replayed: bool) -> JSONResponse:
@@ -95,6 +100,13 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
         )
         if sender is not None and not replayed:
             sender.wake()
+        if sender is not None and sender.behavior.fails_after_charge(idempotency_key or body["id"]):
+            # Simulated: the charge is saved and its webhook is on its way, but the answer is an error.
+            log(logger, logging.WARNING, "charged, then answered 500 on purpose", payment_id=body["id"])
+            return JSONResponse(
+                {"error": {"code": "internal_error", "message": "simulated failure after the charge was saved"}},
+                status_code=500,
+            )
         return _respond(body, replayed)
 
     @app.post("/v1/refunds")
@@ -105,6 +117,11 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
         if sender is not None and not replayed:
             sender.wake()
         return _respond(body, replayed)
+
+    @app.get("/v1/payments")
+    def list_payments(limit: int = Query(100, ge=1, le=500), starting_after: str | None = None) -> dict:
+        payments, has_more = store.list_payments(limit, starting_after)
+        return {"object": "list", "data": payments, "has_more": has_more}
 
     @app.get("/v1/payments/{payment_id}")
     def get_payment(payment_id: str) -> dict:
@@ -130,7 +147,13 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
     def set_behavior(behavior: BehaviorIn) -> dict:
         if sender is None:
             raise ProviderError(409, "no_sender", "this provider has no webhook sender running")
-        sender.behavior = Behavior(behavior.lose_ack_rate, behavior.seed, frozenset(behavior.lose_ack_event_ids))
+        sender.behavior = Behavior(
+            lose_ack_rate=behavior.lose_ack_rate,
+            seed=behavior.seed,
+            lose_ack_event_ids=frozenset(behavior.lose_ack_event_ids),
+            fail_after_charge_rate=behavior.fail_after_charge_rate,
+            fail_after_charge_keys=frozenset(behavior.fail_after_charge_keys),
+        )
         logger.warning("delivery behavior changed", extra={"fields": sender.behavior.to_dict()})
         return sender.behavior.to_dict()
 

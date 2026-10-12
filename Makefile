@@ -7,6 +7,7 @@ DOCKER := $(or $(shell command -v docker 2>/dev/null),$(HOME)/.docker/bin/docker
 export PATH := $(HOME)/.docker/bin:$(PATH)
 export DOCKER_CLI_HINTS := false
 export LEDGER_HANDLER := $(or $(HANDLER),idempotent)
+export CONFIRMER_HANDLER := $(or $(CONFIRMER),by_our_id)
 
 # Only ever this repo's own project on this Mac: ignore variables that could point docker somewhere else.
 unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
@@ -14,7 +15,8 @@ unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PR
 PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
-.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live local-docker-only
+.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer \
+	local-docker-only
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-17s %s\n", $$1, $$2}'
@@ -29,9 +31,10 @@ test: ## offline tests, no Docker needed
 lint: ## ruff: style and common mistakes
 	.venv/bin/ruff check src tests scripts
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
-		src/klaxon/demo/live.py tests/services tests/integration tests/e2e tests/test_live_check.py
+		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py tests/services tests/integration tests/e2e \
+		tests/test_live_check.py tests/test_payments_match_provider.py
 
-up: local-docker-only ## build and start the stack, wait until every service is healthy (HANDLER=naive: bad baseline)
+up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
 
 down: ## stop the stack, keep its data
@@ -53,7 +56,7 @@ logs: ## follow every service's logs
 test-integration: ## tests against the running stack's PostgreSQL and Kafka (make up first)
 	$(PY) -m pytest -q -m integration
 
-e2e: ## reset the stack and drive it end to end (about a minute)
+e2e: ## reset the stack and drive it end to end (about a minute and a half)
 	$(PY) -m pytest -q -m e2e
 
 mutants: ## break the code on purpose, on a copy, and check the tests notice (make up first)
@@ -66,3 +69,8 @@ demo-live: ## the first piece's scenario on the real stack, on fresh data: make 
 	$(MAKE) reset
 	$(MAKE) up
 	$(PY) -m klaxon.demo live-duplicate-webhook --handler $(LEDGER_HANDLER)
+
+demo-lost-answer: ## a charge whose answer is lost, on fresh data: make demo-lost-answer CONFIRMER=by_our_id|by_provider_id
+	$(MAKE) reset
+	$(MAKE) up
+	$(PY) -m klaxon.demo live-lost-answer --confirmer $(CONFIRMER_HANDLER)

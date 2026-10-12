@@ -13,6 +13,14 @@ How a retried request is kept from charging twice, layer by layer:
 3. The provider: we send our payment id as the provider's Idempotency-Key, so
    even a repeated charge request returns the first charge.
 
+When the provider's answer never comes (timeouts, 5xx), the outcome is
+unknown: the payment stays pending and the client is told to retry with the
+same key. If the provider did charge, its webhook settles it: the payment
+confirmer marks it succeeded (see payment_confirmer), so a retry finds it
+confirmed, and it does not stay pending when the client never retries. If the
+provider never charged, it stays pending: no money moved, and the money
+check accepts that.
+
 The ledger is not written here. Money is booked only from the provider's
 webhooks, one path for every payment (see ledger_consumer).
 

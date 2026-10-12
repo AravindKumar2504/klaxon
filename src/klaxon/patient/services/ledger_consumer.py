@@ -1,7 +1,7 @@
 """The ledger consumer: reads provider events from Kafka and books them in PostgreSQL.
 
-Its consumer group is "ledger". The loop it runs lives in
-`klaxon.patient.services.consumer`: book the event in one
+Its consumer group is "ledger". The loop it runs is shared with the payment
+confirmer (`klaxon.patient.services.consumer`): book the event in one
 database transaction, then commit the Kafka offset; dead-letter only what can
 never be booked; retry everything else without committing. Read twice +
 idempotent booking = booked once (see `pg_ledger`).

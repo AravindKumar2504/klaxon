@@ -69,10 +69,10 @@ def reset() -> None:
     compose("down", "--volumes", "--remove-orphans")
 
 
-def up(handler: str = "idempotent") -> None:
+def up(handler: str = "idempotent", confirmer: str = "by_our_id") -> None:
     """Build, start, and wait until every service reports healthy."""
     ensure_local()
-    compose("up", "--detach", "--build", "--wait", env={"LEDGER_HANDLER": handler})
+    compose("up", "--detach", "--build", "--wait", env={"LEDGER_HANDLER": handler, "CONFIRMER_HANDLER": confirmer})
 
 
 def start_container(service: str) -> None:
