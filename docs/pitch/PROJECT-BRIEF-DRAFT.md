@@ -1,5 +1,7 @@
 # Project brief draft: Klaxon
 
+> **Superseded.** This is the working draft from 2026-10-09, kept for the record. The brief that was submitted is in the course repo (`fall-2026/aravind-s/final-project-film/PROJECT-BRIEF.md`). Some lines here are out of date, for example "double charge" (now "posted twice") and K8sGPT (dropped); see `docs/DECISIONS.md`.
+
 DRAFT written by Claude on 2026-10-09 from the planning session. Items in [brackets] need Aravind's answer or confirmation. Nothing here is submitted. The final version goes to `fall-2026/aravind-s/final-project-film/PROJECT-BRIEF.md` in the course repo and must fit on one page.
 
 ## 1. What is it?

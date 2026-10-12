@@ -74,7 +74,7 @@ The first piece's in-process demo still works on its own:
 
 On 2026-10-09 (seed 7), the first piece's in-process demo with the naive handler: 7 webhook requests, 0 errors, dashboard GREEN, ledger balanced, and the money check FAILED: one payment (pay_0003, $69.68) posted twice, books off by +$69.68. With the idempotent handler, every check passed (files in `evidence/first-piece/`).
 
-The same scenario through the live stack (2026-10-09, commit `408670a`, files in `evidence/week1/`) gave the same numbers: with the naive ledger consumer, the dashboard stayed GREEN and the ledger balanced, and the money check FAILED, off by +$69.68, because `evt_000003` was booked twice from two Kafka messages. With the idempotent consumer, it passed. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
+The same scenario through the live stack (2026-10-09, commit `408670a`, an ID from before the one-time history rewrite that [docs/HISTORY.md](docs/HISTORY.md) maps to `1758991`; files in `evidence/week1/`) gave the same numbers: with the naive ledger consumer, the dashboard stayed GREEN and the ledger balanced, and the money check FAILED, off by +$69.68, because `evt_000003` was booked twice from two Kafka messages. With the idempotent consumer, it passed. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
 - Current status: [docs/STATUS.md](docs/STATUS.md)

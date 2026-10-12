@@ -2,6 +2,8 @@
 
 Last updated: 2026-10-11, after Aravind's week 1 review. Week 1 is done and merged into `main` (on his Mac only; nothing is pushed). Next: week 2.
 
+Commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
+
 ## Done
 
 ### Week 1: the patient runs for real in Docker Compose (2026-10-09)
