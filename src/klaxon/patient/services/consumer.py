@@ -23,6 +23,13 @@ What happens to each message:
   bug in our rules): retry the same message with backoff, without committing,
   until it works. A money event is never skipped because something on our
   side is broken; the growing lag is what an alert watches.
+
+Telemetry (week 2): each attempt at a message gets its own span, which
+continues the trace the webhook receiver put in the message's headers, so the
+work shows up under the webhook that brought it. A failed attempt's span ends
+at once, marked as an error, so a consumer retrying for an hour shows every
+failure as it happens. Counters: klaxon.consumer.events (by outcome, dead
+letters included), klaxon.consumer.retries and klaxon.consumer.dead_letters.
 """
 
 from __future__ import annotations
@@ -36,13 +43,30 @@ from typing import Any, Protocol
 
 import psycopg
 from confluent_kafka import KafkaException
+from opentelemetry import metrics, trace
+from opentelemetry.context import Context
+from opentelemetry.trace import Span, SpanKind, StatusCode
 from psycopg_pool import ConnectionPool
 
-from klaxon.patient.services.common import Heartbeat, env_str, log
+from klaxon.patient.services.common import Heartbeat, capped, env_str, log
 from klaxon.patient.services.events import BadEvent, ProviderEvent, parse_event
 from klaxon.patient.services.kafka_io import DLQ_TOPIC, EVENTS_TOPIC, KafkaPublisher, make_consumer
+from klaxon.patient.services.telemetry import trace_from_kafka
 
 logger = logging.getLogger("klaxon.consumer")
+tracer = trace.get_tracer("klaxon.consumer")
+meter = metrics.get_meter("klaxon.consumer")
+EVENTS = meter.create_counter(
+    "klaxon.consumer.events", unit="{message}", description="Messages a consumer finished, by outcome."
+)
+RETRIES = meter.create_counter(
+    "klaxon.consumer.retries",
+    unit="{attempt}",
+    description="Failed attempts to apply an event; the same message is tried again. A stuck consumer climbs.",
+)
+DEAD_LETTERS = meter.create_counter(
+    "klaxon.consumer.dead_letters", unit="{message}", description="Messages sent to the dead-letter topic, by why."
+)
 
 RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0, 4.0, 8.0, 15.0)
 # The database refuses these values; retrying the same message cannot change that.
@@ -94,50 +118,85 @@ class EventConsumer:
 
     def handle(self, msg: Any, stop: threading.Event) -> bool:
         """Process one message. True when it is done and its offset may be committed."""
+        outcome = self._process(msg, stop)
+        if outcome is None:
+            return False  # shutting down: leave it uncommitted, it will be read again
+        EVENTS.add(1, {"consumer": self.name, "outcome": outcome})
+        return True
+
+    def _attempt(self, msg: Any, parent: Context, event: ProviderEvent | None = None):
+        """A span for one try at the message, under the webhook's trace."""
+        attributes = {
+            "messaging.system": "kafka",
+            "messaging.operation.type": "process",
+            "messaging.destination.name": msg.topic(),
+            "messaging.destination.partition.id": str(msg.partition()),
+            "messaging.kafka.offset": msg.offset(),
+            "messaging.consumer.group.name": self.name,
+        }
+        if event is not None:
+            attributes |= {"provider.event_id": event.id, "provider.payment_id": event.payment_id}
+            if event.klaxon_payment_id is not None:
+                attributes["klaxon.payment_id"] = event.klaxon_payment_id
+        return tracer.start_as_current_span(
+            f"process {msg.topic()}", context=parent, kind=SpanKind.CONSUMER, attributes=attributes
+        )
+
+    def _process(self, msg: Any, stop: threading.Event) -> str | None:
+        """What happened to the message ("posted", "dead_lettered", ...), or None when stopped before it was done."""
         source = f"{msg.topic()}/{msg.partition()}@{msg.offset()}"
+        parent = trace_from_kafka(msg.headers())  # the webhook's trace
         try:
             event = parse_event(msg.value())
         except BadEvent as exc:
-            return self._dead_letter(msg, source, f"cannot {self.verb} this event: {exc}", stop)
+            with self._attempt(msg, parent) as span:
+                return _finish(
+                    span, self._dead_letter(msg, source, f"cannot {self.verb} this event: {exc}", "bad_event", stop)
+                )
 
         attempt = 0
         while True:
-            try:
-                outcome = self.apply(event, source)
-            except REFUSED_VALUES as exc:
-                reason = f"database refused the values: {type(exc).__name__}: {exc}"
-                return self._dead_letter(msg, source, reason, stop)
-            except Exception as exc:  # down, permissions, schema, a bug: ours to fix, so wait and retry
-                delay = self.retry_delays[min(attempt, len(self.retry_delays) - 1)]
-                attempt += 1
-                log(
-                    logger,
-                    logging.ERROR if attempt >= 3 else logging.WARNING,
-                    f"could not {self.verb}; will retry the same message",
-                    consumer=self.name,
-                    event_id=event.id,
-                    source=source,
-                    attempt=attempt,
-                    retry_in_seconds=delay,
-                    error=f"{type(exc).__name__}: {exc}",
-                )
-                if stop.wait(delay):
-                    return False  # shutting down: leave it uncommitted, it will be read again
-                continue
+            with self._attempt(msg, parent, event) as span:
+                try:
+                    outcome = self.apply(event, source)
+                except REFUSED_VALUES as exc:
+                    reason = f"database refused the values: {type(exc).__name__}: {exc}"
+                    return _finish(span, self._dead_letter(msg, source, reason, "refused_values", stop))
+                except Exception as exc:  # down, permissions, schema, a bug: ours to fix, so wait and retry
+                    error = f"{type(exc).__name__}: {exc}"
+                    span.set_status(StatusCode.ERROR, capped(error))
+                    span.set_attribute("klaxon.outcome", "will_retry")
+                else:
+                    log(
+                        logger,
+                        logging.INFO,
+                        outcome.replace("_", " "),
+                        consumer=self.name,
+                        event_id=event.id,
+                        event_type=event.type,
+                        payment_id=event.payment_id,
+                        amount_cents=event.amount_cents,
+                        source=source,
+                    )
+                    return _finish(span, outcome)
+            delay = self.retry_delays[min(attempt, len(self.retry_delays) - 1)]
+            attempt += 1
+            RETRIES.add(1, {"consumer": self.name})
             log(
                 logger,
-                logging.INFO,
-                outcome.replace("_", " "),
+                logging.ERROR if attempt >= 3 else logging.WARNING,
+                f"could not {self.verb}; will retry the same message",
                 consumer=self.name,
                 event_id=event.id,
-                event_type=event.type,
-                payment_id=event.payment_id,
-                amount_cents=event.amount_cents,
                 source=source,
+                attempt=attempt,
+                retry_in_seconds=delay,
+                error=error,
             )
-            return True
+            if stop.wait(delay):
+                return None  # shutting down: leave it uncommitted, it will be read again
 
-    def _dead_letter(self, msg: Any, source: str, reason: str, stop: threading.Event) -> bool:
+    def _dead_letter(self, msg: Any, source: str, reason: str, kind: str, stop: threading.Event) -> str | None:
         key = msg.key().decode(errors="replace") if msg.key() else ""
         headers = {"reason": reason[:500], "source": source, "consumer": self.name}
         attempt = 0
@@ -156,10 +215,11 @@ class EventConsumer:
                     error=str(exc),
                 )
                 if stop.wait(delay):
-                    return False
+                    return None
                 continue
+            DEAD_LETTERS.add(1, {"consumer": self.name, "reason": kind})
             log(logger, logging.ERROR, "dead-lettered", consumer=self.name, source=source, reason=reason)
-            return True
+            return "dead_lettered"
 
     def _commit(self, msg: Any) -> None:
         try:
@@ -167,6 +227,11 @@ class EventConsumer:
         except KafkaException as exc:
             # Safe to carry on: the message will be read again and applied as a duplicate, which is a no-op.
             log(logger, logging.WARNING, "offset commit failed", consumer=self.name, error=str(exc))
+
+
+def _finish(span: Span, outcome: str | None) -> str | None:
+    span.set_attribute("klaxon.outcome", outcome or "interrupted")
+    return outcome
 
 
 def open_pool(name: str) -> ConnectionPool:

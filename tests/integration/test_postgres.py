@@ -190,6 +190,17 @@ def test_concurrent_requests_with_one_key_create_one_payment(pool_as, connect):
     assert count(connect("postgres"), "payments.payments") == 1
 
 
+def test_pending_payments_are_counted_and_the_old_ones_are_stuck(pool_as, connect):
+    store = PgPaymentsStore(pool_as("payments_api", dict_rows=True))
+    for n in range(3):
+        store.insert_or_get_payment(f"key-{n}", "fp", "cus_001", 100, "usd")
+    store.mark_payment("pmt_000001", "succeeded", "pay_000001")
+    connect("postgres").execute(
+        "UPDATE payments.payments SET created_at = now() - interval '5 minutes' WHERE id = 'pmt_000002'"
+    )
+    assert store.pending_counts(60) == (2, 1)  # two pending, one of them for more than a minute
+
+
 # The money check's SQL on PostgreSQL --------------------------------------------------
 
 

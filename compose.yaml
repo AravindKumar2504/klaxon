@@ -8,7 +8,8 @@
 #   make reset   stop and delete all data
 #
 # Ports on this Mac: payments API 8080, fake provider 8081, webhook receiver 8082,
-# PostgreSQL 5432, Redis 6379, Kafka 9094.
+# PostgreSQL 5432, Redis 6379, Kafka 9094; observability (week 2): Grafana 3000
+# (admin / admin), Prometheus 9090, Tempo 3200, Loki 3100.
 
 name: klaxon
 
@@ -19,6 +20,14 @@ x-patient-service: &patient-service
     dockerfile: docker/patient.Dockerfile
   restart: unless-stopped
   init: true # a small PID 1 that passes SIGTERM on, so `docker compose stop` shuts services down cleanly
+
+# Where our services send traces, metrics and logs (OpenTelemetry, over OTLP/HTTP). The fake
+# provider gets none of this: it stands for an outside company, whose internals we would not see.
+x-telemetry: &telemetry
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_METRIC_EXPORT_INTERVAL: "10000" # every 10 s, not the default minute
+  OTEL_SEMCONV_STABILITY_OPT_IN: http,database # the stable attribute names, as FastAPI's own spans use
 
 x-http-health: &http-health
   test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
@@ -142,6 +151,7 @@ services:
     <<: *patient-service
     command: ["python", "-m", "klaxon.patient.services.receiver_app"]
     environment:
+      <<: *telemetry
       KAFKA_BOOTSTRAP: kafka:9092
       WEBHOOK_SECRETS: klaxon-dev-webhook-secret-not-real # comma-separated: two secrets during a rotation
     depends_on:
@@ -155,6 +165,7 @@ services:
     <<: *patient-service
     command: ["python", "-m", "klaxon.patient.services.payments_api"]
     environment:
+      <<: *telemetry
       DATABASE_URL: postgresql://payments_api:payments-api-dev-only@postgres:5432/klaxon
       REDIS_URL: redis://redis:6379/0
       PROVIDER_URL: http://fake-provider:8000
@@ -173,6 +184,7 @@ services:
     <<: *patient-service
     command: ["python", "-m", "klaxon.patient.services.ledger_consumer"]
     environment:
+      <<: *telemetry
       DATABASE_URL: postgresql://ledger_writer:ledger-writer-dev-only@postgres:5432/klaxon
       KAFKA_BOOTSTRAP: kafka:9092
       # idempotent (default) or naive, the known-bad baseline: make up HANDLER=naive
@@ -199,6 +211,7 @@ services:
     <<: *patient-service
     command: ["python", "-m", "klaxon.patient.services.payment_confirmer"]
     environment:
+      <<: *telemetry
       DATABASE_URL: postgresql://payment_confirmer:payment-confirmer-dev-only@postgres:5432/klaxon
       KAFKA_BOOTSTRAP: kafka:9092
       # by_our_id (default) or by_provider_id, the known-bad baseline: make up CONFIRMER=by_provider_id
@@ -218,7 +231,30 @@ services:
       start_period: 30s
       start_interval: 1s
 
+  # Observability for development (week 2): an OpenTelemetry collector, Prometheus (metrics), Tempo
+  # (traces), Loki (logs) and Grafana, in one container. Klaxon will read these to investigate.
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.34.0
+    volumes:
+      - lgtmdata:/data # kept by make down, wiped by make reset, like the other data
+      - ./docker/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/klaxon.yaml:ro
+      - ./docker/grafana/klaxon-patient.json:/otel-lgtm/grafana/conf/provisioning/dashboards/klaxon/klaxon-patient.json:ro
+    ports:
+      - "127.0.0.1:3000:3000" # Grafana
+      - "127.0.0.1:9090:9090" # Prometheus API
+      - "127.0.0.1:3200:3200" # Tempo API
+      - "127.0.0.1:3100:3100" # Loki API
+    healthcheck:
+      # The image's own check (every backend answers), started sooner than its 30 s default.
+      test: ["CMD", "/otel-lgtm/docker/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+      start_interval: 2s
+
 volumes:
   pgdata:
   kafkadata:
   providerdata:
+  lgtmdata:

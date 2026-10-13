@@ -1,0 +1,9 @@
+# Grafana loads the Klaxon dashboards from this folder (mounted by compose.yaml into grafana/otel-lgtm).
+apiVersion: 1
+
+providers:
+  - name: "Klaxon"
+    type: file
+    options:
+      path: /otel-lgtm/grafana/conf/provisioning/dashboards/klaxon
+      foldersFromFilesStructure: false

@@ -1,6 +1,6 @@
 """End to end: the whole Compose stack, driven over HTTP the way a client and an operator would.
 
-These reset the stack (its data is synthetic) and take about a minute and a half: make e2e.
+These reset the stack (its data is synthetic) and take about two minutes: make e2e.
 The tests in this file run in order and share one stack, except the last two, which build their own.
 """
 
@@ -20,6 +20,7 @@ pytestmark = pytest.mark.e2e
 
 API_URL = live.API_URL
 KAFKA = "127.0.0.1:9094"
+TEMPO, PROMETHEUS, LOKI = "http://127.0.0.1:3200", "http://127.0.0.1:9090", "http://127.0.0.1:3100"
 
 
 @pytest.fixture(scope="module")
@@ -139,6 +140,55 @@ def test_a_charge_whose_answer_is_lost_is_confirmed_by_its_webhook(idempotent_st
     assert (retry.json()["id"], retry.json()["status"]) == (run.stuck_payment_id, "succeeded")
     assert charges() == before + 5
     assert check_live().report.passed
+
+
+def eventually(read, timeout: float = 60.0, every: float = 2.0):
+    """Telemetry is sent in batches every few seconds: poll until read() returns something."""
+    deadline = time.monotonic() + timeout
+    while not (value := read()):
+        assert time.monotonic() < deadline, "the telemetry never arrived"
+        time.sleep(every)
+    return value
+
+
+def test_a_payment_leaves_its_trace_metrics_and_logs_in_the_observability_stack(idempotent_stack, api):
+    payment = pay(api, "e2e-telemetry", 1_234).json()
+    assert check_live().report.passed  # settled: both consumers have handled the webhook
+    charge = payment["provider_payment_id"]
+    [event] = [e.id for e in ProviderAPI(PROVIDER_URL).events if e.payment_id == charge]
+
+    def webhook_trace() -> dict | None:
+        query = f'{{ span.provider.payment_id = "{charge}" && kind = consumer }}'
+        found = httpx.get(f"{TEMPO}/api/search", params={"q": query}, timeout=10).json().get("traces", [])
+        if len(found) != 1:
+            return None
+        spans = httpx.get(f"{TEMPO}/api/v2/traces/{found[0]['traceID']}", timeout=10).json()["trace"]["resourceSpans"]
+        services = {
+            a["value"]["stringValue"]
+            for rs in spans
+            for a in rs["resource"]["attributes"]
+            if a["key"] == "service.name"
+        }
+        # One trace: the receiver's webhook, then both consumers' work. Wait until every part has been exported.
+        return found[0]["traceID"] if {"webhook-receiver", "ledger-consumer", "payment-confirmer"} <= services else None
+
+    trace_id = eventually(webhook_trace)
+
+    def counted_every_posting() -> bool:
+        # Every booking counted exactly once: the counter (summed over consumer restarts) equals the ledger.
+        query = 'sum(klaxon_consumer_events_total{consumer="ledger", outcome="posted"})'
+        result = httpx.get(f"{PROMETHEUS}/api/v1/query", params={"query": query}, timeout=10).json()["data"]["result"]
+        return bool(result) and float(result[0]["value"][1]) == ledger_transactions()
+
+    assert eventually(counted_every_posting)
+
+    def posted_line() -> list:
+        query = f'{{service_name="ledger-consumer"}} | event_id = "{event}"'
+        response = httpx.get(f"{LOKI}/loki/api/v1/query_range", params={"query": query, "since": "1h"}, timeout=10)
+        return response.json()["data"]["result"]
+
+    [stream] = eventually(posted_line)
+    assert stream["stream"]["trace_id"] == trace_id  # the log line leads to the same trace
 
 
 def test_with_redis_stopped_a_retry_still_cannot_charge_twice(idempotent_stack, api):

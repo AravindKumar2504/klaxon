@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import redis
 
@@ -83,6 +83,7 @@ class MemoryPaymentsStore:
         self.payments: dict[str, PaymentRow] = {}
         self.refunds: dict[str, RefundRow] = {}
         self.down = False
+        self.clock = self._now()  # "now", for pending_counts; every row is created at _now()
 
     def _check(self) -> None:
         if self.down:
@@ -153,6 +154,12 @@ class MemoryPaymentsStore:
         self._check()
         return [row for row in self.refunds.values() if row.payment_id == payment_id]
 
+    def pending_counts(self, older_than_seconds):
+        self._check()
+        pending = [row for row in self.payments.values() if row.status == "pending"]
+        cutoff = self.clock - timedelta(seconds=older_than_seconds)
+        return len(pending), sum(1 for row in pending if row.created_at < cutoff)
+
     def ping(self) -> None:
         self._check()
 
@@ -195,8 +202,17 @@ class FakeProvider:
 class FakeMessage:
     """Enough of confluent_kafka.Message for the ledger consumer."""
 
-    def __init__(self, value: bytes, offset: int, partition: int = 0, key: bytes | None = b"pay_000001", error=None):
+    def __init__(
+        self,
+        value: bytes,
+        offset: int,
+        partition: int = 0,
+        key: bytes | None = b"pay_000001",
+        error=None,
+        headers: list[tuple[str, bytes]] | None = None,
+    ):
         self._value, self._offset, self._partition, self._key, self._error = value, offset, partition, key, error
+        self._headers = headers
 
     def value(self) -> bytes:
         return self._value
@@ -215,6 +231,9 @@ class FakeMessage:
 
     def error(self):
         return self._error
+
+    def headers(self) -> list[tuple[str, bytes]] | None:
+        return self._headers  # like confluent_kafka: None when the message has no headers
 
 
 class FakeConsumer:

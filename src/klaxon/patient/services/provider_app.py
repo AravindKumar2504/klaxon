@@ -83,7 +83,9 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
         if sender is not None:
             sender.stop()
 
-    app = FastAPI(title="Fake payment provider (simulator)", lifespan=lifespan)
+    # No telemetry from the provider: it stands for an outside company (see telemetry). Its process sets up
+    # no providers, so FastAPI's own telemetry stays off; this keeps FastAPI from setting any up itself.
+    app = FastAPI(title="Fake payment provider (simulator)", lifespan=lifespan, telemetry={"auto_configure": False})
     add_request_logging(app, logger)
     add_trusted_hosts(app, "fake-provider")
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 
+from klaxon.patient.services import telemetry
 from klaxon.patient.services.common import configure_logging, env_str, log
 from klaxon.patient.services.consumer import open_pool, serve
 from klaxon.patient.services.kafka_io import LEDGER_GROUP
@@ -23,6 +24,7 @@ logger = logging.getLogger("klaxon.ledger_consumer")
 
 def main() -> None:
     configure_logging("ledger-consumer")
+    telemetry.setup("ledger-consumer")  # before the pool, so its connections are traced
     mode = env_str("LEDGER_HANDLER", "idempotent")
     pool = open_pool("ledger")
     log(logger, logging.INFO, "ledger consumer starting", mode=mode)

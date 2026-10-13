@@ -43,7 +43,7 @@ from confluent_kafka import KafkaException
 from klaxon.checks.money import MoneyReport, ProviderPayment, check_money
 from klaxon.patient.provider import Event
 from klaxon.patient.services.events import ID
-from klaxon.patient.services.kafka_io import CONFIRMER_GROUP, EVENTS_TOPIC, LEDGER_GROUP, consumer_lag
+from klaxon.patient.services.kafka_io import CONSUMER_GROUPS, EVENTS_TOPIC, consumer_lag
 
 # This Mac's view of the stack (see the ports in compose.yaml). Local development values, not secrets.
 # 127.0.0.1, not localhost: localhost tries IPv6 first, and the ports listen on IPv4 only.
@@ -52,8 +52,6 @@ READONLY_DSN = os.environ.get(
     "KLAXON_READONLY_DSN", "postgresql://klaxon_readonly:klaxon-readonly-dev-only@127.0.0.1:5432/klaxon"
 )
 KAFKA_BOOTSTRAP = os.environ.get("KLAXON_KAFKA_BOOTSTRAP", "127.0.0.1:9094")
-# Both consumer groups read provider-events. The check waits until both have caught up.
-CONSUMER_GROUPS = (LEDGER_GROUP, CONFIRMER_GROUP)
 
 
 class ProviderAPI:
@@ -124,7 +122,7 @@ def pending_deliveries(provider_url: str = PROVIDER_URL) -> int:
 def consumer_lags(
     kafka_bootstrap: str = KAFKA_BOOTSTRAP, lag: Callable[[str, str, str], dict[int, int]] = consumer_lag
 ) -> dict[str, dict[int, int]]:
-    """Per consumer group, per partition: the messages it has not committed yet."""
+    """Per consumer group, per partition: the messages it has not committed yet. The check waits for every group."""
     return {group: lag(kafka_bootstrap, group, EVENTS_TOPIC) for group in CONSUMER_GROUPS}
 
 

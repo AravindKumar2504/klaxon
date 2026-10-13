@@ -57,6 +57,7 @@ import psycopg
 from psycopg_pool import ConnectionPool
 
 from klaxon.patient.provider import PAYMENT_SUCCEEDED
+from klaxon.patient.services import telemetry
 from klaxon.patient.services.common import configure_logging, env_str, log
 from klaxon.patient.services.consumer import open_pool, serve
 from klaxon.patient.services.events import ProviderEvent
@@ -163,6 +164,7 @@ class PgConfirmer:
 
 def main() -> None:
     configure_logging("payment-confirmer")
+    telemetry.setup("payment-confirmer")  # before the pool, so its connections are traced
     mode = env_str("CONFIRMER_HANDLER", "by_our_id")
     pool = open_pool("confirmer")
     log(logger, logging.INFO, "payment confirmer starting", mode=mode)

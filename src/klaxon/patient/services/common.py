@@ -1,10 +1,12 @@
 """Small pieces every service uses: settings from the environment, JSON logs, a heartbeat.
 
 Logs are one JSON object per line on stdout, so Docker keeps them and a log
-search (week 3) can filter by field. Klaxon will read these logs, so they are
-untrusted input (prompt-injection text can hide in them). To keep that surface
-small, request lines record the route template ("/payments/{payment_id}"), never
-the raw path a caller sent, and every logged string is cut at 300 characters.
+search (week 3) can filter by field. Inside a trace, a line also carries its
+trace_id and span_id, so it leads to the trace (week 2, see telemetry). Klaxon
+will read these logs, so they are untrusted input (prompt-injection text can
+hide in them). To keep that surface small, request lines record the route
+template ("/payments/{payment_id}"), never the raw path a caller sent, and every
+logged string is cut at 300 characters.
 """
 
 from __future__ import annotations
@@ -17,6 +19,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from opentelemetry import trace
 
 
 def env_str(name: str, default: str | None = None) -> str:
@@ -41,7 +45,7 @@ def env_list(name: str, default: str | None = None) -> list[str]:
 MAX_LOGGED_CHARS = 300
 
 
-def _capped(value: object) -> object:
+def capped(value: object) -> object:
     if isinstance(value, str) and len(value) > MAX_LOGGED_CHARS:
         return f"{value[:MAX_LOGGED_CHARS]}...[{len(value) - MAX_LOGGED_CHARS} more characters cut]"
     return value
@@ -58,9 +62,13 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": self.service,
             "logger": record.name,
-            "msg": _capped(record.getMessage()),
+            "msg": capped(record.getMessage()),
         }
-        line.update({name: _capped(value) for name, value in getattr(record, "fields", {}).items()})
+        span = trace.get_current_span().get_span_context()
+        if span.is_valid:
+            line["trace_id"] = format(span.trace_id, "032x")
+            line["span_id"] = format(span.span_id, "016x")
+        line.update({name: capped(value) for name, value in getattr(record, "fields", {}).items()})
         if record.exc_info:
             line["exc"] = self.formatException(record.exc_info)[-2000:]  # the end of a traceback says the most
         return json.dumps(line, default=str)
@@ -72,8 +80,10 @@ def configure_logging(service: str, level: str | None = None) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level or os.environ.get("LOG_LEVEL", "INFO"))
-    # httpx logs every request at INFO with its full URL; our own lines already say what happened.
+    # httpx logs every request at INFO with its full URL, and psycopg's pool every connection it hands out;
+    # our own lines already say what happened.
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("psycopg.pool").setLevel(logging.WARNING)
 
 
 def log(logger: logging.Logger, level: int, msg: str, **fields: object) -> None:

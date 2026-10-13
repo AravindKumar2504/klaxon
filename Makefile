@@ -56,7 +56,7 @@ logs: ## follow every service's logs
 test-integration: ## tests against the running stack's PostgreSQL and Kafka (make up first)
 	$(PY) -m pytest -q -m integration
 
-e2e: ## reset the stack and drive it end to end (about a minute and a half)
+e2e: ## reset the stack and drive it end to end (about two minutes)
 	$(PY) -m pytest -q -m e2e
 
 mutants: ## break the code on purpose, on a copy, and check the tests notice (make up first)

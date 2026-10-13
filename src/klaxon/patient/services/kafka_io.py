@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
 from confluent_kafka import (
     OFFSET_INVALID,
@@ -31,6 +31,8 @@ from confluent_kafka import (
     TopicPartition,
 )
 from confluent_kafka.admin import AdminClient, OffsetSpec
+from opentelemetry import metrics
+from opentelemetry.metrics import CallbackOptions, Observation
 
 logger = logging.getLogger("klaxon.kafka")
 
@@ -38,6 +40,7 @@ EVENTS_TOPIC = "provider-events"
 DLQ_TOPIC = "provider-events-dlq"
 LEDGER_GROUP = "ledger"
 CONFIRMER_GROUP = "payment-confirmer"
+CONSUMER_GROUPS = (LEDGER_GROUP, CONFIRMER_GROUP)  # every group that reads EVENTS_TOPIC
 
 
 class PublishError(Exception):
@@ -145,9 +148,11 @@ def make_consumer(bootstrap: str, group_id: str, client_id: str) -> Consumer:
     )
 
 
-def consumer_lag(bootstrap: str, group_id: str, topic: str, timeout: float = 5.0) -> dict[int, int]:
+def consumer_lag(
+    bootstrap: str, group_id: str, topic: str, timeout: float = 5.0, admin: AdminClient | None = None
+) -> dict[int, int]:
     """Per partition: how many messages the group has not committed yet."""
-    admin = AdminClient({"bootstrap.servers": bootstrap})
+    admin = admin or AdminClient({"bootstrap.servers": bootstrap})
     metadata = admin.list_topics(topic=topic, timeout=timeout)
     if topic not in metadata.topics or metadata.topics[topic].error is not None:
         raise KafkaException(f"topic {topic} not found")
@@ -166,3 +171,45 @@ def consumer_lag(bootstrap: str, group_id: str, topic: str, timeout: float = 5.0
         place = committed.get(p, OFFSET_INVALID)
         lag[p] = end[p] - (place if place >= 0 else start[p])  # nothing committed yet: everything is lag
     return lag
+
+
+LAG_TIMEOUT_SECONDS = 2.0  # measured on the metrics thread: with Kafka down, give up fast
+
+
+def lag_observations(
+    bootstrap: str, groups: Iterable[str], topic: str, admin: AdminClient | None, lag=consumer_lag
+) -> list[Observation]:
+    """Each group's lag per partition, as metric values.
+
+    It stops at the first group it cannot measure: that means Kafka itself is unreachable, and waiting for
+    every other group would hold up the service's other metrics during exactly that outage.
+    """
+    out = []
+    for group in groups:
+        try:
+            by_partition = lag(bootstrap, group, topic, timeout=LAG_TIMEOUT_SECONDS, admin=admin)
+        except Exception as exc:  # no value this time, rather than a wrong one
+            logger.warning("could not measure consumer lag", extra={"fields": {"group": group, "error": str(exc)}})
+            return out
+        out += [Observation(behind, {"consumer": group, "partition": str(p)}) for p, behind in by_partition.items()]
+    return out
+
+
+def observe_consumer_lag(bootstrap: str, groups: Iterable[str] = CONSUMER_GROUPS, topic: str = EVENTS_TOPIC) -> None:
+    """Report every group's lag as a metric, measured from outside the consumers: from the committed offsets.
+
+    A consumer stuck retrying one message still shows a growing lag, and a stopped one too, because the
+    measurement does not depend on the consumer itself. It runs each time the metrics are exported.
+    """
+    admin = AdminClient({"bootstrap.servers": bootstrap})
+    groups = tuple(groups)
+
+    def measure(options: CallbackOptions) -> list[Observation]:
+        return lag_observations(bootstrap, groups, topic, admin)
+
+    metrics.get_meter("klaxon.kafka").create_observable_gauge(
+        "klaxon.kafka.consumer.lag",
+        callbacks=[measure],
+        unit="{message}",
+        description="Messages in provider-events that a consumer group has not committed yet, per partition.",
+    )

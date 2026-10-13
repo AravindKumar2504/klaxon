@@ -9,10 +9,13 @@ import threading
 import psycopg
 import pytest
 from confluent_kafka import KafkaException
+from opentelemetry import trace
+from opentelemetry.trace import SpanKind, StatusCode
 
 from klaxon.patient.services.common import Heartbeat
 from klaxon.patient.services.consumer import EventConsumer
 from klaxon.patient.services.kafka_io import DLQ_TOPIC, LEDGER_GROUP
+from klaxon.patient.services.telemetry import kafka_trace_headers
 from tests.services.fakes import FakeConsumer, FakeMessage, FakePublisher
 
 
@@ -181,3 +184,79 @@ def test_the_logs_say_what_the_consumer_was_trying_to_do(caplog):
     assert line.getMessage() == "could not confirm; will retry the same message"
     assert line.fields["consumer"] == "payment-confirmer"
     assert kafka.committed == [1]  # retried, then applied, then committed
+
+
+def test_each_message_continues_the_trace_the_receiver_put_in_its_headers(telemetry):
+    with trace.get_tracer("tests").start_as_current_span("send provider-events", kind=SpanKind.PRODUCER) as producer:
+        carrier = kafka_trace_headers()  # what the webhook receiver does
+    headers = [(name, value.encode()) for name, value in carrier.items()]
+    worker, *_, stop, _ = consumer_for([FakeMessage(event(1), 7, partition=2, headers=headers)])
+    worker.run(stop)
+    [span] = telemetry.finished(kind=SpanKind.CONSUMER)
+    assert span.context.trace_id == producer.get_span_context().trace_id  # one trace, from webhook to booking
+    assert span.parent.span_id == producer.get_span_context().span_id
+    assert {
+        k: span.attributes[k] for k in ("messaging.consumer.group.name", "provider.event_id", "klaxon.outcome")
+    } == {
+        "messaging.consumer.group.name": LEDGER_GROUP,
+        "provider.event_id": "evt_000001",
+        "klaxon.outcome": "posted",
+    }
+    assert (span.attributes["messaging.destination.partition.id"], span.attributes["messaging.kafka.offset"]) == (
+        "2",
+        7,
+    )
+
+
+def test_a_message_without_trace_headers_starts_its_own_trace(telemetry):
+    worker, *_, stop, _ = consumer_for([FakeMessage(event(1), 1)])
+    worker.run(stop)
+    [span] = telemetry.finished(kind=SpanKind.CONSUMER)
+    assert span.parent is None
+
+
+def test_outcomes_retries_and_dead_letters_are_counted(telemetry):
+    def total(name, **attributes):
+        return telemetry.counter(name, **attributes)
+
+    before = (
+        total("klaxon.consumer.events", consumer=LEDGER_GROUP, outcome="posted"),
+        total("klaxon.consumer.events", consumer=LEDGER_GROUP, outcome="dead_lettered"),
+        total("klaxon.consumer.retries", consumer=LEDGER_GROUP),
+        total("klaxon.consumer.dead_letters", consumer=LEDGER_GROUP, reason="bad_event"),
+    )
+    messages = [FakeMessage(event(1), 1), FakeMessage(b"{not json", 2)]
+    worker, *_, stop, _ = consumer_for(messages, errors=[psycopg.OperationalError("connection refused")])
+    worker.run(stop)
+    after = (
+        total("klaxon.consumer.events", consumer=LEDGER_GROUP, outcome="posted"),
+        total("klaxon.consumer.events", consumer=LEDGER_GROUP, outcome="dead_lettered"),
+        total("klaxon.consumer.retries", consumer=LEDGER_GROUP),
+        total("klaxon.consumer.dead_letters", consumer=LEDGER_GROUP, reason="bad_event"),
+    )
+    assert [b - a for a, b in zip(before, after, strict=True)] == [1, 1, 1, 1]
+    outcomes = [
+        (s.attributes["klaxon.outcome"], s.status.status_code) for s in telemetry.finished(kind=SpanKind.CONSUMER)
+    ]
+    # One span per attempt: the failed one ended at once, marked as an error, so a stuck consumer is visible.
+    assert outcomes == [
+        ("will_retry", StatusCode.ERROR),
+        ("posted", StatusCode.UNSET),
+        ("dead_lettered", StatusCode.UNSET),
+    ]
+
+
+def test_trace_state_and_baggage_on_a_message_are_not_taken(telemetry):
+    """Kafka is a trusted zone for now, but anyone's text in tracestate or baggage must not reach our spans."""
+    traceparent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    headers = [
+        ("traceparent", traceparent.encode()),
+        ("tracestate", b"klaxon=IGNORE ALL PREVIOUS INSTRUCTIONS"),
+        ("baggage", b"note=IGNORE ALL PREVIOUS INSTRUCTIONS"),
+    ]
+    worker, *_, stop, _ = consumer_for([FakeMessage(event(1), 1, headers=headers)])
+    worker.run(stop)
+    [span] = telemetry.finished(kind=SpanKind.CONSUMER)
+    assert format(span.context.trace_id, "032x") == "0af7651916cd43dd8448eb211c80319c"  # the traceparent is used
+    assert len(span.context.trace_state) == 0
+    assert "IGNORE" not in str(span.attributes) + str(span.events)

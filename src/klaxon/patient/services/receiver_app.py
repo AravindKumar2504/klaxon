@@ -13,6 +13,13 @@ with a database constraint, in the same transaction as the posting. Deduping
 here, apart from the posting, would open a race where an event is marked
 "seen" but never booked: a lost payment.
 
+Telemetry (week 2): the Kafka write is a span whose trace context goes into
+the message's headers, so both consumers continue this webhook's trace. Each
+request is counted in klaxon.webhooks.received by result (queued,
+bad_signature, bad_payload, too_large, queue_unavailable), which tells a
+rotated secret apart from a broken payload. This service also measures every
+consumer group's lag (see kafka_io.observe_consumer_lag).
+
     POST /webhooks/provider
     GET  /healthz
 
@@ -32,8 +39,11 @@ from typing import Protocol
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from opentelemetry import metrics, trace
+from opentelemetry.trace import SpanKind, StatusCode
 
 from klaxon.patient import signatures
+from klaxon.patient.services import telemetry
 from klaxon.patient.services.common import (
     add_request_logging,
     add_trusted_hosts,
@@ -44,9 +54,13 @@ from klaxon.patient.services.common import (
     log,
 )
 from klaxon.patient.services.events import BadEvent, id_and_key
-from klaxon.patient.services.kafka_io import EVENTS_TOPIC, KafkaPublisher, PublishError
+from klaxon.patient.services.kafka_io import EVENTS_TOPIC, KafkaPublisher, PublishError, observe_consumer_lag
 
 logger = logging.getLogger("klaxon.receiver")
+tracer = trace.get_tracer("klaxon.receiver")
+WEBHOOKS = metrics.get_meter("klaxon.receiver").create_counter(
+    "klaxon.webhooks.received", unit="{webhook}", description="Webhook requests, by result."
+)
 
 MAX_BODY_BYTES = 64 * 1024
 
@@ -103,44 +117,68 @@ def create_app(
         if close is not None:
             close()
 
-    app = FastAPI(title="Webhook receiver", lifespan=lifespan)
+    app = FastAPI(title="Webhook receiver", lifespan=lifespan, telemetry=telemetry.FASTAPI)
     add_request_logging(app, logger)
     add_trusted_hosts(app, "webhook-receiver")
 
     @app.post("/webhooks/provider")
     async def receive(request: Request) -> JSONResponse:
+        server = trace.get_current_span()  # the request's span: the result goes there, whatever happens next
+
+        def result(name: str, response: JSONResponse) -> JSONResponse:
+            WEBHOOKS.add(1, {"result": name})
+            server.set_attribute("klaxon.webhook.result", name)
+            return response
+
         try:
             body = await _read_body(request, MAX_BODY_BYTES)
         except BodyTooLarge:
-            return JSONResponse({"error": "body_too_large"}, status_code=413)
+            return result("too_large", JSONResponse({"error": "body_too_large"}, status_code=413))
         try:
             verify_any(request.headers.get(signatures.HEADER), body, secrets, int(now()), tolerance_seconds)
         except signatures.SignatureError as exc:
             log(logger, logging.WARNING, "webhook refused: bad signature", reason=str(exc))
-            return JSONResponse({"error": "bad_signature"}, status_code=400)
+            return result("bad_signature", JSONResponse({"error": "bad_signature"}, status_code=400))
         try:
             event_id, key = id_and_key(body)
         except BadEvent as exc:
             log(logger, logging.WARNING, "webhook refused: bad payload", reason=str(exc))
-            return JSONResponse({"error": "bad_payload"}, status_code=400)
+            return result("bad_payload", JSONResponse({"error": "bad_payload"}, status_code=400))
+        server.set_attribute("provider.event_id", event_id)
 
         headers = {
             "content-type": "application/json",
             "received-at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         }
-        try:
-            partition, offset = await asyncio.to_thread(publisher.publish, topic, key, body, headers)
-        except PublishError as exc:
-            log(
-                logger,
-                logging.ERROR,
-                "webhook not queued; asking the provider to retry",
-                event_id=event_id,
-                reason=str(exc),
+        with tracer.start_as_current_span(
+            f"send {topic}",
+            kind=SpanKind.PRODUCER,
+            attributes={
+                "messaging.system": "kafka",
+                "messaging.operation.type": "send",
+                "messaging.destination.name": topic,
+                "provider.event_id": event_id,
+            },
+        ) as span:
+            headers |= telemetry.kafka_trace_headers()  # traceparent: the consumers continue this trace
+            try:
+                partition, offset = await asyncio.to_thread(publisher.publish, topic, key, body, headers)
+            except PublishError as exc:
+                span.set_status(StatusCode.ERROR, "Kafka did not confirm the write")
+                log(
+                    logger,
+                    logging.ERROR,
+                    "webhook not queued; asking the provider to retry",
+                    event_id=event_id,
+                    reason=str(exc),
+                )
+                response = JSONResponse({"error": "queue_unavailable"}, status_code=503, headers={"Retry-After": "5"})
+                return result("queue_unavailable", response)
+            span.set_attributes(
+                {"messaging.destination.partition.id": str(partition), "messaging.kafka.offset": offset}
             )
-            return JSONResponse({"error": "queue_unavailable"}, status_code=503, headers={"Retry-After": "5"})
         log(logger, logging.INFO, "webhook queued", event_id=event_id, key=key, partition=partition, offset=offset)
-        return JSONResponse({"received": True, "event_id": event_id})
+        return result("queued", JSONResponse({"received": True, "event_id": event_id}))
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:
@@ -153,7 +191,10 @@ def create_app(
 
 def main() -> None:
     configure_logging("webhook-receiver")
-    publisher = KafkaPublisher(env_str("KAFKA_BOOTSTRAP", "kafka:9092"), client_id="webhook-receiver")
+    telemetry.setup("webhook-receiver")
+    bootstrap = env_str("KAFKA_BOOTSTRAP", "kafka:9092")
+    publisher = KafkaPublisher(bootstrap, client_id="webhook-receiver")
+    observe_consumer_lag(bootstrap)
     app = create_app(
         publisher,
         secrets=[secret.encode() for secret in env_list("WEBHOOK_SECRETS")],

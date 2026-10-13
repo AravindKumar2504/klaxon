@@ -61,6 +61,8 @@ class PaymentsStore(Protocol):
 
     def refunds_for(self, payment_id: str) -> list[RefundRow]: ...
 
+    def pending_counts(self, older_than_seconds: int) -> tuple[int, int]: ...
+
     def ping(self) -> None: ...
 
 
@@ -131,6 +133,17 @@ class PgPaymentsStore:
         with self.pool.connection() as conn:
             rows = conn.execute("SELECT * FROM refunds WHERE payment_id = %s ORDER BY id", (payment_id,)).fetchall()
         return [RefundRow(**row) for row in rows]
+
+    def pending_counts(self, older_than_seconds: int) -> tuple[int, int]:
+        """(pending payments, of which older than this). Old pending payments are the "stuck" symptom."""
+        with self.pool.connection(timeout=2.0) as conn:
+            row = conn.execute(
+                "SELECT count(*) AS pending,"
+                " count(*) FILTER (WHERE created_at < now() - make_interval(secs => %s)) AS old"
+                " FROM payments WHERE status = 'pending'",
+                (older_than_seconds,),
+            ).fetchone()
+        return row["pending"], row["old"]
 
     def ping(self) -> None:
         with self.pool.connection(timeout=2.0) as conn:

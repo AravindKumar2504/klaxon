@@ -5,6 +5,7 @@ import json
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from opentelemetry.trace import SpanKind
 
 from klaxon.patient import signatures
 from klaxon.patient.services.kafka_io import EVENTS_TOPIC, PublishError
@@ -157,3 +158,34 @@ def test_logs_record_the_route_template_never_the_raw_path(caplog):
     assert "Ignore" not in logged and "refund everything" not in logged
     routes = [r.fields["route"] for r in service_lines if r.getMessage() == "request"]
     assert routes == ["(no matching route)", "/webhooks/provider"]
+
+
+def test_the_kafka_message_carries_the_webhooks_trace(telemetry):
+    publisher, client = receiver()
+    assert post(client).status_code == 200
+    [message] = publisher.messages
+    [server] = telemetry.finished(kind=SpanKind.SERVER)
+    [producer] = telemetry.finished(kind=SpanKind.PRODUCER)
+    version, trace_id, span_id, flags = message["headers"]["traceparent"].split("-")
+    assert int(trace_id, 16) == server.context.trace_id == producer.context.trace_id
+    assert int(span_id, 16) == producer.context.span_id  # the consumers' spans hang under the Kafka write
+    assert producer.attributes["provider.event_id"] == "evt_000001"
+
+
+def test_every_webhook_result_is_counted_and_recorded_on_the_request_span(telemetry):
+    results = ("queued", "bad_signature", "bad_payload", "too_large", "queue_unavailable")
+
+    def counts():
+        return [telemetry.counter("klaxon.webhooks.received", result=r) for r in results]
+
+    before = counts()
+    publisher, client = receiver()
+    post(client)
+    post(client, secret=b"a-rotated-secret")
+    post(client, body=b"not json")
+    post(client, body=b"x" * (MAX_BODY_BYTES + 1))
+    _, down = receiver(FakePublisher(fail=PublishError("no acknowledgement from Kafka in time")))
+    post(down)
+    assert [b - a for a, b in zip(before, counts(), strict=True)] == [1, 1, 1, 1, 1]
+    recorded = [s.attributes["klaxon.webhook.result"] for s in telemetry.finished(kind=SpanKind.SERVER)]
+    assert recorded == list(results)  # on the request's own span, the one a search finds first
