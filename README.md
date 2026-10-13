@@ -26,6 +26,11 @@ client -> payments API -> fake provider (charges; keeps its own books)
 - `compose.yaml`, `docker/`: official images only (`postgres:18.6-alpine`, `redis:8.8.3-alpine`, `apache/kafka:4.3.1` in KRaft mode, `python:3.12.15-slim`). Every port listens on 127.0.0.1. One database role per service, each with only what it needs.
 - `src/klaxon/checks/live.py`: the money check against the running stack. It waits until nothing is in flight, then compares the ledger and our payments table with the provider's own records.
 
+### Observability: traces, metrics and logs (week 2)
+
+- `src/klaxon/patient/services/telemetry.py`: OpenTelemetry in the payments API, the webhook receiver and both consumers (not the fake provider, which stands for an outside company). A webhook's trip through Kafka is one trace, and every log line carries its trace id. Klaxon will read this telemetry, so it is treated as untrusted input: a caller's trace headers are ignored, the raw path and other caller-chosen text never reach a span, and every attribute is capped at 300 characters.
+- `compose.yaml`, `docker/grafana/`: one `grafana/otel-lgtm` container (collector, Prometheus, Tempo, Loki, Grafana) and a "Klaxon patient" dashboard: webhook results, consumer lag and outcomes, retries and dead letters, the API and the provider, payments pending.
+
 ### The first piece: the money check, in process
 
 - `src/klaxon/checks/money.py`: four invariants, each with evidence: every provider event posted exactly once, the ledger balanced, the ledger matching the provider overall and per payment, and (week 2) our payments table matching the provider's payments. The fourth also catches what the other three cannot: a customer charged twice for one payment, or the wrong amount, because the ledger copies whatever the provider charged. The first three check the first piece's SQLite ledger and the live PostgreSQL ledger alike.
@@ -58,9 +63,10 @@ make check
 | `make test` | offline tests, no Docker needed |
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling week 2, `make reset` once: it adds a database role) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
-| `make e2e` | resets the stack and drives it end to end (about a minute and a half) |
-| `make mutants` | breaks the code on purpose 67 ways, on a copy, and checks a test notices each one |
+| `make e2e` | resets the stack and drives it end to end (about two minutes) |
+| `make mutants` | breaks the code on purpose 86 ways, on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
+| Grafana | http://127.0.0.1:3000 while the stack runs (sign-in: the image's defaults, in `compose.yaml`); dashboard "Klaxon patient" |
 | `make demo-live HANDLER=naive` | the first piece's scenario through the real stack, with the known-bad consumer; writes evidence to `evidence/week1/` |
 | `make demo-live HANDLER=idempotent` | the same with the correct consumer |
 | `make demo-lost-answer CONFIRMER=by_provider_id` | the provider charges a payment but its answer is lost, with the known-bad confirmer; writes evidence to `evidence/week2/` |

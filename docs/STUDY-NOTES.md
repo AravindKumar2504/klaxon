@@ -164,3 +164,42 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 - *What if the API and the confirmer write at the same moment?* They write the same values. The confirmer's UPDATE matches only a pending row, and the API sets succeeded only after the provider said so. An integration test races the two.
 - *Why not dead-letter a conflict?* The message is fine; our record disagrees with it. Retrying cannot fix that, and dead letters are for broken messages. It is logged as an error, and the fourth invariant reports it with evidence.
 - *What is still not covered?* Refunds have the same gap: a refund whose answer is lost stays pending, and nothing confirms it yet.
+
+## Week 2, item 2 (built 2026-10-12): OpenTelemetry, and what Grafana shows
+
+**Why this matters for Klaxon.** Klaxon investigates an incident through tools that read metrics, logs and traces (week 3). Until now the patient wrote JSON logs and nothing else. Now four services send all three signals to one container, `grafana/otel-lgtm`, and Grafana shows them.
+
+**The three signals, in one line each.**
+- *Metrics* are numbers over time: how many webhooks per second, by result; how far behind each consumer is. Cheap to keep, good for alerts and dashboards. Prometheus stores them.
+- *Traces* follow one request through every service. A trace is a tree of *spans*; each span is one piece of work (an HTTP request, a database query, a Kafka message) with a start, an end and attributes. Tempo stores them.
+- *Logs* are the lines the services print, now with the trace id, so a line leads to its trace. Loki stores them.
+
+**OpenTelemetry** is the vendor-neutral standard for producing all three. The services use its Python SDK and send everything over OTLP (its protocol) to the collector inside `otel-lgtm`, which hands each signal to its store.
+
+**How one trace crosses Kafka.** HTTP carries the trace context in a `traceparent` header automatically. Kafka does not, so the receiver does it by hand: it writes the context into the Kafka message's headers, inside a "send" span. Each consumer reads it back and starts its "process" span as a child. So the webhook, the ledger's booking and the confirmer's confirmation are one trace. I saw it: the trace of payment 3's webhook had the receiver's spans, then the ledger consumer's span ("posted") and the confirmer's ("confirmed"), each with its database statements underneath.
+
+**What a trace does not cross: the provider.** The fake provider sends no telemetry, because it stands for an outside company; Stripe does not send us its internal traces either. So the API's request ends at the provider call, and the provider's webhook starts a new trace at our receiver. Our ids join them: search for the payment id and both traces come up.
+
+**The numbers to know (from the dashboard).**
+- *Webhook results*: queued, bad_signature, bad_payload, too_large, queue_unavailable. A rotated secret shows as bad_signature; a broken payload as bad_payload. Both are HTTP 400, which is why the result has its own counter.
+- *Consumer lag* per group: measured from the committed offsets, outside the consumers, so a consumer stuck on one message, or stopped, still shows a growing lag.
+- *Consumer outcomes*, *retries* and *dead letters*: a steady climb in retries means a consumer is stuck.
+- *Provider calls*: every attempt, with its status or error. A provider outage shows here first.
+- *Payments pending*, under or over a minute old. Over a minute is the "stuck pending" symptom.
+
+**Untrusted input, again.** Klaxon will read this telemetry, and an attacker controls some of what a request contains. So a caller's trace headers (traceparent, tracestate, baggage) are ignored: otherwise a caller could switch our tracing off, choose our trace ids, or write its own text onto every span. Only our own hop through Kafka carries trace context, and only the traceparent. Server spans never keep the raw path, query, original method or Host header (overwritten when the span starts; the route template stays), database and Redis spans record the statement without its values, and every attribute is cut at 300 characters. The same rule as the week 1 logs.
+
+**Queries to try** (Grafana, Explore; or the APIs on 127.0.0.1):
+- Tempo (TraceQL): `{ span.klaxon.payment_id = "pmt_000003" }` finds the payment's traces.
+- Prometheus (PromQL): `sum by (consumer) (klaxon_kafka_consumer_lag)` is each group's lag.
+- Loki (LogQL): `{service_name="ledger-consumer"} | event_id = "evt_000003"` finds the log line, with its trace_id.
+
+**What I can say ran (2026-10-12; STATUS has the commands).** With the lost-answer demo's traffic: payment 3's webhook was one trace, from the receiver through the Kafka write to both consumers' work ("posted", "confirmed"); the API's trace for that payment showed the three failed provider attempts; the metrics matched the demo's numbers exactly; the log lines in Loki carried the same trace id; and the Grafana dashboard drew it all. A request that sent its own traceparent got a new trace of ours instead. Measured: 309 offline tests, 57 integration tests, 11 end-to-end tests (one reads a payment's trace, metric and log back from the three stores), and 86 of 86 deliberate breaks caught.
+
+**What the review taught.** I had cleaned what the telemetry records about a request, but not what it takes from it. The trace context arrives in headers, and the tracer believed them: a caller could turn tracing off or put its own text on every span, as far as Kafka and the consumers. Lesson: with untrusted input, check both what you record and what you obey.
+
+**Likely questions.**
+- *Why not instrument the provider too?* A real provider is another company; we would not see its internals, and Klaxon must work without them.
+- *Why put the trace context in Kafka headers by hand?* A contrib instrumentation for confluent-kafka exists (0.66b0 supports our version). I did it by hand instead: our publisher already passes headers, it is about 20 lines, and the tests check the hand-off directly. Either would work.
+- *Why measure lag outside the consumers?* A consumer stuck in a retry loop, or stopped, cannot be trusted to report its own lag.
+- *What does it cost?* The container uses about 0.8 GB of memory, and `make up` still takes about 13 s.

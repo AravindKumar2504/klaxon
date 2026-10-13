@@ -1,10 +1,27 @@
 # Status
 
-Last updated: 2026-10-12. Week 2, item 1 (payment confirmation) is done: Aravind ran it himself, merged it into `main` and had it pushed to GitHub on 2026-10-12 (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 2, items 2-5.
+Last updated: 2026-10-12, evening. Week 2, item 2 (OpenTelemetry) is built and tested on the branch `week-2-opentelemetry` (from `main`) and waits for Aravind's review; it is not merged, and nothing of it is pushed. Item 1 (payment confirmation) is done: Aravind ran it himself, merged it into `main` and had it pushed to GitHub on 2026-10-12 (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 2, items 3-5.
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
 ## Done
+
+### Week 2, item 2: traces, metrics and logs in Grafana (OpenTelemetry, 2026-10-12)
+
+On the branch `week-2-opentelemetry`, not merged yet.
+
+- **The observability container:** `grafana/otel-lgtm:0.34.0` (an OpenTelemetry collector, Prometheus, Tempo, Loki and Grafana in one), always on. Grafana at http://127.0.0.1:3000 (the image's default sign-in, written in `compose.yaml`), the Prometheus, Tempo and Loki APIs on 127.0.0.1 ports 9090, 3200 and 3100. Its data is wiped by `make reset`. Measured 2026-10-12: about 0.8 GB of memory (the whole stack about 1.8 GB of Docker's 7.75), and a fresh `make up` took 13.3 s, as in week 1.
+- **What the services send** (`src/klaxon/patient/services/telemetry.py`): the payments API, the webhook receiver and both consumers; not the fake provider, which stands for an outside company. Traces: FastAPI's request spans, the provider calls (httpx), every database query and Redis command, and the webhook's path through Kafka as one trace. Metrics: request counts and durations, provider call durations, webhook results, consumer outcomes, retries and dead letters, consumer lag per group, pending payments by age. Logs: the JSON lines, with their fields and trace id.
+- **Untrusted input:** a caller's trace headers are ignored; server spans never keep the raw path, query, method text or Host header; database and Redis spans have no values; every attribute is cut at 300 characters.
+- **A dashboard, "Klaxon patient"** (`docker/grafana/klaxon-patient.json`, 17 panels): webhooks, consumers, the API and the provider, pending payments, database time, warning and error logs.
+- **Checked live, 2026-10-12**, with the lost-answer demo's traffic (`python -m klaxon.demo live-lost-answer --confirmer by_our_id --no-evidence`, then the Tempo, Prometheus and Loki APIs): payment 3's webhook was one trace, from the receiver's request through the Kafka write to the ledger's "posted" and the confirmer's "confirmed", each with its database statements; the API's trace for that payment (616 ms) showed the provider's three 500 answers; the metrics matched the demo (6 webhooks queued, 6 postings; 1 "confirmed", 4 "already confirmed", 1 refund ignored; the provider calls 5 answered 200 and 3 answered 500); Loki's "confirmed evt_000003" line carried the webhook trace's id; the dashboard drew all of it. A request that sent its own traceparent got a new trace of ours, and health checks and the pending-payments query left no traces.
+- **Tests** (all measured 2026-10-12 on this branch's final code):
+  - `make test`: 309 passed, offline, 1.0 s. They now run with telemetry on, sent to memory.
+  - `make test-integration` (stack up): 57 passed in 15 s.
+  - `make e2e`: 11 passed in 130 s. New: a payment's webhook trace (all three services), its metric (the "posted" counter equal to the ledger's transactions) and its log line (with that trace id) are read back from Tempo, Prometheus and Loki.
+  - `make mutants` (stack up): 86 of 86 deliberate breaks caught, 237 s. New: 19 for the telemetry, one for each rule above.
+- **Independent review:** a separate Claude review found no way for the telemetry to change a booking, a confirmation, an acknowledgement or a commit. Its biggest finding: FastAPI's tracing trusted the trace headers a caller sends (a caller could turn tracing off, or write its own text onto every span, as far as the consumers). Fixed, with the other findings (see `DECISIONS.md`), before the measurements above.
+- **Versions:** OpenTelemetry 1.45.0 with the 0.66b0 instrumentations (the 2026-10-06 release was under two weeks old); `requirements/services.lock.txt` rebuilt in a clean venv.
 
 ### Week 2, item 1: payments confirmed from webhooks, and a fourth money-check invariant (2026-10-11)
 
@@ -53,20 +70,26 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 ## Known gaps (found in review, not fixed yet)
 
 1. **Refund status never catches up.** Payments are fixed (week 2, above), refunds are not: a refund whose provider answer is lost stays pending, nothing confirms it, and the fourth invariant does not compare refunds. The same fix applies: our refund id as metadata, a `refund.succeeded` confirmation, refunds in the invariant. **Decided 2026-10-12 (Aravind): later.** Claude's suggested time: after the first 3 faults.
-2. **Kafka is a trusted zone.** Any process on this Mac or in the Compose network can publish to Kafka without the provider's signature. The money check would flag a forged event as "posted, but the provider never sent it", but nothing stops it. Planned for the week 9 safety pass: forward the signature in Kafka headers and check it again in the consumer.
+2. **Kafka is a trusted zone.** Any process on this Mac or in the Compose network can publish to Kafka without the provider's signature. The money check would flag a forged event as "posted, but the provider never sent it", but nothing stops it. Such a message can also choose its consumer span's trace id or mark it "not sampled" (only the traceparent is read, never tracestate or baggage). Planned for the week 9 safety pass: forward the signature in Kafka headers and check it again in the consumer.
 3. **The money check assumes no client traffic while it runs.** A request in flight between the provider snapshot and the database read can look like a mismatch ("succeeded but never charged", "charged but not ours"). The traffic generator (week 2, item 3) must pause before a check, or the check needs a cutoff. Decide then.
 4. **A stalled consumer makes `make check` exit 2** ("not settled") instead of showing the money symptom. `python -m klaxon.checks.live --no-wait` runs the check anyway; in-flight events then look lost or stuck. This matters for the poison-message fault.
 5. Smaller limits, documented where they live: no circuit breaker on provider calls (deliberate, a week 2 incident); no OpenTelemetry yet (week 2); one Kafka broker with one copy, so a crash of the whole Docker VM could lose the newest writes; the APIs have no authentication (local only, Host-checked); provider event ids are sequential per provider volume, so reset all volumes together (`make reset`). New in week 2: the API's own status update still trusts the provider's answer, amount included (see `DECISIONS.md`); a poison message is dead-lettered once per consumer group, so a dead-letter metric must count per consumer.
 
 ## Needs Aravind
 
-1. Before the course demos, if not done yet: read the week 2 section of `docs/STUDY-NOTES.md`, then `payment_confirmer.py`, `consumer.py`, and `_payments_match_provider` in `src/klaxon/checks/money.py`.
-2. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
+1. **Review week 2, item 2** (about 30 minutes), on the branch `week-2-opentelemetry`. No `make reset` needed this time (the database is unchanged); the observability image is already downloaded on this Mac.
+   - Run `make test`, then `make up`, then `make demo-lost-answer CONFIRMER=by_our_id`.
+   - Open Grafana at http://127.0.0.1:3000 (sign in with the defaults in `compose.yaml`; it offers a password change, which can be skipped), then the "Klaxon patient" dashboard. In Explore, try the three queries in the week 2 OpenTelemetry section of `docs/STUDY-NOTES.md`.
+   - Run `make e2e` (about two minutes).
+   - Read that section of `STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`.
+   - If you accept it, I merge it into `main`. Nothing is pushed until you say so.
+2. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
+3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Next: the rest of week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
 1. ~~Payment confirmation~~ Done and merged (above).
-2. OpenTelemetry in all five services, into `grafana/otel-lgtm` (one container: collector, metrics, traces, logs, Grafana). Metrics to have: webhook status codes, Kafka consumer lag per group, booking and confirmation outcomes, dead letters per consumer, provider latency, pending payments.
+2. ~~OpenTelemetry~~ Built on its branch (above), waiting for review.
 3. A traffic generator (a service or a make target) using the seeded `lose_ack_rate` and `fail_after_charge_rate`. It must pause before a money check, or the check needs a cutoff (known gap 3).
 4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumers dead-letter poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker. The lost-answer scenario (`klaxon.demo.lost_answer`) already runs on any clean stack, so with `CONFIRMER=by_provider_id` it is a ready-made "payments stuck pending" fault.
 5. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 2 concepts: OpenTelemetry traces, metrics and logs; what Grafana shows).
