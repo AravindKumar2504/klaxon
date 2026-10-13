@@ -75,6 +75,8 @@ Built on the branch `week-2-payment-confirmation`, from `main`: `500a8d9`, `0bab
 - **Refunds are left out for now** (Claude's default; Aravind to confirm). A refund whose answer is lost stays pending, and nothing confirms it. The same fix would apply: our refund id as metadata, a `refund.succeeded` confirmation, refunds in the fourth invariant.
 - **Independent review** (Claude): a separate Claude review of the branch found no way to book twice, charge twice, mark a payment succeeded without a charge, or overwrite a final status. Its fixed findings are listed in STATUS. Two of its scenarios rested on false premises: week 1 already sent the metadata, so the API's request to the provider did not change, and week 1's charges already carry it.
 
-## 2026-10-12 (Aravind's review runs of week 2, item 1)
+## 2026-10-12 (Aravind's review of week 2, item 1)
 
 - **His two demo runs are committed as evidence** (Claude, as for week 1): `evidence/week2/2026-10-12T215323Z_live-lost-answer_by_provider_id_seed7.json` and `2026-10-12T215353Z_live-lost-answer_by_our_id_seed7.json`, at commit `cc6fad7` with clean code and stack. On 2026-10-12 he also ran `make reset`, `make test` (287 passed), `make up`, `make check` (passed) and `make e2e` (10 passed, 88 s). Reading the code and the merge decision are still his.
+- **Week 2, item 1 merged into `main`** (Aravind, 2026-10-12): `week-2-payment-confirmation` was fast-forwarded into `main`, on his Mac only; nothing is pushed. The branch is kept, like `week-1-compose`.
+- **Refunds later** (Aravind, 2026-10-12): the refund version of the lost-answer gap (known gap 1 in STATUS) is not fixed now. Claude's suggested time: after the first 3 faults of week 2.

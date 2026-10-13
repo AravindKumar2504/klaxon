@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-12, after Aravind's review runs. Week 2 has started on the branch `week-2-payment-confirmation` (from `main`). Item 1, payment confirmation, is built, tested and recorded; Aravind ran it himself on 2026-10-12, and it waits for his reading and merge decision. It is not merged, and nothing is pushed. `main` holds week 1 and is public: https://github.com/AravindKumar2504/klaxon (first pushed 2026-10-11, `main` only, no license).
+Last updated: 2026-10-12. Week 2, item 1 (payment confirmation) is done: Aravind ran it himself and merged it into `main` on 2026-10-12, on his Mac only. Nothing is pushed: GitHub's `main` still holds week 1 (public: https://github.com/AravindKumar2504/klaxon, first pushed 2026-10-11, no license). Next: week 2, items 2-5.
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -8,7 +8,7 @@ The week 1 commit IDs quoted below were written before the one-time history rewr
 
 ### Week 2, item 1: payments confirmed from webhooks, and a fourth money-check invariant (2026-10-11)
 
-Aravind's decision of 2026-10-11, built as he decided it. Commits on the branch: `500a8d9` (the consumer loop moves to its own module, unchanged in behavior), `0babb86` (the feature), `0b9d5c1` (the demo runs).
+Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-payment-confirmation`, which was fast-forwarded into `main` on 2026-10-12. Commits: `500a8d9` (the consumer loop moves to its own module, unchanged in behavior), `0babb86` (the feature), `0b9d5c1` (the demo runs), `7bc0151` (Aravind's runs).
 
 - **The payment confirmer:** a fifth service, `payment-confirmer` (`src/klaxon/patient/services/payment_confirmer.py`), in its own Kafka consumer group on `provider-events`. It finds our payment through the metadata the provider sends back (`klaxon_payment_id`) and moves it from pending to succeeded in one conditional UPDATE: only if still pending, for the same amount, not linked to another charge. A final status is never overwritten; a conflict is logged as an error and changes nothing. Its database role `payment_confirmer` reads four columns of `payments.payments` and may change only a status and the provider's id. The stack now runs 9 containers.
 - **One consumer loop:** `src/klaxon/patient/services/consumer.py`, run by both consumers (moved from `ledger_consumer.py`).
@@ -52,7 +52,7 @@ Aravind's decision of 2026-10-11, built as he decided it. Commits on the branch:
 
 ## Known gaps (found in review, not fixed yet)
 
-1. **Refund status never catches up.** Payments are fixed on the week 2 branch (above), refunds are not: a refund whose provider answer is lost stays pending, nothing confirms it, and the fourth invariant does not compare refunds. The same fix applies when wanted: our refund id as metadata, a `refund.succeeded` confirmation, refunds in the invariant.
+1. **Refund status never catches up.** Payments are fixed (week 2, above), refunds are not: a refund whose provider answer is lost stays pending, nothing confirms it, and the fourth invariant does not compare refunds. The same fix applies: our refund id as metadata, a `refund.succeeded` confirmation, refunds in the invariant. **Decided 2026-10-12 (Aravind): later.** Claude's suggested time: after the first 3 faults.
 2. **Kafka is a trusted zone.** Any process on this Mac or in the Compose network can publish to Kafka without the provider's signature. The money check would flag a forged event as "posted, but the provider never sent it", but nothing stops it. Planned for the week 9 safety pass: forward the signature in Kafka headers and check it again in the consumer.
 3. **The money check assumes no client traffic while it runs.** A request in flight between the provider snapshot and the database read can look like a mismatch ("succeeded but never charged", "charged but not ours"). The traffic generator (week 2, item 3) must pause before a check, or the check needs a cutoff. Decide then.
 4. **A stalled consumer makes `make check` exit 2** ("not settled") instead of showing the money symptom. `python -m klaxon.checks.live --no-wait` runs the check anyway; in-flight events then look lost or stuck. This matters for the poison-message fault.
@@ -60,18 +60,17 @@ Aravind's decision of 2026-10-11, built as he decided it. Commits on the branch:
 
 ## Needs Aravind
 
-1. **Finish the review of week 2, item 1**, on the branch `week-2-payment-confirmation`. The runs are done (2026-10-12, above). Still to do:
-   - Read the week 2 section of `docs/STUDY-NOTES.md`, then `payment_confirmer.py`, `consumer.py`, and `_payments_match_provider` in `src/klaxon/checks/money.py`.
-   - If you accept it, merge the branch into `main`. Nothing is pushed until you say so.
-2. **Decide: refunds now or later?** Confirm refunds the same way (known gap 1) now, or after the first 3 faults? Claude's default: later.
+1. **Push?** `main` now holds week 2, item 1 on this Mac only. Pushing would make it public on GitHub. Claude asks before every push.
+2. Before the course demos, if not done yet: read the week 2 section of `docs/STUDY-NOTES.md`, then `payment_confirmer.py`, `consumer.py`, and `_payments_match_provider` in `src/klaxon/checks/money.py`.
 3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Next: the rest of week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
-1. ~~Payment confirmation~~ Done on its branch (above), waiting for review.
+1. ~~Payment confirmation~~ Done and merged (above).
 2. OpenTelemetry in all five services, into `grafana/otel-lgtm` (one container: collector, metrics, traces, logs, Grafana). Metrics to have: webhook status codes, Kafka consumer lag per group, booking and confirmation outcomes, dead letters per consumer, provider latency, pending payments.
 3. A traffic generator (a service or a make target) using the seeded `lose_ack_rate` and `fail_after_charge_rate`. It must pause before a money check, or the check needs a cutoff (known gap 3).
 4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumers dead-letter poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker. The lost-answer scenario (`klaxon.demo.lost_answer`) already runs on any clean stack, so with `CONFIRMER=by_provider_id` it is a ready-made "payments stuck pending" fault.
 5. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 2 concepts: OpenTelemetry traces, metrics and logs; what Grafana shows).
+6. Later (Aravind, 2026-10-12): confirm refunds the same way (known gap 1); suggested after the first 3 faults.
 
 Course tie-in: CSYE 7374 on 10/14 covers an agent working in a real project, and this repo is that project.
