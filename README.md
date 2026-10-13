@@ -65,7 +65,7 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling week 2, `make reset` once: it adds a database role) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about two minutes) |
-| `make mutants` | breaks the code on purpose 89 ways, on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 128 ways, on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make traffic` | synthetic customers until Ctrl-C (`RATE=2` payments per second, `DURATION=` seconds, `SEED=7`) |
 | `make check-under-traffic` | the money check again and again while traffic flows (`CHECKS=20`, `RATE=5`); writes evidence to `evidence/week2/` |
@@ -87,7 +87,9 @@ On 2026-10-09 (seed 7), the first piece's in-process demo with the naive handler
 
 The same scenario through the live stack (2026-10-09, commit `408670a`, an ID from before the one-time history rewrite that [docs/HISTORY.md](docs/HISTORY.md) maps to `1758991`; files in `evidence/week1/`) gave the same numbers: with the naive ledger consumer, the dashboard stayed GREEN and the ledger balanced, and the money check FAILED, off by +$69.68, because `evt_000003` was booked twice from two Kafka messages. With the idempotent consumer, it passed.
 
-A lost provider answer through the live stack (2026-10-11, commit `0babb86`, on the week 2 branch; files in `evidence/week2/`): the fake provider saved payment 3's charge ($69.68) and answered 500 to every retry, so our API had to leave it pending. With the known-bad confirmer, it stayed pending and its refund was refused, while the webhook dashboard stayed GREEN and the ledger balanced and matched the provider; only the fourth invariant FAILED. With the payment confirmer, the webhook confirmed it, the refund went through, and all four invariants passed. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
+A lost provider answer through the live stack (2026-10-11, commit `0babb86`, on the week 2 branch; files in `evidence/week2/`): the fake provider saved payment 3's charge ($69.68) and answered 500 to every retry, so our API had to leave it pending. With the known-bad confirmer, it stayed pending and its refund was refused, while the webhook dashboard stayed GREEN and the ledger balanced and matched the provider; only the fourth invariant FAILED. With the payment confirmer, the webhook confirmed it, the refund went through, and all four invariants passed.
+
+The money check while synthetic traffic flows (2026-10-13, `make check-under-traffic CHECKS=100 RATE=5`, 5 payments per second; files in `evidence/week2/`): before the check had a cutoff, 19 of 100 checks failed on a healthy stack, because a payment landing between the check's reads looked like lost money. With the cutoff, 100 of 100 passed, twice, while most checks had newer payments still landing past their cutoff. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
 - Current status: [docs/STATUS.md](docs/STATUS.md)
