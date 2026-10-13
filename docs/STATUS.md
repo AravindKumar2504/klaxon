@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-13. Week 2, item 2 (OpenTelemetry) is built, tested and reviewed in Grafana on the branch `week-2-opentelemetry` (from `main`). The review found five problems, all fixed on the branch. It waits for Aravind's acceptance; it is not merged, and nothing of it is pushed. Item 1 (payment confirmation) is done: Aravind ran it himself, merged it into `main` and had it pushed to GitHub on 2026-10-12 (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 2, items 3-5.
+Last updated: 2026-10-13. Week 2, item 2 (OpenTelemetry) is done: built on the branch `week-2-opentelemetry`, reviewed in Grafana by Aravind (five problems found, all fixed), accepted by him and fast-forwarded into `main` on 2026-10-13 (`2735793`). It is not pushed yet. Item 1 (payment confirmation) is done: Aravind ran it himself, merged it into `main` and had it pushed to GitHub on 2026-10-12 (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 2, items 3-5.
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -8,7 +8,7 @@ The week 1 commit IDs quoted below were written before the one-time history rewr
 
 ### Week 2, item 2: traces, metrics and logs in Grafana (OpenTelemetry, 2026-10-12)
 
-On the branch `week-2-opentelemetry`, not merged yet.
+Built on the branch `week-2-opentelemetry`. Aravind accepted it on 2026-10-13, after his Grafana review and its fixes, and it was fast-forwarded into `main`. Not pushed yet.
 
 - **The observability container:** `grafana/otel-lgtm:0.34.0` (an OpenTelemetry collector, Prometheus, Tempo, Loki and Grafana in one), always on. Grafana at http://127.0.0.1:3000 (sign in with the image's defaults, written in `compose.yaml`; anonymous access is off since 2026-10-13), the Prometheus, Tempo and Loki APIs on 127.0.0.1 ports 9090, 3200 and 3100. Its data is wiped by `make reset`. Measured 2026-10-12: about 0.8 GB of memory (the whole stack about 1.8 GB of Docker's 7.75), and a fresh `make up` took 13.3 s, as in week 1.
 - **What the services send** (`src/klaxon/patient/services/telemetry.py`): the payments API, the webhook receiver and both consumers; not the fake provider, which stands for an outside company. Traces: FastAPI's request spans, the provider calls (httpx), every database query and Redis command, and the webhook's path through Kafka as one trace. Metrics: request counts and durations, provider call durations, webhook results, consumer outcomes, retries and dead letters, consumer lag per group, pending payments by age. Logs: the JSON lines, with their fields and trace id.
@@ -79,17 +79,15 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. **Accept week 2, item 2?** Your Grafana review is done (above), and its five fixes are on the branch `week-2-opentelemetry`.
-   - To see the fixes: `make demo-lost-answer CONFIRMER=by_our_id`, then the "Klaxon patient" dashboard (Grafana now asks you to sign in: the defaults in `compose.yaml`; it offers a password change, which can be skipped). The rate panels now show the demo's burst.
-   - Read "What my Grafana review found" in the week 2 OpenTelemetry section of `docs/STUDY-NOTES.md`.
-   - If you accept it, I merge it into `main`. Nothing is pushed until you say so.
-2. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
-3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
+1. **Push `main` to GitHub?** It holds week 2, item 2 now, ahead of `origin/main`. Nothing is pushed until you say so.
+2. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
+3. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
+4. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Next: the rest of week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
 1. ~~Payment confirmation~~ Done and merged (above).
-2. ~~OpenTelemetry~~ Built and reviewed on its branch (above), waiting for acceptance.
+2. ~~OpenTelemetry~~ Done and merged (above).
 3. A traffic generator (a service or a make target) using the seeded `lose_ack_rate` and `fail_after_charge_rate`. It must pause before a money check, or the check needs a cutoff (known gap 3).
 4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumers dead-letter poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker. The lost-answer scenario (`klaxon.demo.lost_answer`) already runs on any clean stack, so with `CONFIRMER=by_provider_id` it is a ready-made "payments stuck pending" fault.
 5. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 2 concepts: OpenTelemetry traces, metrics and logs; what Grafana shows).
