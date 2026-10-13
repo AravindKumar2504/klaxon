@@ -20,6 +20,12 @@ services = [
     "psycopg-pool>=3.3",
     "redis>=8.1",
     "confluent-kafka>=2.15",
+    # Week 2: traces, metrics and logs, exported to grafana/otel-lgtm (FastAPI itself needs opentelemetry-api).
+    "opentelemetry-sdk>=1.45",
+    "opentelemetry-exporter-otlp-proto-http>=1.45",
+    "opentelemetry-instrumentation-psycopg>=0.66b0",
+    "opentelemetry-instrumentation-redis>=0.66b0",
+    "opentelemetry-instrumentation-httpx>=0.66b0",
 ]
 
 [tool.setuptools.packages.find]
