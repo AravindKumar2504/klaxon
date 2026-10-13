@@ -33,7 +33,7 @@ lint: ## ruff: style and common mistakes
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
 		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py src/klaxon/demo/under_traffic.py src/klaxon/traffic.py \
 		tests/services tests/integration tests/e2e tests/test_live_check.py tests/test_payments_match_provider.py \
-		tests/test_observability_config.py tests/test_traffic.py
+		tests/test_observability_config.py tests/test_traffic.py tests/test_money_cutoff.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait

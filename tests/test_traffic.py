@@ -396,3 +396,49 @@ def test_what_the_client_learned():
     assert payment_outcome(None) == ("unknown", None)
     assert payment_outcome(response(402, {"payment": {"id": "pmt_1"}})) == ("failed", {"id": "pmt_1"})
     assert payment_outcome(response(422)) == ("error", None)
+
+
+def test_a_double_click_as_the_pool_shuts_down_is_not_sent_and_its_payment_still_is():
+    clock = Clock()
+    stack = Stack(clock)
+    calls = []
+
+    def submit(task):  # the second submit, from inside the payment, finds the pool shutting down
+        calls.append(task)
+        if len(calls) == 2:
+            raise RuntimeError("cannot schedule new futures after shutdown")
+        task()
+
+    generator = stack.generator(quiet(seconds=1.0), submit=submit, payments=one_payment(double_click=True))
+    stats = generator.run()
+    assert (stats["not_sent.double_clicks"], stats["payments.succeeded"], stats["generator_errors"]) == (1, 1, 0)
+    assert generator.in_flight == 0 and len(stack.posts()) == 1
+
+
+def test_traffic_through_the_real_thread_pool_with_real_waits():
+    stack = Stack(Clock())
+    stack.clock = lambda: 0.0  # the stack's own log times do not matter here
+    settings = quiet(seconds=1.0, rate=20.0, double_click_share=0.3)
+    generator = TrafficGenerator(
+        settings,
+        api=httpx.Client(transport=httpx.MockTransport(stack.api_handler), base_url="http://127.0.0.1:8080"),
+        provider=httpx.Client(transport=httpx.MockTransport(stack.provider_handler), base_url="http://127.0.0.1:8081"),
+    )
+    stats = generator.run()
+    assert stats["payments.arrived"] >= 5 and stats["payments.succeeded"] == stats["payments.arrived"]
+    assert stats["generator_errors"] == 0 and generator.in_flight == 0
+    sent = stats["double_clicks.sent"]
+    assert sent == sum(stats[f"double_clicks.{a}"] for a in ("in_progress", "replayed", "ran_first", "other"))
+
+
+def test_the_generators_requests_never_go_through_a_proxy(monkeypatch):
+    """Proxy settings in the environment or the system would send 127.0.0.1 traffic to another machine."""
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.example:3128")
+    monkeypatch.setenv("ALL_PROXY", "http://proxy.example:3128")
+    generator = TrafficGenerator(quiet())
+    assert generator.api.trust_env is False and generator.provider.trust_env is False
+
+
+def test_a_client_passed_to_the_generator_must_aim_at_this_mac_too():
+    with pytest.raises(ValueError, match="only this Mac"):
+        TrafficGenerator(quiet(), api=httpx.Client(base_url="http://payments.example.com"))

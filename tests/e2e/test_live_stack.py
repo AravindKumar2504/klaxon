@@ -10,8 +10,9 @@ import time
 import httpx
 import pytest
 
+from klaxon import traffic
 from klaxon.checks.live import PROVIDER_URL, ProviderAPI, check_live
-from klaxon.demo import live, lost_answer
+from klaxon.demo import live, lost_answer, under_traffic
 from klaxon.patient import stack
 from klaxon.patient.provider import PAYMENT_SUCCEEDED
 from klaxon.patient.services.kafka_io import CONFIRMER_GROUP, EVENTS_TOPIC, LEDGER_GROUP, consumer_lag
@@ -32,7 +33,7 @@ def idempotent_stack():
 
 @pytest.fixture
 def api():
-    with httpx.Client(base_url=API_URL, timeout=20.0) as client:
+    with httpx.Client(base_url=API_URL, timeout=20.0, trust_env=False) as client:
         yield client
 
 
@@ -66,7 +67,7 @@ def test_the_first_pieces_scenario_passes_with_the_idempotent_consumer(idempoten
 
 
 def set_behavior(**behavior) -> None:
-    with httpx.Client(base_url=PROVIDER_URL) as provider:
+    with httpx.Client(base_url=PROVIDER_URL, trust_env=False) as provider:
         provider.put("/admin/behavior", json=behavior).raise_for_status()
 
 
@@ -89,7 +90,7 @@ def test_client_retries_and_lost_acknowledgements_still_book_every_payment_once(
             )
             assert response.status_code == 201
         result = check_live()
-        with httpx.Client(base_url=PROVIDER_URL) as provider:
+        with httpx.Client(base_url=PROVIDER_URL, trust_env=False) as provider:
             stats = provider.get("/admin/deliveries").json()["stats"]
     finally:
         set_behavior()  # the later tests share this stack: never leave it losing acknowledgements
@@ -105,7 +106,7 @@ def test_concurrent_requests_with_one_key_charge_once(idempotent_stack):
     answers: list[httpx.Response] = []
 
     def send():
-        with httpx.Client(base_url=API_URL, timeout=20.0) as client:
+        with httpx.Client(base_url=API_URL, timeout=20.0, trust_env=False) as client:
             start.wait()
             answers.append(pay(client, "e2e-concurrent", 3_333))
 
@@ -117,7 +118,7 @@ def test_concurrent_requests_with_one_key_charge_once(idempotent_stack):
     statuses = sorted(answer.status_code for answer in answers)
     assert set(statuses) <= {201, 409} and 201 in statuses
     assert len({answer.json()["id"] for answer in answers if answer.status_code == 201}) == 1
-    with httpx.Client(base_url=API_URL, timeout=20.0) as client:
+    with httpx.Client(base_url=API_URL, timeout=20.0, trust_env=False) as client:
         assert pay(client, "e2e-concurrent", 3_333).status_code == 201  # finished now, so a repeat is a replay
     assert charges() == before + 1
     assert check_live().report.passed
@@ -142,6 +143,30 @@ def test_a_charge_whose_answer_is_lost_is_confirmed_by_its_webhook(idempotent_st
     assert check_live().report.passed
 
 
+def test_while_traffic_keeps_flowing_every_money_check_passes(idempotent_stack):
+    """Known gap 3, closed: before the cutoff, 19 of 100 checks failed like this on a healthy stack."""
+    run = under_traffic.run_live(rate=5.0, checks=8, warmup_seconds=3.0)
+    assert run.passed, under_traffic.render(run)
+    assert run.traffic["counts"]["payments.succeeded"] > 20  # the checks really ran while payments were made
+    assert run.behavior_note == "the provider's behavior was put back as it was found"
+
+
+def checks_under_traffic(settings: traffic.Settings, checks: int = 3) -> list:
+    generator = traffic.TrafficGenerator(settings)
+    generator.start()
+    try:
+        time.sleep(5.0)
+        return [check_live() for _ in range(checks)]
+    finally:
+        generator.close()
+        generator.join()
+
+
+def local_get(url: str, params: dict | None = None) -> httpx.Response:
+    """A GET to this Mac's stack, never through a proxy."""
+    return httpx.get(url, params=params, timeout=10, trust_env=False)
+
+
 def eventually(read, timeout: float = 60.0, every: float = 2.0):
     """Telemetry is sent in batches every few seconds: poll until read() returns something."""
     deadline = time.monotonic() + timeout
@@ -159,10 +184,10 @@ def test_a_payment_leaves_its_trace_metrics_and_logs_in_the_observability_stack(
 
     def webhook_trace() -> dict | None:
         query = f'{{ span.provider.payment_id = "{charge}" && kind = consumer }}'
-        found = httpx.get(f"{TEMPO}/api/search", params={"q": query}, timeout=10).json().get("traces", [])
+        found = local_get(f"{TEMPO}/api/search", {"q": query}).json().get("traces", [])
         if len(found) != 1:
             return None
-        spans = httpx.get(f"{TEMPO}/api/v2/traces/{found[0]['traceID']}", timeout=10).json()["trace"]["resourceSpans"]
+        spans = local_get(f"{TEMPO}/api/v2/traces/{found[0]['traceID']}").json()["trace"]["resourceSpans"]
         services = {
             a["value"]["stringValue"]
             for rs in spans
@@ -177,14 +202,16 @@ def test_a_payment_leaves_its_trace_metrics_and_logs_in_the_observability_stack(
     def counted_every_posting() -> bool:
         # Every booking counted exactly once: the counter (summed over consumer restarts) equals the ledger.
         query = 'sum(klaxon_consumer_events_total{consumer="ledger", outcome="posted"})'
-        result = httpx.get(f"{PROMETHEUS}/api/v1/query", params={"query": query}, timeout=10).json()["data"]["result"]
+        result = local_get(f"{PROMETHEUS}/api/v1/query", {"query": query}).json()["data"]["result"]
         return bool(result) and float(result[0]["value"][1]) == ledger_transactions()
 
     assert eventually(counted_every_posting)
 
     def posted_line() -> list:
         query = f'{{service_name="ledger-consumer"}} | event_id = "{event}"'
-        response = httpx.get(f"{LOKI}/loki/api/v1/query_range", params={"query": query, "since": "1h"}, timeout=10)
+        response = httpx.get(
+            f"{LOKI}/loki/api/v1/query_range", params={"query": query, "since": "1h"}, timeout=10, trust_env=False
+        )
         return response.json()["data"]["result"]
 
     [stream] = eventually(posted_line)
@@ -195,13 +222,13 @@ def test_a_payment_leaves_its_trace_metrics_and_logs_in_the_observability_stack(
     # Every counter series starts with a 0 in Prometheus, where it started counting, so rate() also sees a
     # burst counted before the series' first export (otel-lgtm runs Prometheus with created-timestamp zero ingestion).
     query = "klaxon_webhooks_received_total[1h]"
-    series = httpx.get(f"{PROMETHEUS}/api/v1/query", params={"query": query}, timeout=10).json()["data"]["result"]
+    series = local_get(f"{PROMETHEUS}/api/v1/query", {"query": query}).json()["data"]["result"]
     assert series and all(s["values"][0][1] == "0" for s in series)
 
 
 def test_grafana_asks_who_you_are(idempotent_stack):
     """The image lets anyone on this Mac in as Admin by default; compose.yaml turns that off."""
-    assert httpx.get("http://127.0.0.1:3000/api/search", timeout=10).status_code == 401
+    assert httpx.get("http://127.0.0.1:3000/api/search", timeout=10, trust_env=False).status_code == 401
 
 
 def test_with_redis_stopped_a_retry_still_cannot_charge_twice(idempotent_stack, api):
@@ -260,7 +287,7 @@ def test_with_kafka_down_webhooks_wait_at_the_provider_and_are_booked_once_it_re
         response = pay(api, "e2e-kafka-down", 7_777)
         assert response.status_code == 201  # taking a payment does not need Kafka
         time.sleep(3)  # let the provider try, and fail, to deliver
-        with httpx.Client(base_url=PROVIDER_URL) as provider:
+        with httpx.Client(base_url=PROVIDER_URL, trust_env=False) as provider:
             stats = provider.get("/admin/deliveries").json()["stats"]
         assert stats["pending"] >= 1  # not acknowledged, so the provider keeps it
     finally:
@@ -318,6 +345,17 @@ def test_the_naive_consumer_is_caught_by_the_money_check_and_by_nothing_else(nai
     assert (run.dashboard.status, run.dashboard.error_rate) == ("GREEN", 0.0)
 
 
+def test_under_traffic_the_naive_consumer_is_caught_for_counting_twice_and_for_nothing_else(naive_stack):
+    """The cutoff must not hide a real fault, nor add false ones next to it."""
+    lossy = traffic.Settings(rate=5.0, seed=3, lose_ack_rate=0.2, lost_answer_rate=0.0)
+    for result in checks_under_traffic(lossy):
+        assert not result.report.passed
+        posted = result.report.invariant("posted_exactly_once").evidence
+        assert posted and all(item["expected"] == 1 and item["times_posted"] > 1 for item in posted)
+        assert result.report.invariant("ledger_balanced").passed
+        assert result.report.invariant("payments_match_provider").passed
+
+
 @pytest.fixture(scope="module")
 def naive_confirmer_stack():
     stack.reset()
@@ -339,3 +377,15 @@ def test_the_naive_confirmer_leaves_a_charged_payment_pending_and_only_the_fourt
     )
     assert (run.after_webhooks["status"], run.refund["status"]) == ("pending", 409)  # and it cannot be refunded
     assert (run.dashboard.status, run.dashboard.error_rate) == ("GREEN", 0.0)
+
+
+def test_under_traffic_the_naive_confirmer_is_caught_for_charged_payments_left_pending_and_nothing_else(
+    naive_confirmer_stack,
+):
+    lost_answers = traffic.Settings(rate=5.0, seed=3, lose_ack_rate=0.0, lost_answer_rate=0.2)
+    results = checks_under_traffic(lost_answers)
+    for result in results:
+        assert [i.name for i in result.report.invariants if not i.passed] == ["payments_match_provider"]
+        stuck = result.report.invariant("payments_match_provider").evidence
+        assert stuck and {item["problem"] for item in stuck} == {"pending but charged"}
+    assert len(results[-1].report.invariant("payments_match_provider").evidence) > 3  # the lost answers pile up

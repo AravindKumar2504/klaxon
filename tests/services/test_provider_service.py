@@ -353,3 +353,68 @@ def test_http_behavior_sets_and_shows_every_control(store, clock):
     shown = api.get("/admin/behavior").json()
     assert shown == chosen | {"lose_ack_event_ids": []}
     assert api.put("/admin/behavior", json={"fail_after_charge_rate": 2}).status_code == 422
+
+
+# What the money check needs to work while traffic flows (week 2) --------------------------
+
+
+def test_the_balance_as_of_a_time_counts_only_what_happened_up_to_that_second(store, clock):
+    store.create_payment("cus_001", 2_500)
+    first = int(clock())
+    clock.now += 5
+    store.create_refund("pay_000001", 500)
+    store.create_payment("cus_002", 1_000)
+    assert store.balance_cents(as_of=first) == 2_500
+    assert store.balance_cents(as_of=first + 4) == 2_500
+    assert store.balance_cents(as_of=first + 5) == store.balance_cents() == 3_000
+    assert store.balance_cents(as_of=first - 1) == 0
+
+
+def test_delivery_counts_up_to_a_time_leave_newer_events_out(store, clock):
+    store.create_payment("cus_001", 2_500)
+    first = int(clock())
+    clock.now += 5
+    store.create_payment("cus_002", 1_000)
+    assert (store.delivery_stats()["pending"], store.delivery_stats()["events"]) == (2, 2)
+    up_to_first = store.delivery_stats(created_lte=first)
+    assert (up_to_first["pending"], up_to_first["events"]) == (1, 1)
+
+
+def test_http_balance_as_of_deliveries_up_to_and_the_providers_clock(api, store, clock):
+    api.post("/v1/payments", json={"customer": "cus_001", "amount_cents": 2_500})
+    first = int(clock())
+    clock.now += 5
+    api.post("/v1/payments", json={"customer": "cus_002", "amount_cents": 1_000})
+    assert api.get("/v1/balance", params={"as_of": first}).json() == {
+        "object": "balance",
+        "available_cents": 2_500,
+        "currency": "usd",
+        "as_of": first,
+    }
+    assert "as_of" not in api.get("/v1/balance").json()
+    assert api.get("/admin/deliveries", params={"created_lte": first}).json()["stats"]["pending"] == 1
+    assert api.get("/admin/clock").json() == {"now": clock()}
+    assert api.get("/v1/balance", params={"as_of": -1}).status_code == 422
+
+
+def test_the_clock_waits_for_a_write_that_is_still_open(store):
+    """A charge stamped C may still be committing when the clock says C + 1. Read under the store's lock,
+    the clock answers only after that write is done, so the check's cutoff is final."""
+    import threading
+    import time
+
+    held, release = threading.Event(), threading.Event()
+
+    def open_write():
+        with store._lock:  # what a payment's write transaction holds from BEGIN to COMMIT
+            held.set()
+            release.wait(5)
+
+    writer = threading.Thread(target=open_write)
+    writer.start()
+    held.wait(5)
+    threading.Timer(0.3, release.set).start()
+    started = time.monotonic()
+    store.now()
+    assert time.monotonic() - started >= 0.25
+    writer.join()

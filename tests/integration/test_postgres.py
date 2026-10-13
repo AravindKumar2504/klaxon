@@ -5,6 +5,7 @@ import threading
 import psycopg
 import pytest
 
+from klaxon.checks.live import read_ledger_and_check
 from klaxon.checks.money import MONEY_EFFECT, check_money
 from klaxon.patient.ledger import Line
 from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED, Event
@@ -12,6 +13,7 @@ from klaxon.patient.services import pg_ledger
 from klaxon.patient.services.events import ProviderEvent
 from klaxon.patient.services.payments_store import PgPaymentsStore
 from klaxon.patient.services.pg_ledger import PgLedger
+from tests.integration.conftest import dsn
 
 pytestmark = pytest.mark.integration
 
@@ -209,6 +211,7 @@ class Records:
 
     def __init__(self, *events: Event) -> None:
         self.events = list(events)
+        self.payments = []
 
     def balance_cents(self) -> int:
         return sum(MONEY_EFFECT[e.type] * e.amount_cents for e in self.events)
@@ -280,3 +283,19 @@ def test_the_money_check_catches_an_unbalanced_transaction_on_postgres(connect):
     balanced = report.invariant("ledger_balanced")
     assert not balanced.passed
     assert {"transaction_id": 1, "lines": 1, "debits_cents": 0, "credits_cents": 2_500} in balanced.evidence
+
+
+def test_the_live_check_reads_our_books_before_the_providers_records(pool_as, database):
+    """Something booked while the provider is being read must not be seen: its event may be missing from the read."""
+    ledger = PgLedger(pool_as("ledger_writer"))
+    ledger.book(PAYMENT, "provider-events/0@0")
+
+    def read_provider(as_of):
+        ledger.book(REFUND, "provider-events/0@1")  # the provider sent it after its records were read
+        return Records(PAID)
+
+    _, report = read_ledger_and_check(None, dsn("klaxon_readonly", database), read_provider)
+    # Our snapshot was taken first, so the refund's posting is not in it. Read the other way round, it would
+    # be, as "posted, but the provider never sent it": a false alarm.
+    assert report.passed, report
+    assert report.ledger_clearing_cents == 2_500

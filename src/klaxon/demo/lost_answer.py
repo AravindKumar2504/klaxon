@@ -34,7 +34,7 @@ from pathlib import Path
 
 import httpx
 
-from klaxon.checks.live import PROVIDER_URL, ProviderAPI, Settling, read_ledger_and_check, wait_until_settled
+from klaxon.checks.live import PROVIDER_URL, ProviderAPI, Settling, read_ledger_and_check, settle
 from klaxon.checks.money import MoneyReport, format_cents
 from klaxon.demo.live import (
     API_URL,
@@ -88,11 +88,10 @@ class LostAnswerRun:
 
 def clean_start(settle_timeout: float) -> ProviderAPI:
     """Wait until settled, then require a passing money check. Returns the provider's records at that moment."""
-    settling = wait_until_settled(settle_timeout)
+    settling = settle(settle_timeout)
     if not settling.settled:
         raise DemoError(f"the stack did not settle within {settle_timeout} s before the scenario: {settling}")
-    snapshot = ProviderAPI(PROVIDER_URL)
-    before = read_ledger_and_check(snapshot)
+    snapshot, before = read_ledger_and_check(settling.cutoff)
     if not before.passed:
         failed = ", ".join(i.name for i in before.invariants if not i.passed)
         raise DemoError(f"the money check fails before the scenario starts ({failed}): make reset, then make up")
@@ -115,8 +114,8 @@ def run_live(
     run_id = uuid.uuid4().hex[:8]
 
     with (
-        httpx.Client(base_url=PROVIDER_URL, timeout=10.0) as provider,
-        httpx.Client(base_url=API_URL, timeout=30.0) as api,
+        httpx.Client(base_url=PROVIDER_URL, timeout=10.0, trust_env=False) as provider,
+        httpx.Client(base_url=API_URL, timeout=30.0, trust_env=False) as api,
     ):
         known_events = {e.id for e in clean_start(settle_timeout).events}
         provider.put("/admin/behavior", json={}).raise_for_status()  # nothing else misbehaves in this run
@@ -145,7 +144,7 @@ def run_live(
             if lost:
                 stuck = payment
 
-        settling = wait_until_settled(settle_timeout)
+        settling = settle(settle_timeout)
         if not settling.settled:
             raise DemoError(f"the stack did not settle within {settle_timeout} s: {settling}")
         after_webhooks = api.get(f"/payments/{stuck['id']}").raise_for_status().json()
@@ -165,12 +164,12 @@ def run_live(
             "body": response.json(),
         }
 
-        settling = wait_until_settled(settle_timeout)
+        settling = settle(settle_timeout)
         if not settling.settled:
             raise DemoError(f"the stack did not settle within {settle_timeout} s after the refund: {settling}")
         attempts = provider.get("/admin/deliveries", params={"attempts": "true"}).raise_for_status().json()["attempts"]
 
-    snapshot = ProviderAPI(PROVIDER_URL)
+    snapshot, report = read_ledger_and_check(settling.cutoff)
     attempts = [a for a in attempts if a["event_id"] not in known_events]
     return LostAnswerRun(
         confirmer=confirmer,
@@ -185,7 +184,7 @@ def run_live(
         settling=settling,
         attempts=attempts,
         provider=snapshot,
-        report=read_ledger_and_check(snapshot),
+        report=report,
         # What HTTP monitoring of our webhook endpoint would see: every status code it answered in this scenario.
         dashboard=summarize(
             RequestRecord(a["event_id"], a["status"], "answered") for a in attempts if a["status"] is not None

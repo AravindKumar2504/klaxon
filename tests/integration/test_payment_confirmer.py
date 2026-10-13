@@ -213,6 +213,6 @@ def test_the_live_check_runs_all_four_invariants_through_the_read_only_role(api_
     row = pending(api_store)
     api_store.mark_payment(row.id, "succeeded", "pay_000001")
     provider = Records(("pay_000001", 2_500, row.id), ("pay_000002", 2_500, row.id))  # charged twice
-    report = read_ledger_and_check(provider, dsn("klaxon_readonly", database))
+    _, report = read_ledger_and_check(None, dsn("klaxon_readonly", database), lambda as_of: provider)
     assert [i.name for i in report.invariants][-1] == "payments_match_provider"
     assert report.invariant("payments_match_provider").evidence[0]["problem"] == "charged twice"

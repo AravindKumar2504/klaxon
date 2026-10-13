@@ -24,7 +24,8 @@ client -> payments API -> fake provider (charges; keeps its own books)
 
 - `src/klaxon/patient/services/`: the five services. The **payments API** (FastAPI) keeps a retried request from charging twice: Redis claims the `Idempotency-Key`, PostgreSQL has it UNIQUE, and the provider gets our payment id as its own key. The **fake provider** keeps its own SQLite books and sends HMAC-signed webhooks at least once, with retries; it can lose acknowledgements on purpose to cause duplicates, or save a charge and answer 500 so we never hear about it. The **webhook receiver** checks the signature and answers 200 only after Kafka has the event. Two Kafka consumer groups read it: the **ledger consumer** books each event in a double-entry ledger in the same transaction as its dedupe row, then commits its offset; the **payment confirmer** (week 2) marks a payment succeeded from the provider's webhook when the API never heard the provider's answer. They share one loop (`consumer.py`).
 - `compose.yaml`, `docker/`: official images only (`postgres:18.6-alpine`, `redis:8.8.3-alpine`, `apache/kafka:4.3.1` in KRaft mode, `python:3.12.15-slim`). Every port listens on 127.0.0.1. One database role per service, each with only what it needs.
-- `src/klaxon/checks/live.py`: the money check against the running stack. It waits until nothing is in flight, then compares the ledger and our payments table with the provider's own records.
+- `src/klaxon/checks/live.py`: the money check against the running stack. It compares the ledger and our payments table with the provider's own records, up to a cutoff: the second the check starts in. It waits until everything up to the cutoff is handled, and leaves newer records for the next check, so it stays right while traffic keeps flowing (week 2).
+- `src/klaxon/traffic.py` (week 2): synthetic customers. Seeded payments at a steady random rate, some double clicks and refunds, retries with the same key, and a little provider noise (lost acknowledgements, lost answers) that a healthy stack absorbs. It only sends to this Mac.
 
 ### Observability: traces, metrics and logs (week 2)
 
@@ -66,6 +67,8 @@ make check
 | `make e2e` | resets the stack and drives it end to end (about two minutes) |
 | `make mutants` | breaks the code on purpose 89 ways, on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
+| `make traffic` | synthetic customers until Ctrl-C (`RATE=2` payments per second, `DURATION=` seconds, `SEED=7`) |
+| `make check-under-traffic` | the money check again and again while traffic flows (`CHECKS=20`, `RATE=5`); writes evidence to `evidence/week2/` |
 | Grafana | http://127.0.0.1:3000 while the stack runs (sign-in: the image's defaults, in `compose.yaml`); dashboard "Klaxon patient" |
 | `make demo-live HANDLER=naive` | the first piece's scenario through the real stack, with the known-bad consumer; writes evidence to `evidence/week1/` |
 | `make demo-live HANDLER=idempotent` | the same with the correct consumer |

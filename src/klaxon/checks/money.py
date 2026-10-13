@@ -23,6 +23,17 @@ the ledger copies the provider faithfully, even when the provider charged a
 customer twice for one payment, or charged the wrong amount. Only invariant
 4 compares the provider with what we asked for.
 
+With a cutoff (week 2, for a check while traffic flows; see klaxon.checks.live):
+only what the provider did up to the end of the cutoff's second is judged.
+A provider record stamped later, and anything our side made from it, may
+still be on its way, so it is left for the next check. Everything up to the
+cutoff is judged exactly as without one. Four things are judged whatever the
+cutoff, because no timing explains them: a posting the provider never sent,
+a payment charged twice, a payment we call succeeded with no charge at all,
+and one linked to a charge the provider gives to another payment of ours.
+(The live check reads our books before the provider's records, so whatever
+our books hold from the provider is already in those records.)
+
 The check reads the ledger and our payments with its own SELECT queries, not
 through the Ledger class, the handlers or the payments API, so it does not
 depend on their bookkeeping being right. Invariants 1-3 run on the first
@@ -57,12 +68,14 @@ class ProviderPayment:
     """One payment as the provider records it. Every payment at this provider is captured at once.
 
     klaxon_payment_id is our own payment id, which the payments API sends with every charge as
-    metadata; None when the metadata holds none.
+    metadata; None when the metadata holds none. created: when it was charged, by the provider's clock
+    (unix seconds); None when not known, and then a cutoff never leaves it out.
     """
 
     id: str
     amount_cents: int
     klaxon_payment_id: str | None
+    created: int | None = None
 
 
 class SqlConnection(Protocol):
@@ -86,6 +99,8 @@ class MoneyReport:
     provider_balance_cents: int
     money_off_cents: int  # ledger minus provider; positive = our books claim money that is not there
     invariants: list[InvariantResult]
+    cutoff: int | None = None  # the provider's clock, unix seconds; None: everything was judged
+    left_for_next_check: dict[str, int] = field(default_factory=dict)  # newer than the cutoff, not judged yet
 
     def invariant(self, name: str) -> InvariantResult:
         return next(i for i in self.invariants if i.name == name)
@@ -94,32 +109,54 @@ class MoneyReport:
         return asdict(self)
 
 
+def _n(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
 def format_cents(cents: int, signed: bool = False) -> str:
     sign = "-" if cents < 0 else ("+" if signed and cents > 0 else "")
     return f"{sign}${abs(cents) // 100:,}.{abs(cents) % 100:02d}"
 
 
 def check_money(
-    provider: ProviderRecords, ledger: SqlConnection, provider_payments: list[ProviderPayment] | None = None
+    provider: ProviderRecords,
+    ledger: SqlConnection,
+    provider_payments: list[ProviderPayment] | None = None,
+    cutoff: int | None = None,
 ) -> MoneyReport:
     """Invariants 1-3; and invariant 4 when the provider's payments are given (ledger must then reach a
-    payments table too, as the live stack's read-only role does)."""
-    events = [e for e in provider.events if e.type in MONEY_EFFECT]
+    payments table too, as the live stack's read-only role does).
+
+    cutoff: judge only what the provider did up to the end of that second (its clock, unix seconds). Then
+    provider.balance_cents() must be its balance as of the cutoff, and provider.events must hold its newer
+    events too: they tell a posting made after the cutoff from one the provider never sent.
+    """
+    money_events = [e for e in provider.events if e.type in MONEY_EFFECT]
+    events = [e for e in money_events if cutoff is None or e.created <= cutoff]
+    newer = {e.id for e in money_events if cutoff is not None and e.created > cutoff}
     provider_balance = provider.balance_cents()
-    ledger_clearing = _clearing_net_debit(ledger)
+    # The ledger's provider_clearing money per (payment, event), without the postings of newer events.
+    clearing = {key: net for key, net in _clearing_by_event(ledger).items() if key[1] not in newer}
+    ledger_clearing = sum(clearing.values())
     invariants = [
-        _posted_exactly_once(events, ledger),
+        _posted_exactly_once(events, ledger, newer),
         _ledger_balanced(ledger),
-        _matches_provider(events, provider_balance, ledger_clearing, ledger),
+        _matches_provider(events, provider_balance, ledger_clearing, clearing),
     ]
+    left = {"provider_events": len(newer), "provider_charges": 0} if cutoff is not None else {}
     if provider_payments is not None:
-        invariants.append(_payments_match_provider(provider_payments, ledger))
+        fourth, newer_charges = _payments_match_provider(provider_payments, ledger, cutoff)
+        invariants.append(fourth)
+        if cutoff is not None:
+            left["provider_charges"] = newer_charges
     return MoneyReport(
         passed=all(i.passed for i in invariants),
         ledger_clearing_cents=ledger_clearing,
         provider_balance_cents=provider_balance,
         money_off_cents=ledger_clearing - provider_balance,
         invariants=invariants,
+        cutoff=cutoff,
+        left_for_next_check=left,
     )
 
 
@@ -139,8 +176,10 @@ def _live_postings(ledger: SqlConnection) -> dict[str, list[int]]:
     return out
 
 
-def _posted_exactly_once(events: list[Event], ledger: SqlConnection) -> InvariantResult:
+def _posted_exactly_once(events: list[Event], ledger: SqlConnection, newer: set[str]) -> InvariantResult:
     postings = _live_postings(ledger)
+    for event_id in newer:  # booked from an event newer than the cutoff: the next check judges it
+        postings.pop(event_id, None)
     evidence = []
     for e in events:
         tx_ids = postings.pop(e.id, [])
@@ -171,7 +210,15 @@ def _posted_exactly_once(events: list[Event], ledger: SqlConnection) -> Invarian
         )
 
     if not evidence:
-        return InvariantResult("posted_exactly_once", True, f"all {len(events)} provider events posted exactly once")
+        if not newer:
+            return InvariantResult(
+                "posted_exactly_once", True, f"all {len(events)} provider events posted exactly once"
+            )
+        summary = (
+            f"all {len(events)} provider events up to the cutoff posted exactly once"
+            f" ({_n(len(newer), 'newer one is', 'newer ones are')} left for the next check)"
+        )
+        return InvariantResult("posted_exactly_once", True, summary)
     parts = []
     for item in evidence:
         if "type" in item:
@@ -219,19 +266,14 @@ def _ledger_balanced(ledger: SqlConnection) -> InvariantResult:
 
 
 def _matches_provider(
-    events: list[Event], provider_balance: int, ledger_clearing: int, ledger: SqlConnection
+    events: list[Event], provider_balance: int, ledger_clearing: int, clearing: dict[tuple[str, str], int]
 ) -> InvariantResult:
     provider_net: dict[str, int] = defaultdict(int)
     for e in events:
         provider_net[e.payment_id] += MONEY_EFFECT[e.type] * e.amount_cents
-    ledger_net = dict(
-        ledger.execute(
-            "SELECT t.payment_id,"
-            "       CAST(SUM(CASE e.side WHEN 'debit' THEN e.amount_cents ELSE -e.amount_cents END) AS BIGINT)"
-            " FROM transactions t JOIN entries e ON e.transaction_id = t.id"
-            " WHERE e.account = 'provider_clearing' GROUP BY t.payment_id"
-        )
-    )
+    ledger_net: dict[str, int] = defaultdict(int)
+    for (payment_id, _), net in clearing.items():
+        ledger_net[payment_id] += net
 
     evidence = []
     if ledger_clearing != provider_balance:
@@ -264,7 +306,14 @@ def _matches_provider(
     return InvariantResult("matches_provider", False, summary, evidence)
 
 
-def _payments_match_provider(provider_payments: list[ProviderPayment], db: SqlConnection) -> InvariantResult:
+def _payments_match_provider(
+    provider_payments: list[ProviderPayment], db: SqlConnection, cutoff: int | None = None
+) -> tuple[InvariantResult, int]:
+    """Invariant 4, and how many of the provider's charges it left for the next check: those newer than the cutoff."""
+
+    def newer(charge: ProviderPayment) -> bool:
+        return cutoff is not None and charge.created is not None and charge.created > cutoff
+
     ours = {
         payment_id: (status, amount, provider_id)
         for payment_id, status, amount, provider_id in db.execute(
@@ -286,10 +335,10 @@ def _payments_match_provider(provider_payments: list[ProviderPayment], db: SqlCo
             strangers.append(charge)
 
     evidence = []
-    never_charged = 0
+    never_charged = left_ours = left_strangers = 0
     for payment_id, (status, amount, provider_id) in ours.items():
         found = charges.get(payment_id, [])
-        if len(found) > 1:
+        if len(found) > 1:  # judged whatever the cutoff: no timing explains two charges
             problems = ["charged twice" if len(found) == 2 else f"charged {len(found)} times"]
         elif not found:
             if status != "succeeded":
@@ -300,9 +349,12 @@ def _payments_match_provider(provider_payments: list[ProviderPayment], db: SqlCo
             else:
                 problems = ["succeeded but never charged"]
         else:
+            [charge] = found
+            if newer(charge):  # its answer or its webhook may still be on its way: the next check judges it
+                left_ours += 1
+                continue
             # Every way this payment disagrees with its one charge, not only the first: a stuck payment that was
             # also charged the wrong amount must not read as "just confirm it".
-            [charge] = found
             problems = []
             if status != "succeeded":
                 problems.append(f"{status} but charged")
@@ -325,6 +377,9 @@ def _payments_match_provider(provider_payments: list[ProviderPayment], db: SqlCo
             }
         )
     for charge in strangers:
+        if newer(charge):  # its payment of ours may not be in our snapshot yet
+            left_strangers += 1
+            continue
         evidence.append(
             {
                 "payment_id": charge.klaxon_payment_id,
@@ -336,16 +391,20 @@ def _payments_match_provider(provider_payments: list[ProviderPayment], db: SqlCo
             }
         )
 
+    left = left_ours + left_strangers
     if not evidence:
-        charged = len(ours) - never_charged
+        judged = len(ours) - left_ours
+        charged = judged - never_charged
         summary = (
-            f"all {len(ours)} of our payments agree with the provider ({charged} charged once, {never_charged} never charged)"
-            if ours
+            f"all {judged} of our payments agree with the provider ({charged} charged once, {never_charged} never charged)"
+            if ours or left
             else "no payments yet, ours or the provider's"
         )
-        return InvariantResult("payments_match_provider", True, summary)
+        if left:
+            summary += f"; {_n(left, 'charge', 'charges')} newer than the cutoff left for the next check"
+        return InvariantResult("payments_match_provider", True, summary), left
     summary = "; ".join(_describe_payment(item, named) for item in evidence)
-    return InvariantResult("payments_match_provider", False, summary, evidence)
+    return InvariantResult("payments_match_provider", False, summary, evidence), left
 
 
 def _describe_payment(item: dict, named: dict[str, str | None]) -> str:
@@ -381,9 +440,14 @@ def _describe_payment(item: dict, named: dict[str, str | None]) -> str:
     return f"{ours} " + ", and ".join(sentences)
 
 
-def _clearing_net_debit(ledger: SqlConnection) -> int:
-    (net,) = ledger.execute(
-        "SELECT CAST(COALESCE(SUM(CASE side WHEN 'debit' THEN amount_cents ELSE -amount_cents END), 0) AS BIGINT)"
-        " FROM entries WHERE account = 'provider_clearing'"
-    ).fetchone()
-    return net
+def _clearing_by_event(ledger: SqlConnection) -> dict[tuple[str, str], int]:
+    """The ledger's net debit to provider_clearing, per (payment id, event id), reversals included."""
+    return {
+        (payment_id, event_id): net
+        for payment_id, event_id, net in ledger.execute(
+            "SELECT t.payment_id, t.event_id,"
+            "       CAST(SUM(CASE e.side WHEN 'debit' THEN e.amount_cents ELSE -e.amount_cents END) AS BIGINT)"
+            " FROM transactions t JOIN entries e ON e.transaction_id = t.id"
+            " WHERE e.account = 'provider_clearing' GROUP BY t.payment_id, t.event_id"
+        ).fetchall()
+    }

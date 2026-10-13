@@ -148,29 +148,68 @@ def make_consumer(bootstrap: str, group_id: str, client_id: str) -> Consumer:
     )
 
 
+def _partitions(admin: AdminClient, topic: str, timeout: float) -> list[int]:
+    metadata = admin.list_topics(topic=topic, timeout=timeout)
+    if topic not in metadata.topics or metadata.topics[topic].error is not None:
+        raise KafkaException(f"topic {topic} not found")
+    return sorted(metadata.topics[topic].partitions)
+
+
+def _committed(admin: AdminClient, group_id: str, topic: str, partitions: list[int], timeout: float) -> dict[int, int]:
+    request = ConsumerGroupTopicPartitions(group_id, [TopicPartition(topic, p) for p in partitions])
+    group = admin.list_consumer_group_offsets([request], request_timeout=timeout)[group_id].result(timeout)
+    return {tp.partition: tp.offset for tp in group.topic_partitions}
+
+
+def _offsets(admin: AdminClient, topic: str, partitions: list[int], spec: OffsetSpec, timeout: float) -> dict[int, int]:
+    futures = admin.list_offsets({TopicPartition(topic, p): spec for p in partitions}, request_timeout=timeout)
+    return {tp.partition: future.result(timeout).offset for tp, future in futures.items()}
+
+
 def consumer_lag(
     bootstrap: str, group_id: str, topic: str, timeout: float = 5.0, admin: AdminClient | None = None
 ) -> dict[int, int]:
     """Per partition: how many messages the group has not committed yet."""
     admin = admin or AdminClient({"bootstrap.servers": bootstrap})
-    metadata = admin.list_topics(topic=topic, timeout=timeout)
-    if topic not in metadata.topics or metadata.topics[topic].error is not None:
-        raise KafkaException(f"topic {topic} not found")
-    partitions = sorted(metadata.topics[topic].partitions)
-    request = ConsumerGroupTopicPartitions(group_id, [TopicPartition(topic, p) for p in partitions])
-    group = admin.list_consumer_group_offsets([request], request_timeout=timeout)[group_id].result(timeout)
-    committed = {tp.partition: tp.offset for tp in group.topic_partitions}
-
-    def offsets(spec: OffsetSpec) -> dict[int, int]:
-        futures = admin.list_offsets({TopicPartition(topic, p): spec for p in partitions}, request_timeout=timeout)
-        return {tp.partition: future.result(timeout).offset for tp, future in futures.items()}
-
-    end, start = offsets(OffsetSpec.latest()), offsets(OffsetSpec.earliest())
+    partitions = _partitions(admin, topic, timeout)
+    committed = _committed(admin, group_id, topic, partitions, timeout)
+    end = _offsets(admin, topic, partitions, OffsetSpec.latest(), timeout)
+    start = _offsets(admin, topic, partitions, OffsetSpec.earliest(), timeout)
     lag = {}
     for p in partitions:
         place = committed.get(p, OFFSET_INVALID)
         lag[p] = end[p] - (place if place >= 0 else start[p])  # nothing committed yet: everything is lag
     return lag
+
+
+def end_offsets(bootstrap: str, topic: str, timeout: float = 5.0, admin: AdminClient | None = None) -> dict[int, int]:
+    """Per partition: the offset the next message will get. Every message written so far is below it."""
+    admin = admin or AdminClient({"bootstrap.servers": bootstrap})
+    return _offsets(admin, topic, _partitions(admin, topic, timeout), OffsetSpec.latest(), timeout)
+
+
+def not_yet_handled(
+    bootstrap: str,
+    group_id: str,
+    topic: str,
+    below: Mapping[int, int],
+    timeout: float = 5.0,
+    admin: AdminClient | None = None,
+) -> dict[int, int]:
+    """Per partition: how many of the messages below these offsets the group has not committed yet.
+
+    Lag counts up to the end of the log, and the end keeps moving while traffic flows. This counts up to a
+    fixed point instead, so a group that keeps up with the traffic does reach it.
+    """
+    admin = admin or AdminClient({"bootstrap.servers": bootstrap})
+    partitions = sorted(below)
+    committed = _committed(admin, group_id, topic, partitions, timeout)
+    start = _offsets(admin, topic, partitions, OffsetSpec.earliest(), timeout)
+    left = {}
+    for p in partitions:
+        place = committed.get(p, OFFSET_INVALID)
+        left[p] = max(0, below[p] - (place if place >= 0 else start[p]))  # nothing committed yet: from the start
+    return left
 
 
 LAG_TIMEOUT_SECONDS = 2.0  # measured on the metrics thread: with Kafka down, give up fast

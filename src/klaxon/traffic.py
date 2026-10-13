@@ -216,8 +216,11 @@ class TrafficGenerator:
         self.settings = settings
         self._payments = payments  # None: the seeded plan; tests pass their own
         limits = httpx.Limits(max_connections=settings.max_in_flight, max_keepalive_connections=settings.max_in_flight)
-        self.api = api or httpx.Client(base_url=settings.api_url, timeout=15.0, limits=limits)
-        self.provider = provider or httpx.Client(base_url=settings.provider_url, timeout=10.0)
+        # trust_env=False: no proxy from the environment or the system settings, so nothing leaves this Mac.
+        self.api = api or httpx.Client(base_url=settings.api_url, timeout=15.0, limits=limits, trust_env=False)
+        self.provider = provider or httpx.Client(base_url=settings.provider_url, timeout=10.0, trust_env=False)
+        for client in (self.api, self.provider):
+            require_local(str(client.base_url))  # a client passed in must aim at this Mac too
         self.clock = clock
         self.stats = Stats()
         self._submit = submit  # None: a thread pool; tests pass one that runs each task at once
@@ -379,7 +382,12 @@ class TrafficGenerator:
                 with self._lock:
                     self._in_flight -= 1
 
-        self._submit(run)
+        try:
+            self._submit(run)
+        except RuntimeError:  # the pool is shutting down: a double click as the run ends is simply not sent
+            with self._lock:
+                self._in_flight -= 1
+            self.stats.add(f"not_sent.{'double_clicks' if task == self._click_again else task.__name__}")
 
     # What a customer does ---------------------------------------------------------
 
@@ -495,7 +503,8 @@ def summary(counts: dict[str, int]) -> list[str]:
         f'  double clicks {n("double_clicks.sent")}: {n("double_clicks.in_progress")} told "still running",'
         f" {n('double_clicks.replayed')} given the saved answer, {n('double_clicks.ran_first')} ran first",
         f"  retries {n('retries')} ({_retry_reasons(counts)}), shed {n('shed')}, generator errors {n('generator_errors')};"
-        f" not sent because the run ended: {n('not_sent.refunds')} refunds, {n('not_sent.status_checks')} status checks",
+        f" not sent because the run ended: {n('not_sent.refunds')} refunds, {n('not_sent.status_checks')} status checks,"
+        f" {n('not_sent.double_clicks')} double clicks",
     ]
 
 

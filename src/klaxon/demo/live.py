@@ -30,7 +30,7 @@ from klaxon.checks.live import (
     ProviderAPI,
     Settling,
     read_ledger_and_check,
-    wait_until_settled,
+    settle,
 )
 from klaxon.checks.money import MoneyReport, format_cents
 from klaxon.demo.duplicate_webhook import build_provider, code_fingerprint
@@ -132,8 +132,8 @@ def run_live(handler: str, seed: int = 7, payments: int = 5, settle_timeout: flo
     scenario = scenario_from_first_piece(seed, payments)
 
     with (
-        httpx.Client(base_url=PROVIDER_URL, timeout=10.0) as provider,
-        httpx.Client(base_url=API_URL, timeout=20.0) as api,
+        httpx.Client(base_url=PROVIDER_URL, timeout=10.0, trust_env=False) as provider,
+        httpx.Client(base_url=API_URL, timeout=20.0, trust_env=False) as api,
     ):
         ensure_fresh(provider)
         provider.put("/admin/behavior", json={"lose_ack_event_ids": [scenario.lost_ack_event_id]}).raise_for_status()
@@ -155,14 +155,14 @@ def run_live(handler: str, seed: int = 7, payments: int = 5, settle_timeout: flo
         refunded = payment_ids[scenario.refund_of - 1]
         call(f"/payments/{refunded}/refunds", {"amount_cents": scenario.refund_cents}, f"demo-seed{seed}-refund-1")
 
-        settling = wait_until_settled(settle_timeout)
+        settling = settle(settle_timeout)
         if not settling.settled:
             raise DemoError(f"the stack did not settle within {settle_timeout} s: {settling}")
         deliveries = provider.get("/admin/deliveries", params={"attempts": "true"}).raise_for_status().json()
 
     if deliveries["stats"]["duplicate_deliveries"] < 1:
         raise DemoError("the provider delivered no duplicate, so this run does not show the scenario")
-    snapshot = ProviderAPI(PROVIDER_URL)
+    snapshot, report = read_ledger_and_check(settling.cutoff)
     return LiveRun(
         handler=handler,
         scenario=scenario,
@@ -173,7 +173,7 @@ def run_live(handler: str, seed: int = 7, payments: int = 5, settle_timeout: flo
         delivery_stats=deliveries["stats"],
         attempts=deliveries["attempts"],
         provider=snapshot,
-        report=read_ledger_and_check(snapshot),
+        report=report,
         # What HTTP monitoring of our webhook endpoint would see: every status code it answered.
         dashboard=summarize(
             RequestRecord(a["event_id"], a["status"], "answered")

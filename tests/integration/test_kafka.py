@@ -6,7 +6,7 @@ import pytest
 from confluent_kafka import Consumer
 from confluent_kafka.admin import AdminClient, NewTopic
 
-from klaxon.patient.services.kafka_io import KafkaPublisher, consumer_lag, make_consumer
+from klaxon.patient.services.kafka_io import KafkaPublisher, consumer_lag, end_offsets, make_consumer, not_yet_handled
 from tests.integration.conftest import KAFKA
 
 pytestmark = pytest.mark.integration
@@ -81,6 +81,33 @@ def test_lag_counts_what_the_group_has_not_committed(topic):
         for msg in messages[4:]:
             consumer.commit(message=msg, asynchronous=False)
         assert sum(consumer_lag(KAFKA, group, topic).values()) == 0
+    finally:
+        consumer.close()
+
+
+def test_handled_up_to_a_point_is_counted_up_to_that_point_however_much_arrives_after(topic):
+    """What the money check waits for under traffic: the messages before a fixed point, not the end of the log."""
+    publisher = KafkaPublisher(KAFKA, client_id="test-publisher")
+    try:
+        for n in range(6):
+            publisher.publish(topic, f"pay_{n}", b"before")
+        point = end_offsets(KAFKA, topic)
+        for n in range(4):
+            publisher.publish(topic, f"pay_{n}", b"after")  # new traffic after the point
+    finally:
+        publisher.close()
+    assert sum(point.values()) == 6
+    group = f"test-{uuid.uuid4().hex[:8]}"
+    assert sum(not_yet_handled(KAFKA, group, topic, point).values()) == 6  # a new group: everything is left
+
+    consumer = make_consumer(KAFKA, group, "test-consumer")
+    consumer.subscribe([topic])
+    try:
+        for msg in drain(consumer, 10):
+            if msg.offset() < point[msg.partition()]:
+                consumer.commit(message=msg, asynchronous=False)
+        assert not_yet_handled(KAFKA, group, topic, point) == {p: 0 for p in point}
+        assert sum(consumer_lag(KAFKA, group, topic).values()) == 4  # the newer messages still count as lag
     finally:
         consumer.close()
 

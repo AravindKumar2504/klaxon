@@ -5,11 +5,12 @@
     GET  /v1/payments        every payment, oldest first, paginated (limit, starting_after)
     GET  /v1/payments/{id}
     GET  /v1/events          every event, oldest first, paginated (limit, starting_after)
-    GET  /v1/balance         what the provider holds for us: captured minus refunded
+    GET  /v1/balance         what the provider holds for us: captured minus refunded (as_of: up to a time)
 
 Simulator controls, not part of any real provider:
 
-    GET  /admin/deliveries   delivery counts; ?attempts=true lists every attempt
+    GET  /admin/deliveries   delivery counts (created_lte: for the events up to a time); ?attempts=true lists every attempt
+    GET  /admin/clock        the provider's clock, which stamps every record it makes
     PUT  /admin/behavior     lose acknowledgements on purpose, to cause duplicates; answer a
                              charge with a 500, to leave our side not knowing it went through
     GET  /healthz
@@ -135,15 +136,21 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
         return {"object": "list", "data": events, "has_more": has_more}
 
     @app.get("/v1/balance")
-    def balance() -> dict:
-        return {"object": "balance", "available_cents": store.balance_cents(), "currency": "usd"}
+    def balance(as_of: int | None = Query(None, ge=0)) -> dict:
+        out = {"object": "balance", "available_cents": store.balance_cents(as_of), "currency": "usd"}
+        return out if as_of is None else out | {"as_of": as_of}
 
     @app.get("/admin/deliveries")
-    def deliveries(attempts: bool = False) -> dict:
-        out = {"stats": store.delivery_stats()}
+    def deliveries(attempts: bool = False, created_lte: int | None = Query(None, ge=0)) -> dict:
+        out = {"stats": store.delivery_stats(created_lte)}
         if attempts:
             out["attempts"] = store.delivery_attempts()
         return out
+
+    @app.get("/admin/clock")
+    def clock() -> dict:
+        # The money check takes its cutoff from this clock, the one that stamps the provider's records.
+        return {"now": store.now()}
 
     @app.put("/admin/behavior")
     def set_behavior(behavior: BehaviorIn) -> dict:

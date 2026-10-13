@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED, Event
 
 SUPPORTED_CURRENCY = "usd"
+END_OF_TIME = 2**62  # "up to any time": later than every created stamp
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS payments (
@@ -276,6 +277,16 @@ class ProviderStore:
         )
         return event_id
 
+    def now(self) -> float:
+        """The clock that stamps every record, read once no write is half done.
+
+        A payment or refund takes its stamp inside its write transaction, under the same lock. Read under the
+        lock, this time comes after the stamp of every record already written, and a record written later gets
+        this second or a later one. That is what makes the money check's cutoff final.
+        """
+        with self._lock:
+            return self.clock()
+
     # Records the money check reads ------------------------------------------
 
     def list_events(self, limit: int = 100, starting_after: str | None = None) -> tuple[list[dict], bool]:
@@ -309,11 +320,19 @@ class ProviderStore:
             ]
             return [self._payment(payment_id) for payment_id in ids[:limit]], len(ids) > limit
 
-    def balance_cents(self) -> int:
-        """What the provider holds for us: captured minus refunded."""
+    def balance_cents(self, as_of: int | None = None) -> int:
+        """What the provider holds for us: captured minus refunded. as_of: only up to the end of that second.
+
+        A real provider gives the same through its history: Stripe's balance transactions, summed up to a time.
+        """
+        upto = END_OF_TIME if as_of is None else as_of
         with self._lock:
-            (captured,) = self.conn.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM payments").fetchone()
-            (refunded,) = self.conn.execute("SELECT COALESCE(SUM(amount_cents), 0) FROM refunds").fetchone()
+            (captured,) = self.conn.execute(
+                "SELECT COALESCE(SUM(amount_cents), 0) FROM payments WHERE created <= ?", (upto,)
+            ).fetchone()
+            (refunded,) = self.conn.execute(
+                "SELECT COALESCE(SUM(amount_cents), 0) FROM refunds WHERE created <= ?", (upto,)
+            ).fetchone()
         return captured - refunded
 
     # The webhook outbox ---------------------------------------------------
@@ -363,24 +382,30 @@ class ProviderStore:
                 (attempt, next_attempt_at, outcome, sent_at, outcome, sent_at, event_id),
             )
 
-    def delivery_stats(self) -> dict:
+    def delivery_stats(self, created_lte: int | None = None) -> dict:
+        """Delivery counts. created_lte: only for the events created up to the end of that second."""
+        upto = END_OF_TIME if created_lte is None else created_lte
         with self._lock:
-            (events,) = self.conn.execute("SELECT COUNT(*) FROM events").fetchone()
+            (events,) = self.conn.execute("SELECT COUNT(*) FROM events WHERE created <= ?", (upto,)).fetchone()
             pending, delivered, abandoned = self.conn.execute(
-                "SELECT COALESCE(SUM(delivered_at IS NULL AND abandoned_at IS NULL), 0),"
-                "       COALESCE(SUM(delivered_at IS NOT NULL), 0), COALESCE(SUM(abandoned_at IS NOT NULL), 0)"
-                " FROM deliveries"
+                "SELECT COALESCE(SUM(d.delivered_at IS NULL AND d.abandoned_at IS NULL), 0),"
+                "       COALESCE(SUM(d.delivered_at IS NOT NULL), 0), COALESCE(SUM(d.abandoned_at IS NOT NULL), 0)"
+                " FROM deliveries d JOIN events e ON e.id = d.event_id WHERE e.created <= ?",
+                (upto,),
             ).fetchone()
             attempts, answered_2xx, answered_4xx, answered_5xx, no_answer, lost_acks = self.conn.execute(
-                "SELECT COUNT(*), COALESCE(SUM(status BETWEEN 200 AND 299), 0),"
-                "       COALESCE(SUM(status BETWEEN 400 AND 499), 0), COALESCE(SUM(status >= 500), 0),"
-                "       COALESCE(SUM(status IS NULL), 0), COALESCE(SUM(ack_lost), 0)"
-                " FROM delivery_attempts"
+                "SELECT COUNT(*), COALESCE(SUM(a.status BETWEEN 200 AND 299), 0),"
+                "       COALESCE(SUM(a.status BETWEEN 400 AND 499), 0), COALESCE(SUM(a.status >= 500), 0),"
+                "       COALESCE(SUM(a.status IS NULL), 0), COALESCE(SUM(a.ack_lost), 0)"
+                " FROM delivery_attempts a JOIN events e ON e.id = a.event_id WHERE e.created <= ?",
+                (upto,),
             ).fetchone()
             # A duplicate is a delivery our endpoint accepted (2xx) for an event it had already accepted.
             (duplicates,) = self.conn.execute(
-                "SELECT COALESCE(SUM(n - 1), 0) FROM (SELECT COUNT(*) AS n FROM delivery_attempts"
-                " WHERE status BETWEEN 200 AND 299 GROUP BY event_id) WHERE n > 1"
+                "SELECT COALESCE(SUM(n - 1), 0) FROM (SELECT COUNT(*) AS n FROM delivery_attempts a"
+                " JOIN events e ON e.id = a.event_id"
+                " WHERE a.status BETWEEN 200 AND 299 AND e.created <= ? GROUP BY a.event_id) WHERE n > 1",
+                (upto,),
             ).fetchone()
         return {
             "events": events,
