@@ -442,3 +442,16 @@ def test_the_generators_requests_never_go_through_a_proxy(monkeypatch):
 def test_a_client_passed_to_the_generator_must_aim_at_this_mac_too():
     with pytest.raises(ValueError, match="only this Mac"):
         TrafficGenerator(quiet(), api=httpx.Client(base_url="http://payments.example.com"))
+
+
+def test_the_measurement_says_how_much_traffic_each_check_left_for_the_next_one():
+    from klaxon.demo.under_traffic import CheckRun, _line, left_in_total
+
+    at = "2026-10-13T21:00:01.000+00:00"
+    busy = CheckRun(1, at, 1.0, "passed", [], None, {}, {"provider_events": 4, "provider_charges": 3})
+    calm = CheckRun(2, at, 0.9, "passed", [], None, {}, {"provider_events": 0, "provider_charges": 0})
+    assert _line(busy).endswith("left for the next check: 4 events, 3 charges")
+    assert left_in_total([busy, calm]) == (
+        "Newer than their cutoffs, left for the next check: 4 provider events in all, 0 to 4 per check (2 checks)."
+    )
+    assert left_in_total([]) == "No check left anything for the next one."

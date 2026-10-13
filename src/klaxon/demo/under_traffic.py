@@ -36,7 +36,8 @@ class CheckRun:
     outcome: str  # passed, failed, or could not run
     failed: list[dict]  # each failed invariant: its name, its summary and its first evidence items
     error: str | None
-    details: dict | None  # what the check reported about settling (and, once it has one, its cutoff)
+    details: dict | None  # what the check reported about its cutoff and settling
+    left_for_next_check: dict[str, int] | None = None  # records newer than the cutoff: proof traffic was in flight
 
 
 @dataclass
@@ -59,7 +60,7 @@ class UnderTrafficRun:
 def one_check(n: int, settle_timeout: float) -> CheckRun:
     started = datetime.now(timezone.utc)
     clock = time.monotonic()
-    error, failed, details = None, [], None
+    error, failed, details, left = None, [], None, None
     try:
         result = check_live(timeout_seconds=settle_timeout)
     except NotSettled as exc:
@@ -70,6 +71,7 @@ def one_check(n: int, settle_timeout: float) -> CheckRun:
         report = result.to_dict()
         details = {key: value for key, value in report.items() if key != "money_check"}
         outcome = "passed" if result.report.passed else "failed"
+        left = result.report.left_for_next_check or None
         failed = [
             {"name": i.name, "summary": i.summary[:300], "evidence": i.evidence[:3], "items": len(i.evidence)}
             for i in result.report.invariants
@@ -83,6 +85,7 @@ def one_check(n: int, settle_timeout: float) -> CheckRun:
         failed,
         error,
         details,
+        left,
     )
 
 
@@ -117,7 +120,22 @@ def _line(c: CheckRun) -> str:
         return f"{head}  " + "; ".join(f"{f['name']}: {f['summary'][:150]}" for f in c.failed)
     if c.error:
         return f"{head}  {c.error[:150]}"
+    if c.left_for_next_check:
+        left = c.left_for_next_check
+        return f"{head}  left for the next check: {left['provider_events']} events, {left['provider_charges']} charges"
     return head
+
+
+def left_in_total(checks: list[CheckRun]) -> str:
+    """How much each check left out as newer than its cutoff: the traffic in flight it did not mistake for loss."""
+    counts = [c.left_for_next_check for c in checks if c.left_for_next_check]
+    if not counts:
+        return "No check left anything for the next one."
+    events = [left["provider_events"] for left in counts]
+    return (
+        f"Newer than their cutoffs, left for the next check: {sum(events)} provider events in all, {min(events)} to"
+        f" {max(events)} per check ({len(counts)} checks)."
+    )
 
 
 def render(run: UnderTrafficRun) -> str:
@@ -141,6 +159,7 @@ def render(run: UnderTrafficRun) -> str:
         "",
         f"Under traffic: {len(run.checks)} checks, {counted['passed']} passed, {counted['failed']} failed,"
         f" {counted['could not run']} could not run. Quiet stack: {run.quiet.outcome}.",
+        left_in_total(run.checks),
         f"RESULT: {'every check passed' if run.passed else 'NOT every check passed'}",
     ]
     return "\n".join(out)
