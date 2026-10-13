@@ -16,10 +16,10 @@ PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer \
-	local-docker-only
+	traffic check-under-traffic local-docker-only
 
 help: ## list the commands
-	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-17s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 
 venv: ## create .venv with Klaxon, its test tools and the service libraries
 	python3.12 -m venv .venv
@@ -31,8 +31,9 @@ test: ## offline tests, no Docker needed
 lint: ## ruff: style and common mistakes
 	.venv/bin/ruff check src tests scripts
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
-		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py tests/services tests/integration tests/e2e \
-		tests/test_live_check.py tests/test_payments_match_provider.py tests/test_observability_config.py
+		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py src/klaxon/demo/under_traffic.py src/klaxon/traffic.py \
+		tests/services tests/integration tests/e2e tests/test_live_check.py tests/test_payments_match_provider.py \
+		tests/test_observability_config.py tests/test_traffic.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -64,6 +65,12 @@ mutants: ## break the code on purpose, on a copy, and check the tests notice (ma
 
 check: ## run the money check against the running stack
 	$(PY) -m klaxon.checks.live
+
+traffic: ## synthetic customers until Ctrl-C (RATE=2 payments/s, DURATION=seconds, SEED=7)
+	$(PY) -m klaxon.traffic --rate $(or $(RATE),2) --seed $(or $(SEED),7) $(if $(DURATION),--seconds $(DURATION))
+
+check-under-traffic: ## the money check again and again while traffic flows (CHECKS=20, RATE=5)
+	$(PY) -m klaxon.demo live-check-under-traffic --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)
 
 demo-live: ## the first piece's scenario on the real stack, on fresh data: make demo-live HANDLER=naive|idempotent
 	$(MAKE) reset

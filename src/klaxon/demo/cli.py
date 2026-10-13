@@ -1,6 +1,7 @@
 """python -m klaxon.demo duplicate-webhook --handler naive|idempotent
 python -m klaxon.demo live-duplicate-webhook --handler naive|idempotent
 python -m klaxon.demo live-lost-answer --confirmer by_our_id|by_provider_id
+python -m klaxon.demo live-check-under-traffic --checks 20 --rate 5
 
 Exit status: 0 when the money check passes, 1 when it fails, 2 for bad arguments
 (or, for the live demos, when they could not run as designed).
@@ -55,7 +56,17 @@ def main(argv: list[str] | None = None) -> int:
     lost.add_argument("--seed", type=int, default=7)
     lost.add_argument("--evidence-dir", type=Path, default=Path("evidence/week2"))
     lost.add_argument("--no-evidence", action="store_true", help="print only; write no evidence file")
+    under = scenarios.add_parser(
+        "live-check-under-traffic", help="run the money check again and again while synthetic traffic flows"
+    )
+    under.add_argument("--checks", type=_positive_int, default=20, help="checks while the traffic flows")
+    under.add_argument("--rate", type=float, default=5.0, help="new payments per second, on average")
+    under.add_argument("--seed", type=int, default=7)
+    under.add_argument("--evidence-dir", type=Path, default=Path("evidence/week2"))
+    under.add_argument("--no-evidence", action="store_true", help="print only; write no evidence file")
     args = parser.parse_args(argv)
+    if args.scenario == "live-check-under-traffic":
+        return _under_traffic(args, argv)
     if args.scenario == "live-duplicate-webhook":
         return _live(args, argv)
     if args.scenario == "live-lost-answer":
@@ -101,3 +112,19 @@ def _lost_answer(args: argparse.Namespace, argv: list[str]) -> int:
         path = lost_answer.write_evidence(run, args.evidence_dir, command)
         print(f"\nEvidence written: {path}")
     return 0 if run.report.passed else 1
+
+
+def _under_traffic(args: argparse.Namespace, argv: list[str]) -> int:
+    from klaxon.demo import under_traffic
+
+    try:
+        run = under_traffic.run_live(rate=args.rate, checks=args.checks, seed=args.seed)
+    except Exception as exc:  # anything before a result exists means "could not run" (2), never "failed" (1)
+        print(f"The live demo could not run as designed, so there is no result: {exc!r}", file=sys.stderr)
+        return 2
+    print(under_traffic.render(run))
+    if not args.no_evidence:
+        command = shlex.join(["python", "-m", "klaxon.demo", *argv])
+        path = under_traffic.write_evidence(run, args.evidence_dir, command)
+        print(f"\nEvidence written: {path}")
+    return 0 if run.passed else 1
