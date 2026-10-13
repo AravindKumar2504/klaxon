@@ -1,0 +1,490 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack: payments API, fake provider, webhook receiver, Kafka, ledger consumer, payment confirmer, PostgreSQL and Redis. Synthetic data and a simulated provider: no real money, no real payment company. The lost answer is injected on purpose through the simulator's controls. It shows the money check Klaxon will use to verify fixes; it is not the Klaxon agent.",
+  "scenario": "live-lost-answer",
+  "confirmer": "by_our_id",
+  "confirmer_description": "finds the payment by our own id, from the metadata the provider sends back",
+  "container_confirmer_handler": "by_our_id",
+  "seed": 7,
+  "run_id": "ade2ffbd",
+  "rerun_command": "python -m klaxon.demo live-lost-answer --confirmer by_our_id",
+  "ran_at_utc": "2026-10-13T03:53:39+00:00",
+  "ran_at_local": "2026-10-12T20:53:39-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "7247427ceaeea0b7291410ec4f6719b73a7b18ed077868ef0e2495af0ef96642",
+  "stack_files_sha256": "aa734db56ea444f0d2438f35c33ff0075e81ffb0e53be6fb450a1da60703b92a",
+  "git_commit": "95ef6d3d6ce9fee3d65b42c0af4cfd24901b05bc",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:f45e2cc7f71fe1fe6088058299c913f6abacbf8e8b5cb950367895f3e9c2842b"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:f45e2cc7f71fe1fe6088058299c913f6abacbf8e8b5cb950367895f3e9c2842b"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:f45e2cc7f71fe1fe6088058299c913f6abacbf8e8b5cb950367895f3e9c2842b"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:f45e2cc7f71fe1fe6088058299c913f6abacbf8e8b5cb950367895f3e9c2842b"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:f45e2cc7f71fe1fe6088058299c913f6abacbf8e8b5cb950367895f3e9c2842b"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      }
+    ]
+  },
+  "money_check_passed": true,
+  "lost_answer": {
+    "position": 3,
+    "payment_id": "pmt_000003"
+  },
+  "requests": [
+    {
+      "call": "POST /payments",
+      "idempotency_key": "lost-answer-ade2ffbd-payment-1",
+      "status": 201,
+      "body": {
+        "id": "pmt_000001",
+        "status": "succeeded",
+        "customer": "cus_001",
+        "amount_cents": 5805,
+        "currency": "usd",
+        "provider_payment_id": "pay_000001",
+        "created_at": "2026-10-13T03:53:36.809019+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "lost-answer-ade2ffbd-payment-2",
+      "status": 201,
+      "body": {
+        "id": "pmt_000002",
+        "status": "succeeded",
+        "customer": "cus_002",
+        "amount_cents": 2971,
+        "currency": "usd",
+        "provider_payment_id": "pay_000002",
+        "created_at": "2026-10-13T03:53:36.821264+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "lost-answer-ade2ffbd-payment-3",
+      "status": 503,
+      "body": {
+        "error": {
+          "code": "provider_unavailable",
+          "message": "the outcome is unknown; retry with the same Idempotency-Key"
+        },
+        "payment": {
+          "id": "pmt_000003",
+          "status": "pending",
+          "customer": "cus_003",
+          "amount_cents": 6968,
+          "currency": "usd",
+          "provider_payment_id": null,
+          "created_at": "2026-10-13T03:53:36.833484+00:00"
+        }
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "lost-answer-ade2ffbd-payment-4",
+      "status": 201,
+      "body": {
+        "id": "pmt_000004",
+        "status": "succeeded",
+        "customer": "cus_004",
+        "amount_cents": 11164,
+        "currency": "usd",
+        "provider_payment_id": "pay_000004",
+        "created_at": "2026-10-13T03:53:37.454539+00:00"
+      }
+    },
+    {
+      "call": "POST /payments",
+      "idempotency_key": "lost-answer-ade2ffbd-payment-5",
+      "status": 201,
+      "body": {
+        "id": "pmt_000005",
+        "status": "succeeded",
+        "customer": "cus_005",
+        "amount_cents": 1291,
+        "currency": "usd",
+        "provider_payment_id": "pay_000005",
+        "created_at": "2026-10-13T03:53:37.465971+00:00"
+      }
+    }
+  ],
+  "after_webhooks": {
+    "id": "pmt_000003",
+    "status": "succeeded",
+    "customer": "cus_003",
+    "amount_cents": 6968,
+    "currency": "usd",
+    "provider_payment_id": "pay_000003",
+    "created_at": "2026-10-13T03:53:36.833484+00:00",
+    "refunds": []
+  },
+  "refund": {
+    "call": "POST /payments/pmt_000003/refunds",
+    "idempotency_key": "lost-answer-ade2ffbd-refund-1",
+    "status": 201,
+    "body": {
+      "id": "rfd_000001",
+      "payment_id": "pmt_000003",
+      "status": "succeeded",
+      "amount_cents": 3484,
+      "provider_refund_id": "re_000001",
+      "created_at": "2026-10-13T03:53:38.898869+00:00"
+    }
+  },
+  "api_answers": {
+    "201": 5,
+    "503": 1
+  },
+  "settling": {
+    "settled": true,
+    "waited_seconds": 0.76,
+    "pending_deliveries": 0,
+    "lag": {
+      "ledger": 0,
+      "payment-confirmer": 0
+    },
+    "lag_by_partition": {
+      "ledger": {
+        "0": 0,
+        "1": 0,
+        "2": 0
+      },
+      "payment-confirmer": {
+        "0": 0,
+        "1": 0,
+        "2": 0
+      }
+    }
+  },
+  "dashboard": {
+    "requests": 6,
+    "status_counts": {
+      "200": 6
+    },
+    "ok": 6,
+    "client_errors": 0,
+    "server_errors": 0,
+    "error_rate": 0.0,
+    "status": "GREEN"
+  },
+  "money_check": {
+    "passed": true,
+    "ledger_clearing_cents": 24715,
+    "provider_balance_cents": 24715,
+    "money_off_cents": 0,
+    "invariants": [
+      {
+        "name": "posted_exactly_once",
+        "passed": true,
+        "summary": "all 6 provider events posted exactly once",
+        "evidence": []
+      },
+      {
+        "name": "ledger_balanced",
+        "passed": true,
+        "summary": "debits $316.83 = credits $316.83",
+        "evidence": []
+      },
+      {
+        "name": "matches_provider",
+        "passed": true,
+        "summary": "ledger and provider both say $247.15",
+        "evidence": []
+      },
+      {
+        "name": "payments_match_provider",
+        "passed": true,
+        "summary": "all 5 of our payments agree with the provider (5 charged once, 0 never charged)",
+        "evidence": []
+      }
+    ]
+  },
+  "provider": {
+    "balance_cents": 24715,
+    "events": [
+      {
+        "id": "evt_000001",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000001",
+        "amount_cents": 5805,
+        "created": 1791863616
+      },
+      {
+        "id": "evt_000002",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000002",
+        "amount_cents": 2971,
+        "created": 1791863616
+      },
+      {
+        "id": "evt_000003",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000003",
+        "amount_cents": 6968,
+        "created": 1791863616
+      },
+      {
+        "id": "evt_000004",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000004",
+        "amount_cents": 11164,
+        "created": 1791863617
+      },
+      {
+        "id": "evt_000005",
+        "type": "payment.succeeded",
+        "payment_id": "pay_000005",
+        "amount_cents": 1291,
+        "created": 1791863617
+      },
+      {
+        "id": "evt_000006",
+        "type": "refund.succeeded",
+        "payment_id": "pay_000003",
+        "amount_cents": 3484,
+        "created": 1791863618
+      }
+    ],
+    "payments": [
+      {
+        "id": "pay_000001",
+        "amount_cents": 5805,
+        "klaxon_payment_id": "pmt_000001"
+      },
+      {
+        "id": "pay_000002",
+        "amount_cents": 2971,
+        "klaxon_payment_id": "pmt_000002"
+      },
+      {
+        "id": "pay_000003",
+        "amount_cents": 6968,
+        "klaxon_payment_id": "pmt_000003"
+      },
+      {
+        "id": "pay_000004",
+        "amount_cents": 11164,
+        "klaxon_payment_id": "pmt_000004"
+      },
+      {
+        "id": "pay_000005",
+        "amount_cents": 1291,
+        "klaxon_payment_id": "pmt_000005"
+      }
+    ],
+    "delivery_attempts": [
+      {
+        "id": 1,
+        "event_id": "evt_000001",
+        "attempt": 1,
+        "sent_at": 1791863616.8136137,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 2,
+        "event_id": "evt_000002",
+        "attempt": 1,
+        "sent_at": 1791863616.8296037,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 3,
+        "event_id": "evt_000003",
+        "attempt": 1,
+        "sent_at": 1791863616.8360128,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 4,
+        "event_id": "evt_000004",
+        "attempt": 1,
+        "sent_at": 1791863617.459189,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 5,
+        "event_id": "evt_000005",
+        "attempt": 1,
+        "sent_at": 1791863617.4951673,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      },
+      {
+        "id": 6,
+        "event_id": "evt_000006",
+        "attempt": 1,
+        "sent_at": 1791863618.9058778,
+        "status": 200,
+        "error": null,
+        "ack_lost": false
+      }
+    ]
+  },
+  "ledger_transactions": [
+    {
+      "id": 1,
+      "event_id": "evt_000003",
+      "payment_id": "pay_000003",
+      "source": "provider-events/1@0"
+    },
+    {
+      "id": 2,
+      "event_id": "evt_000005",
+      "payment_id": "pay_000005",
+      "source": "provider-events/1@1"
+    },
+    {
+      "id": 3,
+      "event_id": "evt_000001",
+      "payment_id": "pay_000001",
+      "source": "provider-events/0@0"
+    },
+    {
+      "id": 4,
+      "event_id": "evt_000002",
+      "payment_id": "pay_000002",
+      "source": "provider-events/0@1"
+    },
+    {
+      "id": 5,
+      "event_id": "evt_000004",
+      "payment_id": "pay_000004",
+      "source": "provider-events/0@2"
+    },
+    {
+      "id": 6,
+      "event_id": "evt_000006",
+      "payment_id": "pay_000003",
+      "source": "provider-events/1@2"
+    }
+  ],
+  "our_payments": [
+    {
+      "id": "pmt_000001",
+      "status": "succeeded",
+      "amount_cents": 5805,
+      "provider_payment_id": "pay_000001"
+    },
+    {
+      "id": "pmt_000002",
+      "status": "succeeded",
+      "amount_cents": 2971,
+      "provider_payment_id": "pay_000002"
+    },
+    {
+      "id": "pmt_000003",
+      "status": "succeeded",
+      "amount_cents": 6968,
+      "provider_payment_id": "pay_000003"
+    },
+    {
+      "id": "pmt_000004",
+      "status": "succeeded",
+      "amount_cents": 11164,
+      "provider_payment_id": "pay_000004"
+    },
+    {
+      "id": "pmt_000005",
+      "status": "succeeded",
+      "amount_cents": 1291,
+      "provider_payment_id": "pay_000005"
+    }
+  ],
+  "printed_output": [
+    "Klaxon week 2: the provider charges a payment, but its answer never reaches us",
+    "REAL RUN on this Mac's Docker Compose stack (seed 7, run ade2ffbd). Synthetic data, simulated provider, no real money.",
+    "The lost answer is injected on purpose. It shows the money check Klaxon will use to verify fixes; it is not the agent.",
+    "",
+    "Payment confirmer: by_our_id (finds the payment by our own id, from the metadata the provider sends back)",
+    "  the running container has CONFIRMER_HANDLER=by_our_id",
+    "",
+    "Requests, client -> payments API -> fake provider",
+    "  pmt_000001  cus_001    $58.05  -> 201 succeeded  (pay_000001)",
+    "  pmt_000002  cus_002    $29.71  -> 201 succeeded  (pay_000002)",
+    "  pmt_000003  cus_003    $69.68  -> 503 pending    the provider saved the charge, then answered 500 to every retry; the client gives up",
+    "  pmt_000004  cus_004   $111.64  -> 201 succeeded  (pay_000004)",
+    "  pmt_000005  cus_005    $12.91  -> 201 succeeded  (pay_000005)",
+    "",
+    "After every webhook was handled: pmt_000003 is succeeded (provider id pay_000003)",
+    "Refund of half of it ($34.84) -> 201 succeeded",
+    "Payments API answers to the client: 5 x 201, 1 x 503",
+    "",
+    "Webhook deliveries, fake provider -> webhook receiver -> Kafka -> ledger and payment confirmer",
+    "  #1  evt_000001  payment.succeeded  pay_000001    $58.05  -> 200",
+    "  #2  evt_000002  payment.succeeded  pay_000002    $29.71  -> 200",
+    "  #3  evt_000003  payment.succeeded  pay_000003    $69.68  -> 200",
+    "  #4  evt_000004  payment.succeeded  pay_000004   $111.64  -> 200",
+    "  #5  evt_000005  payment.succeeded  pay_000005    $12.91  -> 200",
+    "  #6  evt_000006  refund.succeeded   pay_000003    $34.84  -> 200",
+    "",
+    "Dashboard, what HTTP monitoring of the webhook endpoint sees",
+    "  requests          6",
+    "  2xx / 4xx / 5xx   6 / 0 / 0",
+    "  error rate        0.0%",
+    "  status            GREEN",
+    "",
+    "Money check, our books vs the provider's own records (settled after 0.76 s)",
+    "  PASS  posted_exactly_once      all 6 provider events posted exactly once",
+    "  PASS  ledger_balanced          debits $316.83 = credits $316.83",
+    "  PASS  matches_provider         ledger and provider both say $247.15",
+    "  PASS  payments_match_provider  all 5 of our payments agree with the provider (5 charged once, 0 never charged)",
+    "",
+    "RESULT: money check PASSED (dashboard GREEN, all four invariants hold)"
+  ]
+}
