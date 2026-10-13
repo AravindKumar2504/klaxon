@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-12. Week 2, item 1 (payment confirmation) is done: Aravind ran it himself and merged it into `main` on 2026-10-12, on his Mac only. Nothing is pushed: GitHub's `main` still holds week 1 (public: https://github.com/AravindKumar2504/klaxon, first pushed 2026-10-11, no license). Next: week 2, items 2-5.
+Last updated: 2026-10-12. Week 2, item 1 (payment confirmation) is done: Aravind ran it himself, merged it into `main` and had it pushed to GitHub on 2026-10-12 (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 2, items 2-5.
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -8,7 +8,7 @@ The week 1 commit IDs quoted below were written before the one-time history rewr
 
 ### Week 2, item 1: payments confirmed from webhooks, and a fourth money-check invariant (2026-10-11)
 
-Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-payment-confirmation`, which was fast-forwarded into `main` on 2026-10-12. Commits: `500a8d9` (the consumer loop moves to its own module, unchanged in behavior), `0babb86` (the feature), `0b9d5c1` (the demo runs), `7bc0151` (Aravind's runs).
+Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-payment-confirmation`, which was fast-forwarded into `main` and pushed on 2026-10-12. Commits: `500a8d9` (the consumer loop moves to its own module, unchanged in behavior), `0babb86` (the feature), `0b9d5c1` (the demo runs), `7bc0151` (Aravind's runs).
 
 - **The payment confirmer:** a fifth service, `payment-confirmer` (`src/klaxon/patient/services/payment_confirmer.py`), in its own Kafka consumer group on `provider-events`. It finds our payment through the metadata the provider sends back (`klaxon_payment_id`) and moves it from pending to succeeded in one conditional UPDATE: only if still pending, for the same amount, not linked to another charge. A final status is never overwritten; a conflict is logged as an error and changes nothing. Its database role `payment_confirmer` reads four columns of `payments.payments` and may change only a status and the provider's id. The stack now runs 9 containers.
 - **One consumer loop:** `src/klaxon/patient/services/consumer.py`, run by both consumers (moved from `ledger_consumer.py`).
@@ -60,9 +60,8 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. **Push?** `main` now holds week 2, item 1 on this Mac only. Pushing would make it public on GitHub. Claude asks before every push.
-2. Before the course demos, if not done yet: read the week 2 section of `docs/STUDY-NOTES.md`, then `payment_confirmer.py`, `consumer.py`, and `_payments_match_provider` in `src/klaxon/checks/money.py`.
-3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
+1. Before the course demos, if not done yet: read the week 2 section of `docs/STUDY-NOTES.md`, then `payment_confirmer.py`, `consumer.py`, and `_payments_match_provider` in `src/klaxon/checks/money.py`.
+2. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Next: the rest of week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
