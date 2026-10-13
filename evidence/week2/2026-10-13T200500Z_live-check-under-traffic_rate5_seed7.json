@@ -1,0 +1,843 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic (made-up customers and amounts, a simulated provider, no real money). It measures the money check Klaxon will use to verify fixes, run while traffic flows; it is not the Klaxon agent.",
+  "scenario": "live-check-under-traffic",
+  "rerun_command": "python -m klaxon.demo live-check-under-traffic --checks 20 --rate 5",
+  "ran_at_utc": "2026-10-13T20:05:00+00:00",
+  "ran_at_local": "2026-10-13T13:05:00-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "75d81e8fb828b21cc519ae9c709c41005bd5b71d48bfb89517b3641645f6a451",
+  "stack_files_sha256": "587b2ce2b3ac9b25ff49c1572fe2b914f1bf9b88dc27223e04b3d0f53c77a0b8",
+  "git_commit": "1300fef901bf37ddeeaf54973b59e59fffdae5ca",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:5e029a17b1b02af1cd353e954fcc40802ed4fc5fc1d06ab36f4bc0c179141787"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:5e029a17b1b02af1cd353e954fcc40802ed4fc5fc1d06ab36f4bc0c179141787"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:5e029a17b1b02af1cd353e954fcc40802ed4fc5fc1d06ab36f4bc0c179141787"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:5e029a17b1b02af1cd353e954fcc40802ed4fc5fc1d06ab36f4bc0c179141787"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:5e029a17b1b02af1cd353e954fcc40802ed4fc5fc1d06ab36f4bc0c179141787"
+      }
+    ]
+  },
+  "every_check_passed": false,
+  "traffic_settings": {
+    "rate": 5.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "84a8cac0"
+  },
+  "warmup_seconds": 5.0,
+  "counted": {
+    "passed": 19,
+    "failed": 1,
+    "could not run": 0
+  },
+  "checks": [
+    {
+      "n": 1,
+      "started_utc": "2026-10-13T20:04:30.885+00:00",
+      "seconds": 4.69,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 4.65,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 2,
+      "started_utc": "2026-10-13T20:04:35.580+00:00",
+      "seconds": 2.08,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 2.05,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 3,
+      "started_utc": "2026-10-13T20:04:37.658+00:00",
+      "seconds": 2.06,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 2.04,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 4,
+      "started_utc": "2026-10-13T20:04:39.718+00:00",
+      "seconds": 2.1,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 2.06,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 5,
+      "started_utc": "2026-10-13T20:04:41.818+00:00",
+      "seconds": 0.78,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.75,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 6,
+      "started_utc": "2026-10-13T20:04:42.600+00:00",
+      "seconds": 0.78,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.76,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 7,
+      "started_utc": "2026-10-13T20:04:43.382+00:00",
+      "seconds": 2.07,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 2.04,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 8,
+      "started_utc": "2026-10-13T20:04:45.454+00:00",
+      "seconds": 0.8,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.77,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 9,
+      "started_utc": "2026-10-13T20:04:46.256+00:00",
+      "seconds": 0.79,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.76,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 10,
+      "started_utc": "2026-10-13T20:04:47.045+00:00",
+      "seconds": 0.8,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.76,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 11,
+      "started_utc": "2026-10-13T20:04:47.849+00:00",
+      "seconds": 0.82,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.78,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 12,
+      "started_utc": "2026-10-13T20:04:48.670+00:00",
+      "seconds": 0.81,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.77,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 13,
+      "started_utc": "2026-10-13T20:04:49.482+00:00",
+      "seconds": 0.8,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.77,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 14,
+      "started_utc": "2026-10-13T20:04:50.287+00:00",
+      "seconds": 2.07,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 2.03,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 15,
+      "started_utc": "2026-10-13T20:04:52.355+00:00",
+      "seconds": 2.07,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 2.03,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 16,
+      "started_utc": "2026-10-13T20:04:54.422+00:00",
+      "seconds": 0.79,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.76,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 17,
+      "started_utc": "2026-10-13T20:04:55.213+00:00",
+      "seconds": 0.8,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.76,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 18,
+      "started_utc": "2026-10-13T20:04:56.015+00:00",
+      "seconds": 0.82,
+      "outcome": "failed",
+      "failed": [
+        {
+          "name": "posted_exactly_once",
+          "summary": "evt_000157 posted 1 times, but the provider never sent it",
+          "evidence": [
+            {
+              "event_id": "evt_000157",
+              "times_posted": 1,
+              "expected": 0,
+              "problem": "posted, but the provider never sent it",
+              "transaction_ids": [
+                157
+              ]
+            }
+          ],
+          "items": 1
+        },
+        {
+          "name": "matches_provider",
+          "summary": "totals agree at $7,037.11, but 1 payment(s) differ",
+          "evidence": [
+            {
+              "scope": "pay_000146",
+              "ledger_cents": 5660,
+              "provider_cents": 0,
+              "difference_cents": 5660
+            }
+          ],
+          "items": 1
+        },
+        {
+          "name": "payments_match_provider",
+          "summary": "pmt_000146 ($56.60) is succeeded in our records, but the provider has no charge for it",
+          "evidence": [
+            {
+              "payment_id": "pmt_000146",
+              "status": "succeeded",
+              "amount_cents": 5660,
+              "provider_payment_id": "pay_000146",
+              "provider_charges": [],
+              "problem": "succeeded but never charged"
+            }
+          ],
+          "items": 1
+        }
+      ],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.77,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 19,
+      "started_utc": "2026-10-13T20:04:56.830+00:00",
+      "seconds": 1.45,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 1.4,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "n": 20,
+      "started_utc": "2026-10-13T20:04:58.276+00:00",
+      "seconds": 0.8,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.78,
+          "pending_deliveries": 0,
+          "lag": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "lag_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      }
+    }
+  ],
+  "quiet_check": {
+    "n": 0,
+    "started_utc": "2026-10-13T20:05:00.025+00:00",
+    "seconds": 0.82,
+    "outcome": "passed",
+    "failed": [],
+    "error": null,
+    "details": {
+      "settling": {
+        "settled": true,
+        "waited_seconds": 0.77,
+        "pending_deliveries": 0,
+        "lag": {
+          "ledger": 0,
+          "payment-confirmer": 0
+        },
+        "lag_by_partition": {
+          "ledger": {
+            "0": 0,
+            "1": 0,
+            "2": 0
+          },
+          "payment-confirmer": {
+            "0": 0,
+            "1": 0,
+            "2": 0
+          }
+        }
+      }
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.ran_first": 3,
+      "double_clicks.sent": 3,
+      "not_sent.refunds": 4,
+      "payments.arrived": 159,
+      "payments.succeeded": 159,
+      "refunds.succeeded": 12,
+      "retries": 5,
+      "retries.after_409": 3,
+      "retries.after_503": 2
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "printed_output": [
+    "Klaxon week 2: the money check, run while synthetic traffic flows",
+    "REAL RUN on this Mac's Docker Compose stack. Traffic run 84a8cac0, seed 7: 5 payments per second, provider noise lose_ack_rate 0.05, lost_answer_rate 0.02.",
+    "Synthetic data, simulated provider, no real money. It measures the money check; it is not the agent.",
+    "",
+    "Checks while the traffic flows (after 5 s of warm-up)",
+    "  #1   20:04:30  PASSED         4.69 s",
+    "  #2   20:04:35  PASSED         2.08 s",
+    "  #3   20:04:37  PASSED         2.06 s",
+    "  #4   20:04:39  PASSED         2.10 s",
+    "  #5   20:04:41  PASSED         0.78 s",
+    "  #6   20:04:42  PASSED         0.78 s",
+    "  #7   20:04:43  PASSED         2.07 s",
+    "  #8   20:04:45  PASSED         0.80 s",
+    "  #9   20:04:46  PASSED         0.79 s",
+    "  #10  20:04:47  PASSED         0.80 s",
+    "  #11  20:04:47  PASSED         0.82 s",
+    "  #12  20:04:48  PASSED         0.81 s",
+    "  #13  20:04:49  PASSED         0.80 s",
+    "  #14  20:04:50  PASSED         2.07 s",
+    "  #15  20:04:52  PASSED         2.07 s",
+    "  #16  20:04:54  PASSED         0.79 s",
+    "  #17  20:04:55  PASSED         0.80 s",
+    "  #18  20:04:56  FAILED         0.82 s  posted_exactly_once: evt_000157 posted 1 times, but the provider never sent it; matches_provider: totals agree at $7,037.11, but 1 payment(s) differ; payments_match_provider: pmt_000146 ($56.60) is succeeded in our records, but the provider has no charge for it",
+    "  #19  20:04:56  PASSED         1.45 s",
+    "  #20  20:04:58  PASSED         0.80 s",
+    "",
+    "The traffic generator",
+    "  payments  159 answered: 159 succeeded, 0 refused, 0 outcome unknown (0 confirmed later, 0 still pending), 0 unexpected",
+    "  refunds   12 answered: 12 succeeded, 0 refused, 0 outcome unknown, 0 unexpected",
+    "  double clicks 3: 0 told \"still running\", 0 given the saved answer, 3 ran first",
+    "  retries 5 (after 409: 3, after 503: 2), shed 0, generator errors 0; not sent because the run ended: 4 refunds, 0 status checks",
+    "  the provider's behavior was put back as it was found",
+    "",
+    "One more check, after the traffic stopped",
+    "  #0   20:05:00  PASSED         0.82 s",
+    "",
+    "Under traffic: 20 checks, 19 passed, 1 failed, 0 could not run. Quiet stack: passed.",
+    "RESULT: NOT every check passed"
+  ]
+}
