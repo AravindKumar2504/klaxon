@@ -174,7 +174,8 @@ class EventConsumer:
                         consumer=self.name,
                         event_id=event.id,
                         event_type=event.type,
-                        payment_id=event.payment_id,
+                        payment_id=event.klaxon_payment_id,  # ours, as in the payments API's lines
+                        provider_payment_id=event.payment_id,
                         amount_cents=event.amount_cents,
                         source=source,
                     )

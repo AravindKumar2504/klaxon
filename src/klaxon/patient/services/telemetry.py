@@ -6,8 +6,8 @@ What the services send:
   through Kafka stays one trace: the receiver puts the trace context in the message's headers, and both
   consumers continue it, so a posting and a confirmation sit under the webhook that brought them.
 - Metrics. FastAPI's request counts and durations (by route and status code), the durations of the
-  provider calls (httpx), and our own: webhook results, consumer outcomes, retries and dead letters, each
-  consumer group's lag, and the payments still pending.
+  provider calls (httpx) and of database queries and Redis commands, and our own: webhook results,
+  consumer outcomes, retries and dead letters, each consumer group's lag, and the payments still pending.
 - Logs. The lines each service prints as JSON, with the same fields and the trace id.
 
 The fake provider sends none of this. It stands for an outside company, whose internals we would not see.
@@ -53,6 +53,7 @@ from opentelemetry.sdk._logs import LoggerProvider, LogRecordLimits
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, LogRecordExporter, SimpleLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import MetricReader
+from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import Span, SpanLimits, SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor, SpanExporter
@@ -67,6 +68,10 @@ NAMESPACE = "klaxon-patient"
 CALLER_CHOSEN = ("url.path", "url.query", "http.request.method_original", "server.address")
 REDACTED = "redacted"
 MAX_STACK_CHARS = 2000  # the end of a traceback says the most
+# The psycopg and Redis instrumentations record durations in seconds but suggest no buckets, so the SDK's
+# defaults, made for milliseconds (0, 5, 10, ... 10000), put every query in the first one: a 0.3 ms query
+# showed a p95 of 4.75 s (2026-10-13). These are the semantic conventions' buckets for this metric.
+DB_DURATION_BUCKETS = (0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0)
 
 
 def is_health_check(scope: dict[str, Any]) -> bool:
@@ -207,7 +212,11 @@ def build(
     tracer_provider = TracerProvider(resource=resource, span_limits=SpanLimits(max_attribute_length=MAX_LOGGED_CHARS))
     tracer_provider.add_span_processor(RedactCallerText())
     tracer_provider.add_span_processor(BatchSpanProcessor(spans) if batch else SimpleSpanProcessor(spans))
-    meter_provider = MeterProvider(metric_readers=[metric_reader], resource=resource)
+    db_durations = View(
+        instrument_name="db.client.operation.duration",
+        aggregation=ExplicitBucketHistogramAggregation(DB_DURATION_BUCKETS),
+    )
+    meter_provider = MeterProvider(metric_readers=[metric_reader], resource=resource, views=[db_durations])
     # A backstop: OtlpLogHandler caps every value itself.
     logger_provider = LoggerProvider(
         resource=resource, log_record_limits=LogRecordLimits(max_attribute_length=MAX_STACK_CHARS)

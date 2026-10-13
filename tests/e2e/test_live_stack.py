@@ -189,6 +189,19 @@ def test_a_payment_leaves_its_trace_metrics_and_logs_in_the_observability_stack(
 
     [stream] = eventually(posted_line)
     assert stream["stream"]["trace_id"] == trace_id  # the log line leads to the same trace
+    # payment_id is ours in every service's lines, as in the payments API's; the provider's id has its own name.
+    assert (stream["stream"]["payment_id"], stream["stream"]["provider_payment_id"]) == (payment["id"], charge)
+
+    # Every counter series starts with a 0 in Prometheus, where it started counting, so rate() also sees a
+    # burst counted before the series' first export (otel-lgtm runs Prometheus with created-timestamp zero ingestion).
+    query = "klaxon_webhooks_received_total[1h]"
+    series = httpx.get(f"{PROMETHEUS}/api/v1/query", params={"query": query}, timeout=10).json()["data"]["result"]
+    assert series and all(s["values"][0][1] == "0" for s in series)
+
+
+def test_grafana_asks_who_you_are(idempotent_stack):
+    """The image lets anyone on this Mac in as Admin by default; compose.yaml turns that off."""
+    assert httpx.get("http://127.0.0.1:3000/api/search", timeout=10).status_code == 401
 
 
 def test_with_redis_stopped_a_retry_still_cannot_charge_twice(idempotent_stack, api):

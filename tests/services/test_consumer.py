@@ -186,6 +186,17 @@ def test_the_logs_say_what_the_consumer_was_trying_to_do(caplog):
     assert kafka.committed == [1]  # retried, then applied, then committed
 
 
+def test_payment_id_in_the_logs_is_always_ours(caplog):
+    """As in the payments API's lines, so one search finds a payment everywhere; the provider's id has its own name."""
+    body = json.loads(event(1))
+    body["data"]["metadata"] = {"klaxon_payment_id": "pmt_000001"}
+    worker, *_, stop, _ = consumer_for([FakeMessage(json.dumps(body).encode(), 1)])
+    with caplog.at_level("INFO"):
+        worker.run(stop)
+    [line] = [r for r in caplog.records if r.name == "klaxon.consumer" and r.getMessage() == "posted"]
+    assert (line.fields["payment_id"], line.fields["provider_payment_id"]) == ("pmt_000001", "pay_000001")
+
+
 def test_each_message_continues_the_trace_the_receiver_put_in_its_headers(telemetry):
     with trace.get_tracer("tests").start_as_current_span("send provider-events", kind=SpanKind.PRODUCER) as producer:
         carrier = kafka_trace_headers()  # what the webhook receiver does

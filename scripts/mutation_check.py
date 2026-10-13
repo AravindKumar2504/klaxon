@@ -142,6 +142,12 @@ MUTANTS = [
     ("FastAPI adds operation spans", S + "telemetry.py", '"operation_spans": False', '"operation_spans": True', False),
     ("the SDK's own log lines are forwarded", S + "telemetry.py",
      '        if record.name.startswith("opentelemetry"):', "        if False:", False),
+    ("database durations get the SDK's millisecond buckets", S + "telemetry.py",
+     "resource=resource, views=[db_durations])", "resource=resource)", False),
+    ("consumers log the provider's id as payment_id", S + "consumer.py",
+     "payment_id=event.klaxon_payment_id,  # ours", "payment_id=event.payment_id,  # ours", False),
+    ("Related logs search only the span's own milliseconds", "docker/grafana/datasources.yaml",
+     '        spanStartTimeShift: "-1m"\n        spanEndTimeShift: "1m"\n', "", False),
     ("a refund's span records the caller's path", S + "payments_api.py",
      "            payment = store.get_payment(payment_id)\n",
      "            trace.get_current_span().set_attribute(\"klaxon.payment_id\", payment_id)\n"
@@ -253,7 +259,7 @@ def main() -> int:
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
-    for item in ("src", "tests", "docker", "pyproject.toml"):
+    for item in ("src", "tests", "docker", "compose.yaml", "pyproject.toml"):
         src = repo / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
 

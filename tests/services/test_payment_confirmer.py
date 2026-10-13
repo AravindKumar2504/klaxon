@@ -60,6 +60,7 @@ def test_a_payment_event_without_our_id_is_reported_without_a_query(caplog):
     [line] = [r for r in caplog.records if r.name == "klaxon.payment_confirmer"]
     assert line.getMessage().startswith("not confirmed: the provider charged a payment whose metadata")
     assert line.fields["provider_payment_id"] == "pay_000001"
+    assert line.fields["payment_id"] is None and "klaxon_payment_id" not in line.fields  # payment_id is always ours
 
 
 def test_only_the_two_modes_exist():

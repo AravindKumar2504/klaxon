@@ -128,7 +128,7 @@ class PgConfirmer:
                 event_id=event.id,
                 provider_payment_id=event.payment_id,
                 provider_amount_cents=event.amount_cents,
-                klaxon_payment_id=event.klaxon_payment_id,
+                payment_id=event.klaxon_payment_id,  # ours, named in the event's metadata
                 our_status=ours.status if ours else None,
                 our_amount_cents=ours.amount_cents if ours else None,
                 our_provider_payment_id=ours.provider_payment_id if ours else None,

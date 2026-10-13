@@ -64,7 +64,7 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling week 2, `make reset` once: it adds a database role) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about two minutes) |
-| `make mutants` | breaks the code on purpose 86 ways, on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 89 ways, on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | Grafana | http://127.0.0.1:3000 while the stack runs (sign-in: the image's defaults, in `compose.yaml`); dashboard "Klaxon patient" |
 | `make demo-live HANDLER=naive` | the first piece's scenario through the real stack, with the known-bad consumer; writes evidence to `evidence/week1/` |

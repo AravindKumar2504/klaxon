@@ -31,16 +31,23 @@ class Capture:
             if (name is None or span.name == name) and (kind is None or span.kind is kind)
         ]
 
+    def points(self, name: str) -> list:
+        """Every data point of this metric so far, one per set of attributes."""
+        data = self.reader.get_metrics_data()
+        return [
+            point
+            for resource in (data.resource_metrics if data else [])
+            for scope in resource.scope_metrics
+            for metric in scope.metrics
+            if metric.name == name
+            for point in metric.data.data_points
+        ]
+
     def counter(self, name: str, **attributes: str) -> int:
         """A counter's total so far for exactly these attributes (0 before its first count)."""
-        data = self.reader.get_metrics_data()
-        for resource in data.resource_metrics if data else []:
-            for scope in resource.scope_metrics:
-                for metric in scope.metrics:
-                    if metric.name == name:
-                        for point in metric.data.data_points:
-                            if dict(point.attributes) == attributes:
-                                return point.value
+        for point in self.points(name):
+            if dict(point.attributes) == attributes:
+                return point.value
         return 0
 
     def log_records(self) -> list:

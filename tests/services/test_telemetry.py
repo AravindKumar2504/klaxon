@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from fastapi.testclient import TestClient
-from opentelemetry import propagate, trace
+from opentelemetry import metrics, propagate, trace
 from opentelemetry.trace import SpanKind
 
 from klaxon.patient.services import telemetry
@@ -15,6 +15,7 @@ from klaxon.patient.services.common import JsonFormatter, log
 from klaxon.patient.services.kafka_io import lag_observations
 from klaxon.patient.services.payments_api import pending_observations
 from klaxon.patient.services.receiver_app import create_app
+from klaxon.patient.services.telemetry import DB_DURATION_BUCKETS
 from tests.services.fakes import FakePublisher, MemoryPaymentsStore
 
 tracer = trace.get_tracer("tests")
@@ -74,6 +75,17 @@ def test_every_attribute_is_cut_at_300_characters():
     with tracer.start_as_current_span("long", attributes={"note": "x" * 1_000}) as span:
         pass
     assert len(span.attributes["note"]) == 300
+
+
+def test_database_durations_get_buckets_made_for_seconds(telemetry):
+    """psycopg and Redis suggest no buckets; the SDK's defaults are for milliseconds and made every query 4.75 s."""
+    durations = metrics.get_meter("tests").create_histogram("db.client.operation.duration", unit="s")
+    durations.record(0.0003, {"db.system.name": "test-buckets"})
+    [point] = [
+        p for p in telemetry.points("db.client.operation.duration") if p.attributes["db.system.name"] == "test-buckets"
+    ]
+    assert tuple(point.explicit_bounds) == DB_DURATION_BUCKETS
+    assert point.bucket_counts[0] == 1  # under a millisecond, in the first bucket
 
 
 def test_log_lines_reach_the_logs_pipeline_with_their_fields_and_their_trace(telemetry):

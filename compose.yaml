@@ -235,8 +235,15 @@ services:
   # (traces), Loki (logs) and Grafana, in one container. Klaxon will read these to investigate.
   otel-lgtm:
     image: grafana/otel-lgtm:0.34.0
+    environment:
+      # Sign in to Grafana (the defaults above). The image would let anyone on this Mac in as Admin.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Prometheus writes a 0 where each counter starts (OpenTelemetry sends that start time), so rate()
+      # also shows a burst counted before the counter's first export: a demo's first seconds, a first error.
+      PROMETHEUS_EXTRA_ARGS: --enable-feature=created-timestamp-zero-ingestion
     volumes:
       - lgtmdata:/data # kept by make down, wiped by make reset, like the other data
+      - ./docker/grafana/datasources.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml:ro
       - ./docker/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/klaxon.yaml:ro
       - ./docker/grafana/klaxon-patient.json:/otel-lgtm/grafana/conf/provisioning/dashboards/klaxon/klaxon-patient.json:ro
     ports:
