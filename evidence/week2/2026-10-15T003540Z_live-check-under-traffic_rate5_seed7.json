@@ -1,0 +1,926 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic (made-up customers and amounts, a simulated provider, no real money). It measures the money check Klaxon will use to verify fixes, run while traffic flows; it is not the Klaxon agent.",
+  "scenario": "live-check-under-traffic",
+  "rerun_command": "python -m klaxon.demo live-check-under-traffic --checks 20 --rate 5",
+  "ran_at_utc": "2026-10-15T00:35:40+00:00",
+  "ran_at_local": "2026-10-14T17:35:40-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "a9e5d7bf03250fe6fe6646e709a77199715cbbe2e22635367cc3a50df007e0dd",
+  "stack_files_sha256": "efe9f7256ec66884fcec44563d9984274fdc2d2b3af27aef50f609820f26441d",
+  "git_commit": "766ff905252b24f9faf85e7518b8ed209647fb1b",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6d64e40a117fac5202f04cf4dc4b87306ae8100fd48421138eeb2efcb67450fb"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6d64e40a117fac5202f04cf4dc4b87306ae8100fd48421138eeb2efcb67450fb"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6d64e40a117fac5202f04cf4dc4b87306ae8100fd48421138eeb2efcb67450fb"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6d64e40a117fac5202f04cf4dc4b87306ae8100fd48421138eeb2efcb67450fb"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6d64e40a117fac5202f04cf4dc4b87306ae8100fd48421138eeb2efcb67450fb"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      }
+    ]
+  },
+  "every_check_passed": true,
+  "traffic_settings": {
+    "rate": 5.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "4da59a04"
+  },
+  "warmup_seconds": 5.0,
+  "counted": {
+    "passed": 20,
+    "failed": 0,
+    "could not run": 0
+  },
+  "checks": [
+    {
+      "n": 1,
+      "started_utc": "2026-10-15T00:35:19.137+00:00",
+      "seconds": 1.18,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024519,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.24,
+          "cutoff": 1792024519,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 2,
+      "started_utc": "2026-10-15T00:35:20.320+00:00",
+      "seconds": 0.91,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024520,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024520,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0
+      }
+    },
+    {
+      "n": 3,
+      "started_utc": "2026-10-15T00:35:21.232+00:00",
+      "seconds": 1.02,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024521,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024521,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 4,
+      "started_utc": "2026-10-15T00:35:22.248+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024522,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792024522,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 0
+      }
+    },
+    {
+      "n": 5,
+      "started_utc": "2026-10-15T00:35:23.246+00:00",
+      "seconds": 0.98,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024523,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024523,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0
+      }
+    },
+    {
+      "n": 6,
+      "started_utc": "2026-10-15T00:35:24.230+00:00",
+      "seconds": 1.02,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024524,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792024524,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0
+      }
+    },
+    {
+      "n": 7,
+      "started_utc": "2026-10-15T00:35:25.252+00:00",
+      "seconds": 1.01,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024525,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024525,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2
+      }
+    },
+    {
+      "n": 8,
+      "started_utc": "2026-10-15T00:35:26.257+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024526,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792024526,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 9,
+      "started_utc": "2026-10-15T00:35:27.258+00:00",
+      "seconds": 0.98,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024527,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024527,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2
+      }
+    },
+    {
+      "n": 10,
+      "started_utc": "2026-10-15T00:35:28.238+00:00",
+      "seconds": 1.03,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024528,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792024528,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 11,
+      "started_utc": "2026-10-15T00:35:29.265+00:00",
+      "seconds": 0.96,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024529,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024529,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 4,
+        "provider_charges": 3
+      }
+    },
+    {
+      "n": 12,
+      "started_utc": "2026-10-15T00:35:30.227+00:00",
+      "seconds": 1.29,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024530,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.44,
+          "cutoff": 1792024530,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 13,
+      "started_utc": "2026-10-15T00:35:31.518+00:00",
+      "seconds": 1.27,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024531,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.71,
+          "cutoff": 1792024531,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2
+      }
+    },
+    {
+      "n": 14,
+      "started_utc": "2026-10-15T00:35:32.788+00:00",
+      "seconds": 0.49,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024532,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792024532,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 15,
+      "started_utc": "2026-10-15T00:35:33.274+00:00",
+      "seconds": 0.98,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024533,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024533,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1
+      }
+    },
+    {
+      "n": 16,
+      "started_utc": "2026-10-15T00:35:34.255+00:00",
+      "seconds": 0.99,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024534,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.17,
+          "cutoff": 1792024534,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0
+      }
+    },
+    {
+      "n": 17,
+      "started_utc": "2026-10-15T00:35:35.240+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024535,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024535,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2
+      }
+    },
+    {
+      "n": 18,
+      "started_utc": "2026-10-15T00:35:36.241+00:00",
+      "seconds": 0.99,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024536,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024536,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2
+      }
+    },
+    {
+      "n": 19,
+      "started_utc": "2026-10-15T00:35:37.235+00:00",
+      "seconds": 1.02,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024537,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792024537,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0
+      }
+    },
+    {
+      "n": 20,
+      "started_utc": "2026-10-15T00:35:38.258+00:00",
+      "seconds": 0.99,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792024538,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792024538,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 0
+      }
+    }
+  ],
+  "quiet_check": {
+    "n": 0,
+    "started_utc": "2026-10-15T00:35:39.250+00:00",
+    "seconds": 0.98,
+    "outcome": "passed",
+    "failed": [],
+    "error": null,
+    "details": {
+      "cutoff": 1792024539,
+      "settling": {
+        "settled": true,
+        "waited_seconds": 0.18,
+        "cutoff": 1792024539,
+        "pending_deliveries": 0,
+        "behind": {
+          "ledger": 0,
+          "payment-confirmer": 0
+        },
+        "behind_by_partition": {
+          "ledger": {
+            "0": 0,
+            "1": 0,
+            "2": 0
+          },
+          "payment-confirmer": {
+            "0": 0,
+            "1": 0,
+            "2": 0
+          }
+        }
+      }
+    },
+    "left_for_next_check": {
+      "provider_events": 0,
+      "provider_charges": 0
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 1,
+      "double_clicks.ran_first": 1,
+      "double_clicks.sent": 2,
+      "not_sent.refunds": 6,
+      "payments.arrived": 116,
+      "payments.succeeded": 116,
+      "refunds.succeeded": 6,
+      "retries": 3,
+      "retries.after_409": 1,
+      "retries.after_503": 2
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "printed_output": [
+    "Klaxon week 2: the money check, run while synthetic traffic flows",
+    "REAL RUN on this Mac's Docker Compose stack. Traffic run 4da59a04, seed 7: 5 payments per second, provider noise lose_ack_rate 0.05, lost_answer_rate 0.02.",
+    "Synthetic data, simulated provider, no real money. It measures the money check; it is not the agent.",
+    "",
+    "Checks while the traffic flows (after 5 s of warm-up)",
+    "  #1   00:35:19  PASSED         1.18 s  left for the next check: 1 events, 1 charges",
+    "  #2   00:35:20  PASSED         0.91 s  left for the next check: 0 events, 0 charges",
+    "  #3   00:35:21  PASSED         1.02 s  left for the next check: 0 events, 1 charges",
+    "  #4   00:35:22  PASSED         1.00 s  left for the next check: 1 events, 0 charges",
+    "  #5   00:35:23  PASSED         0.98 s  left for the next check: 0 events, 0 charges",
+    "  #6   00:35:24  PASSED         1.02 s  left for the next check: 0 events, 0 charges",
+    "  #7   00:35:25  PASSED         1.01 s  left for the next check: 2 events, 2 charges",
+    "  #8   00:35:26  PASSED         1.00 s  left for the next check: 1 events, 1 charges",
+    "  #9   00:35:27  PASSED         0.98 s  left for the next check: 2 events, 2 charges",
+    "  #10  00:35:28  PASSED         1.03 s  left for the next check: 1 events, 1 charges",
+    "  #11  00:35:29  PASSED         0.96 s  left for the next check: 4 events, 3 charges",
+    "  #12  00:35:30  PASSED         1.29 s  left for the next check: 1 events, 1 charges",
+    "  #13  00:35:31  PASSED         1.27 s  left for the next check: 2 events, 2 charges",
+    "  #14  00:35:32  PASSED         0.49 s  left for the next check: 1 events, 1 charges",
+    "  #15  00:35:33  PASSED         0.98 s  left for the next check: 1 events, 1 charges",
+    "  #16  00:35:34  PASSED         0.99 s  left for the next check: 0 events, 0 charges",
+    "  #17  00:35:35  PASSED         1.00 s  left for the next check: 2 events, 2 charges",
+    "  #18  00:35:36  PASSED         0.99 s  left for the next check: 2 events, 2 charges",
+    "  #19  00:35:37  PASSED         1.02 s  left for the next check: 0 events, 0 charges",
+    "  #20  00:35:38  PASSED         0.99 s  left for the next check: 1 events, 0 charges",
+    "",
+    "The traffic generator",
+    "  payments  116 answered: 116 succeeded, 0 refused, 0 outcome unknown (0 confirmed later, 0 still pending), 0 unexpected",
+    "  refunds   6 answered: 6 succeeded, 0 refused, 0 outcome unknown, 0 unexpected",
+    "  double clicks 2: 1 told \"still running\", 0 given the saved answer, 1 ran first",
+    "  retries 3 (after 409: 1, after 503: 2), shed 0, generator errors 0; not sent because the run ended: 6 refunds, 0 status checks, 0 double clicks",
+    "  the provider's behavior was put back as it was found",
+    "",
+    "One more check, after the traffic stopped",
+    "  #0   00:35:39  PASSED         0.98 s  left for the next check: 0 events, 0 charges",
+    "",
+    "Under traffic: 20 checks, 20 passed, 0 failed, 0 could not run. Quiet stack: passed.",
+    "Newer than their cutoffs, left for the next check: 22 provider events in all, 0 to 4 per check (20 checks).",
+    "RESULT: every check passed"
+  ]
+}
