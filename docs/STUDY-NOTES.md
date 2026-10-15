@@ -294,7 +294,7 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 **Likely questions.**
 - *Why not one invariant for payments and refunds together?* They fail differently. A refund can be on the wrong payment; a payment cannot. Separate invariants keep each report short and pointed at its own fix.
 - *Why does the confirmer check the payment, if the metadata already names our refund?* The metadata says which refund of ours the provider meant; the payment id says where the money actually went. A mismatch means the provider refunded someone else's payment, so confirming would hide it.
-- *Could our API count pending refunds too, so a stuck one still blocks a second refund?* Yes, and that is safer. But then a refund whose outcome is unknown would block any new refund on that payment until it settles. That is a product decision, left open (`STATUS.md`, Needs Aravind).
+- *Could our API count pending refunds too, so a stuck one still blocks a second refund?* Yes, and that is safer. But then a refund whose outcome is unknown would block any new refund on that payment until it settles. That is a product decision. It was chosen on 2026-10-14 for week 4, together with a check, per payment, that the provider never refunded more than it charged.
 
 ## Week 2 in one page (2026-10-14)
 
