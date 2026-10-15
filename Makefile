@@ -19,7 +19,8 @@ PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
-	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool
+	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
+	claude-command claude-check
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -78,6 +79,12 @@ NAME ?= service_health
 ARGS ?= {}
 tool: ## call one read-only tool and print what it returns: make tool NAME=recent_deploys ARGS='{}'
 	$(PY) -m klaxon.agent.mcp_server --call '$(NAME)' '$(ARGS)'
+
+claude-command: ## print the exact command of each live model call (claude -p, locked down); calls nothing (week 3)
+	$(PY) -m klaxon.agent.claude_code command
+
+claude-check: ## one tiny live call to Claude on Aravind's seat ("Reply with the word ok"), saved to evidence/week3/
+	$(PY) -m klaxon.agent.claude_code check
 
 traffic: ## synthetic customers until Ctrl-C (RATE=2 payments/s, DURATION=seconds, SEED=7)
 	$(PY) -m klaxon.traffic --rate $(or $(RATE),2) --seed $(or $(SEED),7) $(if $(DURATION),--seconds $(DURATION))
