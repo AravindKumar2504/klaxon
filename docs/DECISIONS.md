@@ -140,4 +140,4 @@ Built on the branch `week-2-traffic-generator`, from `main`. Aravind reviews it 
 
 - **His run is committed as evidence** (Claude, as for the earlier items): `evidence/week2/2026-10-15T003540Z_live-check-under-traffic_rate5_seed7.json`, at commit `766ff90` with clean code and stack. He also ran `make test` (390 passed) and `make up`. 20 of 20 checks passed under traffic, and the quiet check too.
 - **Week 2, item 3 merged into `main`** (Aravind, 2026-10-14): after reading the study notes, `checks/live.py` and `traffic.py`, he accepted it, and `week-2-traffic-generator` was fast-forwarded into `main`, on his Mac only; nothing is pushed. The branch is kept, like the others.
-
+- **Pushed to GitHub** (Aravind, 2026-10-14): `main` with week 2, item 3 (`main` only; the branches stay on his Mac). A privacy scan of the 10 commits found nothing private. CLAUDE.md's rule still holds: Claude asks before every push.

@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14. Week 2, item 3 (a traffic generator, and the money check working to a cutoff, which closes known gap 3) is done: Aravind reviewed it on 2026-10-14 (his own runs passed) and it was fast-forwarded into `main`. It is not pushed yet. Items 1 (payment confirmation) and 2 (OpenTelemetry) are done, merged and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license; item 2 pushed 2026-10-13). Next: week 2, items 4-6.
+Last updated: 2026-10-14. Week 2, item 3 (a traffic generator, and the money check working to a cutoff, which closes known gap 3) is done: Aravind reviewed it on 2026-10-14 (his own runs passed), it was fast-forwarded into `main`, and pushed to GitHub on 2026-10-14 at his request. Items 1 (payment confirmation) and 2 (OpenTelemetry) are done too (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 2, items 4-6.
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -8,7 +8,7 @@ The week 1 commit IDs quoted below were written before the one-time history rewr
 
 ### Week 2, item 3: synthetic traffic, and a money check that stays right while it flows (2026-10-13)
 
-Built on the branch `week-2-traffic-generator`, from `main`: `1300fef` (the generator and the measurement), `c6a94db` (the cutoff, with the review's fixes), `8195074` (the "before" evidence), `6c3b708` (the first "after" evidence), `4162abf` (the measurement also counts what each check left for the next one), then the second "after" evidence and these docs. Aravind reviewed it on 2026-10-14 and it was fast-forwarded into `main`; not pushed yet. Gap 3 was settled with Aravind first: he chose the cutoff (`DECISIONS.md`, 2026-10-13).
+Built on the branch `week-2-traffic-generator`, from `main`: `1300fef` (the generator and the measurement), `c6a94db` (the cutoff, with the review's fixes), `8195074` (the "before" evidence), `6c3b708` (the first "after" evidence), `4162abf` (the measurement also counts what each check left for the next one), then the second "after" evidence and these docs. Aravind reviewed it on 2026-10-14; it was fast-forwarded into `main` and pushed to GitHub (`main` only) the same day. Gap 3 was settled with Aravind first: he chose the cutoff (`DECISIONS.md`, 2026-10-13).
 
 - **Aravind's review, 2026-10-14:** on the branch at `766ff90`, he ran `make test` (390 passed, 2.56 s), `make up` (all containers healthy) and `make check-under-traffic CHECKS=20` himself: 20 of 20 checks passed under traffic at 5 payments per second, and the quiet check after them too; the checks left 22 newer provider events for the next check (0 to 4 per check). His evidence: `evidence/week2/2026-10-15T003540Z_...` (clean code and stack). He read the study notes, `checks/live.py` and `traffic.py`, and accepted the item.
 
@@ -99,7 +99,7 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. **Push week 2, item 3 to GitHub?** `main` is ahead of `origin/main` by the item's commits; nothing is pushed until you say so. Optional: the retries and dead-letter panels could show 0 instead of "No data" (a one-line change each; default: leave it).
+1. Optional: the retries and dead-letter panels could show 0 instead of "No data" (a one-line change each; default: leave it).
 2. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
 3. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
 4. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
