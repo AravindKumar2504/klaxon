@@ -49,7 +49,12 @@ def eventually(probe, seconds: float = 30.0):
 
 
 def test_the_patients_own_metrics_are_listed_with_their_labels(tools):
-    out = eventually(lambda: (o := tools["list_metrics"].call({"match": "klaxon_"})) and o["metrics"] and o)
+    def with_the_lag_gauge():
+        # Wait for the metric this test names: a fresh stack exports some klaxon_ metrics before others.
+        out = tools["list_metrics"].call({"match": "klaxon_"})
+        return out if any(m["name"] == "klaxon_kafka_consumer_lag" for m in out["metrics"]) else None
+
+    out = eventually(with_the_lag_gauge, seconds=60.0)
     by_name = {m["name"]: m.get("labels") for m in out["metrics"]}
     assert "consumer" in by_name["klaxon_kafka_consumer_lag"] and "partition" in by_name["klaxon_kafka_consumer_lag"]
     assert all("instance" not in labels and "job" not in labels for labels in by_name.values())
@@ -57,7 +62,9 @@ def test_the_patients_own_metrics_are_listed_with_their_labels(tools):
 
 def test_a_promql_query_comes_back_per_consumer(tools):
     query = "sum by (consumer) (klaxon_kafka_consumer_lag)"
-    out = eventually(lambda: (o := tools["query_metrics"].call({"query": query})) and len(o["series"]) == 2 and o)
+    out = eventually(
+        lambda: (o := tools["query_metrics"].call({"query": query})) and len(o["series"]) == 2 and o, seconds=60.0
+    )
     assert {s["labels"]["consumer"] for s in out["series"]} == {"ledger", "payment-confirmer"}
     ranged = tools["query_metrics"].call({"query": query, "minutes": 10})
     assert all(len(s["points"]) <= 30 for s in ranged["series"])
