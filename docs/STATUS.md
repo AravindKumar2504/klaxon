@@ -1,10 +1,29 @@
 # Status
 
-Last updated: 2026-10-14 (late night). Week 2 is done, refunds included, and all of it is on GitHub. Item 6 (refunds confirmed from webhooks, known gap 1; Aravind chose on 2026-10-14 to do it now) was reviewed by Aravind on 2026-10-14 (his own runs behaved as designed, and he read the study notes and the code), fast-forwarded into `main`, and pushed with item 5's docs at his request. Items 1 to 4 (payment confirmation, OpenTelemetry, the traffic generator with the money check's cutoff, the first three faults) were reviewed, merged and pushed before it (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 3 (the MCP server and Klaxon's first loop).
+Last updated: 2026-10-15 (early morning). Week 3 has started, ahead of the plan: item 1 (Klaxon's read-only tools, served by an MCP server written from scratch) is built on the branch `week-3-mcp-server`, not merged, not pushed, waiting for Aravind's review. On 2026-10-14 Aravind chose to start week 3 now, that Klaxon will call Claude through his university seat with Claude Code in headless mode (he has no API key), and Opus 5.5 for week 3's runs. Week 2 is done, refunds included, and all of it is on GitHub. Item 6 (refunds confirmed from webhooks, known gap 1; Aravind chose on 2026-10-14 to do it now) was reviewed by Aravind on 2026-10-14 (his own runs behaved as designed, and he read the study notes and the code), fast-forwarded into `main`, and pushed with item 5's docs at his request. Items 1 to 4 (payment confirmation, OpenTelemetry, the traffic generator with the money check's cutoff, the first three faults) were reviewed, merged and pushed before it (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: Aravind's review of week 3, item 1; then item 2 (model adapters and a trace recorder).
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
 ## Done
+
+### Week 3, item 1: Klaxon's read-only tools, served by an MCP server written from scratch (2026-10-14 and 15)
+
+Built on the branch `week-3-mcp-server`, from `main` at `18dc5e2`: `c3df2ec` (the tools, the server, the tests and the review's fixes), `eb1c414` (an integration test that raced a fresh stack), then these docs. Not merged, not pushed: it waits for Aravind's review. On 2026-10-14 he chose to start week 3 now, in this session (it was planned for Oct 27 to Nov 2).
+
+- **The tools** (`src/klaxon/agent/tools.py`; `make tools` lists them, `make tool NAME=... ARGS='{...}'` calls one): `list_metrics` and `query_metrics` (Prometheus), `search_logs` (Loki), `search_traces` and `get_trace` (Tempo), `service_health` and `recent_deploys` (docker), and `money_check` (the five invariants, with or without waiting to settle). Each checks its arguments against its JSON Schema and returns compact JSON.
+- **Read-only by construction:** GET requests to the three query APIs, with no redirects followed and no proxies; three docker commands that only read (`context inspect`, `compose ps`, `inspect --type container`), each with a 15 s timeout; the money check through the read-only role. No tool takes a URL, a host or a command. Every source must be this Mac, the money check's provider, database and Kafka included, or the tools refuse to start. The read-only database address is now named in full (`hostaddr=127.0.0.1`), so `PGHOSTADDR` in the environment cannot move it.
+- **Untrusted output:** every result and error message is cleaned. Hidden characters are dropped (control, formatting, private-use, unassigned, variation selectors), the home folder is written as `~`, every string and list is capped, and long lists stop at a size budget (a long trace keeps its first and its last spans). The server refuses a result over 60,000 characters. `recent_deploys` shows three behavior settings, never the rest of a container's environment (`DATABASE_URL` holds a password). Text a source sends in an answer the tools cannot read is never repeated.
+- **The MCP server** (`src/klaxon/agent/mcp_server.py`, written from scratch as in INFO 7375 lesson 8): JSON-RPC 2.0 over stdio, MCP revision 2025-11-25 (the `initialize` handshake). It answers "method not found" to `server/discover`, the newer 2026-07-28 revision's probe, and the official SDK's client then falls back to the handshake. Malformed messages, unknown methods and unknown tools are protocol errors; bad arguments, refused queries and unreachable sources are tool errors (`isError`), which the model can read and correct.
+- **Checked against the official SDK** (`mcp==2.2.0`, a test-only dependency): both its clients (a plain session, and the one that probes `server/discover` first) complete the handshake, list the 8 tools and call them, offline and against the stack. The SDK brings `httpx2`, which Starlette's test client now prefers; one receiver test was adjusted. The services and their image are unchanged.
+- **Checked live during the build** (2026-10-14, on the stack after Aravind's lost-refund demo, before the review's fixes): `list_metrics` gave the 7 `klaxon_` metrics and their labels; `query_metrics` the lag per consumer; `search_logs` the ledger's "posted" lines with their event, payment and trace ids; `search_traces` and `get_trace` one webhook's trace across the receiver and both consumers; `service_health` 9 healthy containers and `kafka-init` exited with 0; `recent_deploys` the three settings and no password; `money_check` passed.
+- **Found while testing:** in Python, `$` also matches just before a trailing newline, so the trace id "ab\n" passed its pattern and would have reached Tempo's URL; patterns are now checked with `re.fullmatch`. And Tempo answers an unknown trace with an empty one, not a 404; both now say the same.
+- **Tests** (all measured 2026-10-15 on the code of `eb1c414`):
+  - `make test`: 623 passed, offline, 5.0 s. New: 121 for the tools and the server (including both SDK clients), 17 for the live check's hardening.
+  - `make test-integration` (stack up): 85 passed in 19 s. New: each tool against the real sources, and the SDK's client calling one.
+  - `make e2e`: 21 passed in 305 s. New: after one payment on a fresh stack, through the MCP server and the SDK's client, the tools find the payment's webhook trace across all three services, the ledger's log line, the posted counter, the deploy settings, healthy containers and a passing money check.
+  - `make mutants` (stack up): 254 of 254 deliberate breaks caught, 914 s. 56 are new: 27 for the tools and the server, and 29 for the review's fixes.
+- **Independent review:** a separate Claude review, read-only, found nothing that could write, and no way to reach another host through a tool's arguments. Its findings, all fixed before the measurements above (`DECISIONS.md`): the money check could pass provider text on (a clock that answered text, a pending count) and could page forever; its database could be moved by `PGHOSTADDR`; docker errors carried this Mac's folders; tests did not prove several guards (the last clean, redirects, docker's exact commands, a byte that is not UTF-8); a slow docker could block the server for minutes; an error with an unknown id said `null`, which MCP's schema does not allow; whole numbers were rounded, and two caps disagreed. One finding was already covered: the read-only role has a 5 s statement timeout.
+- The first piece still reproduces: both `python -m klaxon.demo duplicate-webhook` runs print exactly their saved evidence (checked 2026-10-15 after the last `src/klaxon` change).
 
 ### Week 2, item 6: refunds confirmed from webhooks, and a fifth money-check invariant (2026-10-14)
 
@@ -146,9 +165,10 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
-2. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
-3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
+1. **Review week 3, item 1** (Klaxon's read-only tools and its MCP server), on the branch `week-3-mcp-server`. With the stack up (`make up`): `make tools`, then a few tools, for example `make tool NAME=recent_deploys`, `make tool NAME=money_check` and `make tool NAME=query_metrics ARGS='{"query": "sum by (consumer) (klaxon_kafka_consumer_lag)"}'`. Then read the item's study notes, `make_tools` and `_recent_deploys` in `tools.py`, and `Server.handle` in `mcp_server.py`. Merging and pushing wait for your word.
+2. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
+3. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
+4. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults: done
 
@@ -159,7 +179,13 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 5. ~~Update STATUS, DECISIONS and STUDY-NOTES~~ Done (2026-10-14): each item's notes, a one-page week 2 summary in STUDY-NOTES, and PLAN.md's fault list brought in line with Aravind's decisions.
 6. ~~Confirm refunds the same way (known gap 1)~~ Done and merged (above).
 
-Next: week 3 (PLAN: Oct 27-Nov 2): an MCP server with read-only ops tools (metrics, logs, traces, recent deploys, the money check with and without waiting), Klaxon's first loop diagnosing faults 1-3, and a trace recorder.
+## Week 3 (PLAN: Oct 27-Nov 2, started 2026-10-14): read-only tools, a first loop, a trace recorder
+
+1. ~~Read-only ops tools and an MCP server written from scratch~~ Built (above); waiting for Aravind's review.
+2. Model adapters (a scripted mock for offline tests; Claude Code in headless mode on Aravind's seat, Opus 5.5, every live response saved with its date and model) and a trace recorder (one record per step: what the model saw, proposed, what was allowed, what ran, what came back, why it stopped).
+3. The first loop: plain Python, with a goal, state, actions, observations and stopping rules; budgets on steps, tool calls and time; the model's JSON validated, with bounded retries; a diagnosis contract (hypothesis, evidence citing tool-call ids, confidence, proposed fix, blast radius, rollback plan). It acts on nothing.
+4. Alerts on symptoms only, never causes, and runs on faults 1 to 3 under traffic: each diagnosis compared with the cause the fault records, with evidence in `evidence/week3/`.
+5. Docs and Aravind's review.
 
 Week 4 (PLAN: Nov 3-9) will also get, next to the circuit breaker, the two stuck-refund fixes Aravind chose on 2026-10-14 (known gap 1).
 
