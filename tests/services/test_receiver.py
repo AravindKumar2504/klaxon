@@ -2,7 +2,6 @@
 
 import json
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 from opentelemetry.trace import SpanKind
@@ -118,12 +117,12 @@ def test_the_providers_signed_deliveries_pass_the_receivers_check():
     publisher, client = receiver()
     store = ProviderStore(":memory:", clock=lambda: NOW)
     store.create_payment("cus_001", 1999)
-    # TestClient is an httpx.Client, so the sender can post straight into the receiver app.
+    # TestClient has httpx's interface (built on httpx2 when that is installed, as the dev extra does since week 3),
+    # so the sender can post straight into the receiver app.
     sender = WebhookSender(store, "http://testserver/webhooks/provider", SECRET, client, clock=lambda: NOW)
     sender.deliver_due()
     assert store.delivery_stats()["delivered"] == 1
     assert json.loads(publisher.messages[0]["value"])["id"] == "evt_000001"
-    assert isinstance(client, httpx.Client)
 
 
 def test_a_streamed_body_over_the_limit_is_refused_too():

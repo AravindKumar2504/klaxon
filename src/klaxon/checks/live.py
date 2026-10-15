@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -53,26 +54,50 @@ from datetime import datetime, timezone
 import httpx
 import psycopg
 from confluent_kafka import KafkaException
+from psycopg.conninfo import conninfo_to_dict
 
 from klaxon.checks.money import MONEY_EFFECT, MoneyReport, ProviderPayment, ProviderRefund, check_money
 from klaxon.patient.provider import Event
 from klaxon.patient.services.events import ID
 from klaxon.patient.services.kafka_io import CONSUMER_GROUPS, EVENTS_TOPIC, end_offsets, not_yet_handled
+from klaxon.traffic import LOCAL_HOSTS, require_local
 
 # This Mac's view of the stack (see the ports in compose.yaml). Local development values, not secrets.
 # 127.0.0.1, not localhost: localhost tries IPv6 first, and the ports listen on IPv4 only.
 PROVIDER_URL = os.environ.get("KLAXON_PROVIDER_URL", "http://127.0.0.1:8081")
+# hostaddr too: without it, libpq would take PGHOSTADDR from the environment and could connect elsewhere.
 READONLY_DSN = os.environ.get(
-    "KLAXON_READONLY_DSN", "postgresql://klaxon_readonly:klaxon-readonly-dev-only@127.0.0.1:5432/klaxon"
+    "KLAXON_READONLY_DSN",
+    "postgresql://klaxon_readonly:klaxon-readonly-dev-only@127.0.0.1:5432/klaxon?hostaddr=127.0.0.1",
 )
 KAFKA_BOOTSTRAP = os.environ.get("KLAXON_KAFKA_BOOTSTRAP", "127.0.0.1:9094")
 # trust_env=False: no proxy from the environment or the system settings, so these requests never leave this Mac.
 HTTP = httpx.Client(timeout=10.0, trust_env=False)
+MAX_PAGES = 1000  # of up to 100 records each; a provider that never stops saying "more" is refused
 CLOCK_WAIT_LIMIT = 3.0  # seconds; waiting longer for the cutoff's second to end means the provider's clock is wrong
 
 
 class ClockProblem(Exception):
     """The provider's clock and its stamps disagree, so no cutoff can be trusted. "Could not run", never a pass."""
+
+
+def require_local_sources(
+    provider_url: str = PROVIDER_URL, readonly_dsn: str = READONLY_DSN, kafka_bootstrap: str = KAFKA_BOOTSTRAP
+) -> None:
+    """Refuse unless the check would read only this Mac: the provider, the database (and its address), and Kafka.
+
+    Klaxon calls this before it runs the check (klaxon.agent.tools), because each of these can come from the
+    environment. The database must name its address (hostaddr) as well as its host: libpq would otherwise take
+    one from PGHOSTADDR.
+    """
+    require_local(provider_url)
+    params = conninfo_to_dict(readonly_dsn)
+    host, hostaddr = params.get("host", ""), params.get("hostaddr", "")
+    if host not in LOCAL_HOSTS or hostaddr not in LOCAL_HOSTS:
+        raise ValueError("refusing: the money check's database must be this Mac, by host and by hostaddr")
+    for broker in kafka_bootstrap.split(","):
+        if broker.strip().rsplit(":", 1)[0].strip("[]") not in LOCAL_HOSTS:
+            raise ValueError("refusing: the money check's Kafka must be this Mac")
 
 
 def _stamp(item: dict, required: bool) -> int | None:
@@ -81,7 +106,7 @@ def _stamp(item: dict, required: bool) -> int | None:
     if created is None and not required:
         return None
     if not isinstance(created, int) or isinstance(created, bool) or created < 0:
-        raise ValueError(f"the provider sent a created stamp that is not whole seconds: {str(created)[:40]!r}")
+        raise ValueError("the provider sent a created stamp that is not whole seconds")  # never echoed: untrusted
     return created
 
 
@@ -154,7 +179,7 @@ class ProviderAPI:
     def _pages(self, path: str, page_size: int) -> list[dict]:
         items: list[dict] = []
         after: str | None = None
-        while True:
+        for _ in range(MAX_PAGES):
             params: dict[str, str | int] = {"limit": page_size}
             if after is not None:
                 params["starting_after"] = after
@@ -165,6 +190,7 @@ class ProviderAPI:
             if not page["has_more"] or not page["data"]:
                 return items
             after = page["data"][-1]["id"]
+        raise ValueError(f"the provider kept saying there was more after {MAX_PAGES} pages")  # a loop, not a ledger
 
     def _fetch_balance(self) -> int:
         response = self.http.get("/v1/balance", params={} if self.as_of is None else {"as_of": self.as_of})
@@ -205,7 +231,10 @@ class Settling:
 def provider_clock(provider_url: str = PROVIDER_URL) -> float:
     response = HTTP.get(f"{provider_url}/admin/clock")
     response.raise_for_status()
-    return float(response.json()["now"])
+    now = response.json()["now"]
+    if not isinstance(now, int | float) or isinstance(now, bool) or not math.isfinite(now):
+        raise ClockProblem("the provider's clock answered something that is not a number")  # never echoed
+    return float(now)
 
 
 def choose_cutoff(clock: Callable[[], float] = provider_clock, sleep: Callable[[float], None] = time.sleep) -> int:
@@ -249,7 +278,10 @@ def pending_deliveries(up_to: int, provider_url: str = PROVIDER_URL, get: Callab
     """Webhooks of events up to the cutoff that our receiver has not acknowledged yet."""
     response = get(f"{provider_url}/admin/deliveries", params={"created_lte": up_to}, timeout=10.0)
     response.raise_for_status()
-    return response.json()["stats"]["pending"]
+    pending = response.json()["stats"]["pending"]
+    if not isinstance(pending, int) or isinstance(pending, bool) or pending < 0:
+        raise ValueError("the provider's count of pending deliveries is not a whole number")  # never echoed
+    return pending
 
 
 def topic_end(kafka_bootstrap: str = KAFKA_BOOTSTRAP) -> dict[int, int]:

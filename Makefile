@@ -19,7 +19,7 @@ PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
-	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only
+	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -37,7 +37,8 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py src/klaxon/demo/under_traffic.py src/klaxon/traffic.py \
 		tests/services tests/integration tests/e2e tests/test_live_check.py tests/test_payments_match_provider.py \
 		tests/test_observability_config.py tests/test_traffic.py tests/test_money_cutoff.py tests/test_faults.py \
-		src/klaxon/faults.py src/klaxon/demo/fault_scenario.py src/klaxon/demo/lost_refund.py tests/test_refunds_match_provider.py
+		src/klaxon/faults.py src/klaxon/demo/fault_scenario.py src/klaxon/demo/lost_refund.py tests/test_refunds_match_provider.py \
+		src/klaxon/agent tests/agent
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -69,6 +70,14 @@ mutants: ## break the code on purpose, on a copy, and check the tests notice (ma
 
 check: ## run the money check against the running stack
 	$(PY) -m klaxon.checks.live
+
+tools: ## list Klaxon's read-only tools, the ones its MCP server serves (week 3)
+	$(PY) -m klaxon.agent.mcp_server --list
+
+NAME ?= service_health
+ARGS ?= {}
+tool: ## call one read-only tool and print what it returns: make tool NAME=recent_deploys ARGS='{}'
+	$(PY) -m klaxon.agent.mcp_server --call '$(NAME)' '$(ARGS)'
 
 traffic: ## synthetic customers until Ctrl-C (RATE=2 payments/s, DURATION=seconds, SEED=7)
 	$(PY) -m klaxon.traffic --rate $(or $(RATE),2) --seed $(or $(SEED),7) $(if $(DURATION),--seconds $(DURATION))

@@ -23,7 +23,9 @@ FOREIGN_TARGETS = ("DOCKER_HOST", "DOCKER_CONTEXT", "COMPOSE_FILE", "COMPOSE_PRO
 
 
 class StackError(RuntimeError):
-    pass
+    def __init__(self, message: str, stderr: str = "") -> None:
+        super().__init__(message)
+        self.stderr = stderr  # docker's own words, for a caller that must not show the command line (it has paths)
 
 
 def docker() -> str:
@@ -47,7 +49,9 @@ def _run(args: list[str], env: dict[str, str] | None = None, timeout: float = 60
         [binary, *args], cwd=REPO, env=full_env | (env or {}), capture_output=True, text=True, timeout=timeout
     )
     if done.returncode != 0:
-        raise StackError(f"docker {' '.join(args)} failed ({done.returncode}): {done.stderr.strip()[-2000:]}")
+        raise StackError(
+            f"docker {' '.join(args)} failed ({done.returncode}): {done.stderr.strip()[-2000:]}", stderr=done.stderr
+        )
     return done.stdout
 
 
@@ -56,9 +60,9 @@ def compose(*args: str, env: dict[str, str] | None = None, timeout: float = 600)
     return _run(["compose", *target, *args], env=env, timeout=timeout)
 
 
-def ensure_local() -> None:
+def ensure_local(timeout: float = 600) -> None:
     """Refuse unless docker's current endpoint is a socket on this machine (Docker Desktop's is)."""
-    endpoint = _run(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"]).strip()
+    endpoint = _run(["context", "inspect", "--format", "{{.Endpoints.docker.Host}}"], timeout=timeout).strip()
     if not endpoint.startswith(("unix://", "npipe://")):
         raise StackError(f"refusing: docker points at {endpoint!r}, not this machine")
 
@@ -93,6 +97,23 @@ def container_env(service: str) -> dict[str, str]:
         raise StackError(f"{service} is not running (make up)")
     pairs = json.loads(_run(["inspect", "--format", "{{json .Config.Env}}", container]))
     return dict(pair.split("=", 1) for pair in pairs)
+
+
+def containers(timeout: float = 600) -> list[dict]:
+    """Every container of the project, running or not, as `docker compose ps` describes it. Reads only."""
+    text = compose("ps", "--all", "--format", "json", timeout=timeout).strip()
+    if not text:
+        return []
+    # Compose prints a JSON array in some versions and one JSON object per line in others.
+    return json.loads(text) if text.startswith("[") else [json.loads(line) for line in text.splitlines() if line]
+
+
+def inspect(*container_ids: str, timeout: float = 600) -> list[dict]:
+    """`docker inspect` of these containers. Reads only. Their environment holds passwords: never pass it on whole."""
+    if not container_ids:
+        return []
+    # Containers only, and ids after "--": an id can never be read as an option or name another kind of object.
+    return json.loads(_run(["inspect", "--type", "container", "--", *container_ids], timeout=timeout))
 
 
 def describe() -> dict:

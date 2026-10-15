@@ -10,7 +10,9 @@ requires-python = ">=3.12"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.16"]
+# mcp: the official MCP SDK, only for tests that talk to Klaxon's own server as a real client would.
+# 2.2.0 (2026-09-07), not 2.3.0: that one was under two weeks old (week 3).
+dev = ["pytest>=8", "ruff>=0.16", "mcp==2.2.0"]
 # The live patient services (week 1). Exact versions for the image: requirements/services.lock.txt
 services = [
     "fastapi>=0.142",
@@ -39,7 +41,8 @@ markers = [
     "integration: needs the Compose stack's PostgreSQL and Kafka running (make up)",
     "e2e: resets the whole Compose stack and drives it end to end (make e2e)",
 ]
-# Starlette 1.7 asks for a replacement HTTP client in its test client; httpx still works. Revisit on upgrades.
+# Starlette 1.7 asks for a replacement HTTP client in its test client. Since week 3 the dev extra brings it
+# (httpx2, through mcp), so this only matters in a venv without it. Revisit on upgrades.
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
 
 [tool.ruff]

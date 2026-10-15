@@ -5,11 +5,16 @@ The tests in this file run in order and share one stack, except the known-bad ba
 which build their own.
 """
 
+import os
+import sys
 import threading
 import time
 
+import anyio
 import httpx
 import pytest
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 from klaxon import traffic
 from klaxon.checks.live import PROVIDER_URL, ProviderAPI, check_live
@@ -255,6 +260,61 @@ def test_a_payment_leaves_its_trace_metrics_and_logs_in_the_observability_stack(
 def test_grafana_asks_who_you_are(idempotent_stack):
     """The image lets anyone on this Mac in as Admin by default; compose.yaml turns that off."""
     assert httpx.get("http://127.0.0.1:3000/api/search", timeout=10, trust_env=False).status_code == 401
+
+
+def test_klaxons_read_only_tools_see_a_payment_through_its_mcp_server(idempotent_stack, api):
+    """Week 3: what Klaxon will investigate with, through its own MCP server and the official SDK's client."""
+    payment = pay(api, "e2e-mcp", 4_242).json()
+    assert check_live().report.passed  # settled: both consumers have handled the webhook
+    charge = payment["provider_payment_id"]
+    # PYTHONPATH too: on a mutant's copy (scripts/mutation_check.py) the server must run the code under test.
+    server = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "klaxon.agent.mcp_server"],
+        cwd=str(stack.REPO),
+        env={k: v for k, v in os.environ.items() if k == "PYTHONPATH"},
+    )
+
+    async def investigate() -> dict:
+        async with stdio_client(server) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+
+            async def call(name: str, arguments: dict | None = None) -> dict:
+                result = await session.call_tool(name, arguments or {})
+                assert not result.is_error, result.content[0].text
+                return result.structured_content
+
+            async def eventually_call(name: str, arguments: dict, found, timeout: float = 60.0) -> dict:
+                deadline = time.monotonic() + timeout
+                while not found(out := await call(name, arguments)):
+                    assert time.monotonic() < deadline, f"{name} never found it: {out}"
+                    await anyio.sleep(2.0)
+                return out
+
+            query = f'{{ span.provider.payment_id = "{charge}" && kind = consumer }}'
+            traces = await eventually_call("search_traces", {"query": query}, lambda o: o["traces"])
+            ledger_says = f'{{service_name="ledger-consumer"}} | provider_payment_id = "{charge}"'
+            posted = 'sum(klaxon_consumer_events_total{consumer="ledger", outcome="posted"})'
+            return {
+                "trace": await eventually_call(
+                    "get_trace", {"trace_id": traces["traces"][0]["trace_id"]}, lambda o: len(o["services"]) == 3
+                ),
+                "logs": await eventually_call("search_logs", {"query": ledger_says}, lambda o: o["lines"]),
+                "posted": await eventually_call("query_metrics", {"query": posted}, lambda o: o["series"]),
+                "deploys": await call("recent_deploys"),
+                "health": await call("service_health"),
+                "money": await call("money_check"),
+            }
+
+    seen = anyio.run(investigate)
+    assert seen["trace"]["services"] == ["ledger-consumer", "payment-confirmer", "webhook-receiver"]
+    [line, *_] = seen["logs"]["lines"]
+    assert (line["message"], line["fields"]["payment_id"]) == ("posted", payment["id"])
+    assert seen["posted"]["series"][0]["value"] >= 1
+    settings = {d["service"]: d["settings"] for d in seen["deploys"]["deploys"]}
+    assert settings["ledger-consumer"] == {"LEDGER_HANDLER": "idempotent", "BAD_EVENTS": "dead_letter"}
+    assert all(s["health"] == "healthy" for s in seen["health"]["services"] if s["service"] != "kafka-init")
+    assert seen["money"]["outcome"] == "passed"
 
 
 def test_with_redis_stopped_a_retry_still_cannot_charge_twice(idempotent_stack, api):
