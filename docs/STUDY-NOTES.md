@@ -364,7 +364,9 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 
 **What the review taught.** It found eleven things, all fixed with tests. The biggest was the at sign: a feature of Claude Code (file mentions) that is easy to miss as a way to read files, since no tool is involved. Lesson: when you sandbox a program, list everything it does with its input, not only its obvious powers.
 
-**What I can say ran (2026-10-15; STATUS has the commands).** 831 offline tests, 208 of them new, on the code of `3cd17ec`. 85 of 85 new deliberate breaks caught, run offline on a copy. The first piece still prints its saved evidence exactly. Not yet: a live call to Claude through the adapter (it waits for your OK), and the stack-based runs (they wait for your item 1 review).
+**What I can say ran (2026-10-15; STATUS has the commands).** 831 offline tests, 208 of them new, on the code of `3cd17ec`. 85 of 85 new deliberate breaks caught, run offline on a copy. The first piece still prints its saved evidence exactly. The one live call ran with your OK and failed at sign-in: "Not logged in · Please run /login", in 0.18 s, with no model called. It still showed something real: Claude Code's own report of what it loaded (no tools, no MCP servers, the empty folder, the seat's kind of sign-in). Not yet: a reply from Claude through the adapter, and the stack-based runs (they wait for your item 1 review).
+
+**Why the live call failed, in one breath.** The desktop app signs in its own Claude Code sessions. Klaxon starts Claude Code with a clean environment, on purpose, so that copy has no login of its own. A failure that the recording explains in one line is the system working: it stopped at once, called nothing, and saved why.
 
 **Likely questions.**
 - *Why not just call the Anthropic API?* No API key and no budget; the course allows the seat. The interface means an API adapter can be added later without touching the loop.
