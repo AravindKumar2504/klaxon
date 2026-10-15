@@ -615,7 +615,7 @@ class ClaudeCode:
 
 CHECK_SYSTEM = "You are answering a connectivity check for a software project. Follow the user's instruction exactly."
 CHECK_PROMPT = "Reply with the word ok"
-# Klaxon's prompt is under 200 tokens. Much more would mean something else reached the model: CLAUDE.md, memory.
+# The check's prompt is a few sentences. Much more input would mean something else reached the model: CLAUDE.md, memory.
 CHECK_MAX_INPUT_TOKENS = 1_500
 
 

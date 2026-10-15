@@ -5,9 +5,10 @@ replaces one piece of code with a plausible mistake (commit before booking, answ
 Kafka did not confirm, trust Redis alone, ...). The copy lives in WORKDIR, so the repo itself
 is never touched. A mutant is "caught" when at least one test fails.
 
-Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack]    (or: make mutants)
+Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack] [--only FILE ...]    (or: make mutants)
 Offline mutants run the offline suite. --with-stack also runs the mutants that need the
-stack's PostgreSQL, Redis and Kafka (pytest -m integration; make up first).
+stack's PostgreSQL, Redis and Kafka (pytest -m integration; make up first). --only, last,
+runs just the mutants of the files named, as the list names them (src/klaxon/agent/model.py).
 Exit 0 when every mutant is caught, 1 when one survives, 2 when the unbroken copy fails.
 """
 
@@ -870,6 +871,11 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
 def main() -> int:
     repo, work = Path(sys.argv[1]), Path(sys.argv[2])
     with_stack = "--with-stack" in sys.argv
+    only = sys.argv[sys.argv.index("--only") + 1 :] if "--only" in sys.argv else []
+    unknown = sorted(set(only) - {m[1] for m in MUTANTS})
+    if unknown:
+        print(f"no mutants for: {', '.join(unknown)}")
+        return 2
     python = str(repo / ".venv" / "bin" / "python")
     if work.exists():
         shutil.rmtree(work)
@@ -884,7 +890,7 @@ def main() -> int:
     )
     assert str(work) in check.stdout, f"the copy is not the code under test: {check.stdout}"
 
-    selected = [m for m in MUTANTS if with_stack or not m[4]]
+    selected = [m for m in MUTANTS if (with_stack or not m[4]) and (not only or m[1] in only)]
     for integration in sorted({m[4] for m in selected}):
         baseline = run_tests(work, python, integration)
         if baseline.returncode != 0:
