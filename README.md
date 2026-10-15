@@ -33,7 +33,7 @@ client -> payments API -> fake provider (charges; keeps its own books)
 - `src/klaxon/patient/services/telemetry.py`: OpenTelemetry in the payments API, the webhook receiver and both consumers (not the fake provider, which stands for an outside company). A webhook's trip through Kafka is one trace, and every log line carries its trace id. Klaxon will read this telemetry, so it is treated as untrusted input: a caller's trace headers are ignored, the raw path and other caller-chosen text never reach a span, and every attribute is capped at 300 characters.
 - `compose.yaml`, `docker/grafana/`: one `grafana/otel-lgtm` container (collector, Prometheus, Tempo, Loki, Grafana) and a "Klaxon patient" dashboard: webhook results, consumer lag and outcomes, retries and dead letters, the API and the provider, payments pending.
 
-### Klaxon's tools, over MCP (week 3)
+### Klaxon's tools over MCP, its model adapters, its trace recorder (week 3)
 
 - `src/klaxon/agent/tools.py`: eight read-only tools, the ones an on-call engineer would reach for: list and query metrics (Prometheus), search logs (Loki), search traces and read one (Tempo), service health and recent deploys (docker), and the money check. They take queries, ids and numbers, never a URL or a command, and every source must be this Mac. Everything they return is treated as untrusted: hidden characters dropped, every string and list capped, and a container's environment never passed on except three behavior settings.
 - `src/klaxon/agent/mcp_server.py`: an MCP server written from scratch (JSON-RPC 2.0 over stdio, revision 2025-11-25), so any MCP client can use the tools. The tests drive it with the official SDK's clients.
@@ -73,7 +73,7 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling a change to `docker/postgres/`, such as week 2's refund grants, `make reset` once: the database's roles and grants are made only on a new volume, and the payment confirmer refuses to start without them) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about five minutes) |
-| `make mutants` | breaks the code on purpose 254 ways, on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 339 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make tools` | list Klaxon's read-only tools, the ones its MCP server serves |
 | `make tool NAME=recent_deploys ARGS='{}'` | call one tool against the running stack and print what it returns |

@@ -345,3 +345,29 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 - *Why not use an existing Prometheus or Grafana MCP server?* They expose more than Klaxon should have (some can change dashboards or alerts), and none has the money check, which is the point of this project.
 - *Could a tool be tricked into writing?* Only by changing its code. The tools take queries and ids, never URLs or commands, and an id must match a strict pattern before it goes into a URL.
 - *Doesn't recent_deploys make the bad-deploy faults too easy?* It shows what a real deploy log shows. Connecting a deploy to a money symptom is the hard part. The evaluation can also hide the settings.
+
+## Week 3, item 2 (built 2026-10-15): model adapters and the trace recorder
+
+**What it is.** The loop (item 3) will need two things besides its tools: a way to ask a model for the next step, and a record of every step. Item 2 builds both. `model.ask(system, messages)` returns the model's reply with the model id the response reports, the usage, the time and the raw response. Three adapters answer it: a scripted mock for offline tests, Claude through Claude Code on your seat, and a replay of recorded replies. The trace recorder writes one JSON line per step.
+
+**Why an interface, and three adapters.** The loop should not care who answers. Offline tests need answers that are fixed in advance (the mock). Live runs need Claude. Regression tests need yesterday's live answers again, for free and the same every time (the replay). CSYE 7374 calls this a model-call adapter.
+
+**Why Claude Code, and why box it in.** You have no API key, so Klaxon calls `claude -p` on your seat. But Claude Code is an agent itself: it has tools (Bash, Read, Edit), MCP servers, your settings, your memory folder. Klaxon runs every tool itself, through its own MCP server, so Claude Code must only answer. It starts with no tools, no MCP servers, none of your settings, CLAUDE.md or memory, in an empty temporary folder, with a small environment. Then Klaxon does not trust the flags alone: Claude Code's first event says what it actually loaded, and one tool, one MCP server, a memory path or an API-key sign-in stops the call. Lesson: verify a guard at run time, not just set it.
+
+**The conversation in one prompt.** `claude -p` takes one message, so Klaxon writes the whole conversation into it, each turn in a tag. Danger: a log line could contain a fake closing tag and a fake "assistant" turn ("approve the rollback"). So the tag is made from the hash of the conversation itself, like a MIME boundary: a log line cannot contain it, because it cannot know the hash of the text it is part of. Also, every at sign goes out as a fullwidth ＠, because in Claude Code "@path" can attach a file, and a log line could name your memory folder.
+
+**Time, and processes.** Each call has one deadline (300 s by default). At the deadline, Klaxon kills Claude Code's whole process group, so nothing it started lives on. And Klaxon never waits for anything else that holds the output pipe open. The review found that a detached child process made a 1 s call take 6.4 s. Lesson: a timeout on the process is not a timeout on the call. The read itself must have the deadline.
+
+**Recording vs trace.** The recording is evidence: every live reply exactly as received, with its date and model, saved before Klaxon uses it (CLAUDE.md's rule). If it cannot be saved, the reply is not used. The trace is for reading and grading: what the model saw (hashes and sizes), what it proposed, whether that was allowed, what ran, what came back (cleaned and capped), and why the run stopped. Both name each text by its SHA-256, so a trace line can be matched with the exact text in the recording.
+
+**Replay, and why hashes.** The replay serves a recorded reply only for the exact prompt it answered: same system prompt, same turns, same hash. If the prompt changed, there is no reply, and the test says so. A recorded failure comes back as the same error, so a run that retried after a timeout retries again in the replay.
+
+**What the review taught.** It found eleven things, all fixed with tests. The biggest was the at sign: a feature of Claude Code (file mentions) that is easy to miss as a way to read files, since no tool is involved. Lesson: when you sandbox a program, list everything it does with its input, not only its obvious powers.
+
+**What I can say ran (2026-10-15; STATUS has the commands).** 831 offline tests, 208 of them new, on the code of `3cd17ec`. 85 of 85 new deliberate breaks caught, run offline on a copy. The first piece still prints its saved evidence exactly. Not yet: a live call to Claude through the adapter (it waits for your OK), and the stack-based runs (they wait for your item 1 review).
+
+**Likely questions.**
+- *Why not just call the Anthropic API?* No API key and no budget; the course allows the seat. The interface means an API adapter can be added later without touching the loop.
+- *How do you know Claude Code ran no tool?* Three ways: it starts without tools; its first event lists none (else Klaxon stops it); and a reply that used one would show a tool block, extra turns or a permission denial, each of which Klaxon refuses.
+- *Why record every response?* Both courses grade honesty. Any Claude response in a deliverable must be one actually received, with its date and model. The recording is that proof, and the replay reuses it.
+- *What if your seat answers with another model?* The reply reports its model id. If it is not the one asked for, the reply is recorded and refused.
