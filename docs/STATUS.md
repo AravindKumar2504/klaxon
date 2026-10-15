@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (night). Week 2 is done except refunds (known gap 1, later by Aravind's choice). Item 4 (the first three faults, injected on purpose) was reviewed by Aravind on 2026-10-14 (his own run passed) and fast-forwarded into `main`; it is not pushed yet. Items 1 to 3 (payment confirmation, OpenTelemetry, the traffic generator with the money check's cutoff) are done, merged and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 3 (the MCP server and Klaxon's first loop).
+Last updated: 2026-10-14 (night). Week 2 is done except refunds (known gap 1, later by Aravind's choice). Item 4 (the first three faults, injected on purpose) was reviewed by Aravind on 2026-10-14 (his own run passed) and fast-forwarded into `main`, and pushed to GitHub on 2026-10-14 at his request. Items 1 to 3 (payment confirmation, OpenTelemetry, the traffic generator with the money check's cutoff) are done, merged and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). Next: week 3 (the MCP server and Klaxon's first loop).
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -8,7 +8,7 @@ The week 1 commit IDs quoted below were written before the one-time history rewr
 
 ### Week 2, item 4: the first three faults, injected on purpose (2026-10-14)
 
-Built on the branch `week-2-first-faults`, from `main`: `66f5afd` (the patient's fault switches), `65d7d3f` (the fault catalog and the scenario runs, with the review's fixes), then the evidence and these docs. Aravind reviewed it on 2026-10-14 and it was fast-forwarded into `main`; not pushed yet. Two choices were Aravind's (`DECISIONS.md`, 2026-10-14): fault 1 is a ledger deploy without its dedupe (PLAN.md's "Redis down, double charge" cannot happen here), and fault 2 stalls the ledger consumer.
+Built on the branch `week-2-first-faults`, from `main`: `66f5afd` (the patient's fault switches), `65d7d3f` (the fault catalog and the scenario runs, with the review's fixes), then the evidence and these docs. Aravind reviewed it on 2026-10-14; it was fast-forwarded into `main` and pushed to GitHub (`main` only) the same day. Two choices were Aravind's (`DECISIONS.md`, 2026-10-14): fault 1 is a ledger deploy without its dedupe (PLAN.md's "Redis down, double charge" cannot happen here), and fault 2 stalls the ledger consumer.
 
 - **Aravind's review, 2026-10-14:** on the branch at `fc4b80a`, after `make reset` and `make up`, he ran `make faults` and `make demo-fault FAULT=poison-message` himself. It said what the fault expects in every phase: the ledger's lag climbed to 193 (57, 84 and 52 on the three partitions 62 s in), the ledger consumer turned unhealthy 42 s in, the confirmer dead-lettered the poison, the money check could not settle (278 events lost without waiting), and after the rollback the lag was 0 and the money check passed. His evidence: `evidence/week2/2026-10-15T033251Z_...` (clean code and stack). He read the study notes and `faults.py`, and accepted the item.
 - **The faults** (`src/klaxon/faults.py`; `make faults`, `make fault-inject FAULT=...`, `make fault-clear FAULT=...`). Each records its cause in plain words (the answer a correct diagnosis must give, for grading Klaxon in week 5), its expected symptoms, what the money check should show in each phase, and its remedy. Clearing removes the cause (a rollback, or the outage ending), not the damage. They act only on this Mac's stack.
@@ -123,10 +123,9 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. **Push week 2, item 4 to GitHub?** `main` is ahead of `origin/main` by the item's commits (and the earlier note on the two panels); nothing is pushed until you say so.
-2. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
-3. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
-4. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
+1. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
+2. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
+3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Next: the rest of week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 

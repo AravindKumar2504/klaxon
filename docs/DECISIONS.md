@@ -170,4 +170,5 @@ Built on the branch `week-2-first-faults`, from `main`. Aravind reviews it befor
 
 - **His run is committed as evidence** (Claude, as for the earlier items): `evidence/week2/2026-10-15T033251Z_live-fault_poison-message_seed7.json`, at commit `fc4b80a` with clean code and stack, after `make reset` and `make up`. It said what the poison-message fault expects in every phase. He also ran `make faults`.
 - **Week 2, item 4 merged into `main`** (Aravind, 2026-10-14): after reading the study notes and `faults.py`, he accepted it, and `week-2-first-faults` was fast-forwarded into `main`, on his Mac only; nothing is pushed. The branch is kept, like the others.
+- **Pushed to GitHub** (Aravind, 2026-10-14): `main` with week 2, item 4 (`main` only; the branches stay on his Mac). A privacy scan of the 8 commits found nothing private. CLAUDE.md's rule still holds: Claude asks before every push.
 
