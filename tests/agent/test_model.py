@@ -3,7 +3,9 @@
 Every reply here is scripted or made up for the test; none came from a model.
 """
 
+import builtins
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -194,9 +196,11 @@ def test_a_response_is_saved_with_its_date_model_prompt_hash_text_and_usage(tmp_
 
 def test_a_refused_response_is_saved_too_with_why(tmp_path):
     recording = Recording(tmp_path / "calls.jsonl")
-    recording.response(SYSTEM, ASK, made_up_reply(model="claude-sonnet-5-5"), {}, refused="another model")
+    refused = m.ModelMismatch("asked for claude-opus-5-5, but the reply says claude-sonnet-5-5 wrote it")
+    recording.response(SYSTEM, ASK, made_up_reply(model="claude-sonnet-5-5"), {}, refused)
     response = m.read_records(tmp_path / "calls.jsonl")[-1]
-    assert response["accepted"] is False and response["refused"] == "another model"
+    assert response["accepted"] is False and response["error"] == "ModelMismatch"
+    assert response["refused"].startswith("asked for claude-opus-5-5")
 
 
 def test_the_prompt_can_be_rebuilt_exactly_from_the_recording(tmp_path):
@@ -218,10 +222,64 @@ def test_each_part_of_a_prompt_is_stored_once(tmp_path):
     records = m.read_records(path)
     parts = [r["content"] for r in records if r["kind"] == "prompt_part"]
     assert parts == [SYSTEM, "alert", "look at the lag", "lag is 193"]
-    assert [r["kind"] for r in records].count("header") == 1
+    assert [r["kind"] for r in records].count("header") == 2  # one each time the file was opened
     for response in [r for r in records if r["kind"] == "response"]:
         system, turns = m.rebuild_prompt(records, response)
         assert m.prompt_sha256(system, turns) == response["prompt_sha256"]
+
+
+@pytest.mark.parametrize("source", ["scripted", "replay"])
+def test_a_recording_keeps_live_replies_only(tmp_path, source):
+    reply = made_up_reply()
+    with pytest.raises(ValueError, match="live replies only"):
+        Recording(tmp_path / "calls.jsonl").response(SYSTEM, ASK, replace(reply, source=source), {})
+
+
+def test_a_write_that_fails_leaves_no_half_record_and_stores_no_part(tmp_path, monkeypatch):
+    path = tmp_path / "calls.jsonl"
+    recording = Recording(path)
+    before = path.read_bytes()
+
+    class FullDisk:
+        """A file that takes half of what is written, then fails, as a full disk does."""
+
+        def __init__(self, real):
+            self.real = real
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.real.close()
+
+        def seek(self, *args):
+            return self.real.seek(*args)
+
+        def write(self, data):
+            self.real.write(data[: len(data) // 2])
+            self.real.flush()
+            raise OSError("No space left on device")
+
+        def flush(self):
+            self.real.flush()
+
+        def truncate(self, size):
+            return self.real.truncate(size)
+
+    monkeypatch.setattr(m, "open", lambda file, mode, **kw: FullDisk(builtins.open(file, mode, **kw)), raising=False)
+    with pytest.raises(OSError, match="No space"):
+        recording.response(SYSTEM, ASK, made_up_reply(), {})
+    monkeypatch.undo()
+    assert path.read_bytes() == before  # cut back: the next record does not land on half a line
+    recording.response(SYSTEM, ASK, made_up_reply(), {})  # the disk has room again
+    records = m.read_records(path)
+    assert m.rebuild_prompt(records, records[-1]) == (SYSTEM, tuple(ASK))  # its parts were written this time
+
+
+def test_a_failed_call_can_rebuild_its_prompt_too(tmp_path):
+    Recording(tmp_path / "calls.jsonl").failure(SYSTEM, ASK, m.ModelTimeout("no reply"), 300.0, {}, [])
+    records = m.read_records(tmp_path / "calls.jsonl")
+    assert m.rebuild_prompt(records, records[-1]) == (SYSTEM, tuple(ASK))
 
 
 def test_a_failure_is_saved_with_why(tmp_path):
@@ -270,7 +328,8 @@ def recorded(tmp_path, *calls):
     path = tmp_path / "calls.jsonl"
     recording = Recording(path)
     for turns, text, refused in calls:
-        recording.response(SYSTEM, turns, made_up_reply(messages=turns, text=text), {}, refused=refused)
+        error = m.ModelMismatch(refused) if refused else None
+        recording.response(SYSTEM, turns, made_up_reply(messages=turns, text=text), {}, error)
     return path
 
 
@@ -300,11 +359,17 @@ def test_a_prompt_asked_twice_gets_its_recorded_replies_in_order_then_none(tmp_p
         replay.ask(SYSTEM, ASK)
 
 
-def test_a_replay_never_serves_a_reply_klaxon_refused_or_a_failure(tmp_path):
+def test_a_replay_gives_back_refusals_and_failures_as_the_errors_they_were_in_order(tmp_path):
     path = recorded(tmp_path, (ASK, "from another model", "asked for claude-opus-5-5"))
-    Recording(path).failure(SYSTEM, ASK, m.ModelTimeout("no reply"), 300.0, {}, [])
+    Recording(path).failure(SYSTEM, ASK, m.ModelTimeout("no reply within 300 s"), 300.0, {}, [])
+    Recording(path).response(SYSTEM, ASK, made_up_reply(), {})
     replay = ReplayModel(path)
-    assert replay.unused == 0
+    assert replay.unused == 3
+    with pytest.raises(m.ModelMismatch, match="replayed from calls.jsonl: asked for claude-opus-5-5"):
+        replay.ask(SYSTEM, ASK)
+    with pytest.raises(m.ModelTimeout, match="no reply within 300 s"):  # so a run that retried, retries again
+        replay.ask(SYSTEM, ASK)
+    assert replay.ask(SYSTEM, ASK).text == "ok"
     with pytest.raises(m.NotRecorded):
         replay.ask(SYSTEM, ASK)
 

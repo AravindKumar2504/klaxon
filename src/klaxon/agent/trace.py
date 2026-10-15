@@ -25,7 +25,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, fields
 from pathlib import Path
 
-from klaxon.agent.model import Message, Reply, Usage, prompt_sha256, read_records, text_sha256, utc_now
+from klaxon.agent.model import Message, Reply, Usage, finite, prompt_sha256, read_records, text_sha256, utc_now
 from klaxon.agent.tools import clean, clean_text
 
 FORMAT = 1
@@ -91,6 +91,7 @@ class Trace:
         self._model_seconds = 0.0
         self._tool_seconds = 0.0
         self._usage = {f.name: 0 for f in fields(Usage)}
+        self._source = ""
 
     def _write(self, kind: str, body: dict) -> dict:
         now = self._clock()
@@ -119,7 +120,6 @@ class Trace:
             raise TraceError("a trace starts once, before its first step")
         if source not in SOURCES:
             raise TraceError(f"unknown reply source {source!r}: one of {', '.join(SOURCES)}")
-        self._state = "running"
         body = {
             "label": f"Trace of a Klaxon run. Model replies: {SOURCES[source]}.",
             "goal": text_field(goal),
@@ -131,7 +131,9 @@ class Trace:
         }
         if extra:
             body["extra"] = clean(extra)
-        return self._write("start", body)
+        record = self._write("start", body)
+        self._state, self._source = "running", source
+        return record
 
     def step(
         self,
@@ -150,7 +152,9 @@ class Trace:
     ) -> dict:
         """One step. messages: the conversation the model saw. reply, or error when it gave none. proposed: what
         the loop read from the reply. allowed and why: the loop's decision. ran: the tool and its arguments
-        that ran (only if allowed). came_back: the tool's result, as the model will see it."""
+        that ran (only if allowed, and only what was proposed). came_back: the tool's result, as the model will
+        see it. The record is checked and built in full before anything is counted, so a refused step leaves
+        neither a line nor a count behind."""
         if self._state != "running":
             raise TraceError("steps go between start and stop")
         if ran is not None and allowed is not True:
@@ -159,8 +163,15 @@ class Trace:
             raise TraceError("an allow or refuse decision about nothing proposed")
         if came_back is not None and ran is None:
             raise TraceError("a result came back from a tool that did not run")
-        self.steps += 1
-        body: dict = {"step": self.steps, "saw": self._saw(system, messages)}
+        if isinstance(ran, Mapping) and isinstance(proposed, Mapping) and "tool" in ran and "tool" in proposed:
+            if ran["tool"] != proposed["tool"]:
+                raise TraceError("the tool that ran is not the one proposed and allowed")
+        if tool_seconds is not None and finite(tool_seconds) is None:
+            raise TraceError("a tool's time is a finite number of seconds")
+        if reply is not None and finite(reply.seconds) is None:
+            raise TraceError("a reply's time is a finite number of seconds")
+        hashes = [text_sha256(m.content) for m in messages]
+        body: dict = {"step": self.steps + 1, "saw": self._saw(system, messages, hashes)}
         if reply is not None:
             body["reply"] = {
                 "source": reply.source,
@@ -168,12 +179,9 @@ class Trace:
                 "received_at": clean_text(reply.received_at, 40),
                 "seconds": reply.seconds,
                 "usage": asdict(reply.usage),
-                "cost_usd": reply.cost_usd,
+                "cost_usd": finite(reply.cost_usd),
                 **text_field(reply.text),
             }
-            self._model_seconds += reply.seconds
-            for name, count in asdict(reply.usage).items():
-                self._usage[name] += count or 0
         if error is not None:
             body["error"] = clean_text(error, MAX_SHORT)
         body["proposed"] = clean(proposed)
@@ -182,18 +190,27 @@ class Trace:
             body["why"] = clean_text(why, MAX_SHORT)
         if ran is not None:
             body["ran"] = clean(dict(ran))
-            self.tool_calls += 1
         if came_back is not None:
             body["came_back"] = {"is_error": bool(came_back_error), **text_field(came_back)}
         if tool_seconds is not None:
             body["tool_seconds"] = round(tool_seconds, 3)
-            self._tool_seconds += tool_seconds
         body["step_seconds"] = round(self._clock() - self._last, 3)
-        return self._write("step", body)
+        record = self._write("step", body)
+        # Counted only now that the step is on disk.
+        self.steps += 1
+        self._seen = hashes
+        if reply is not None:
+            self._model_seconds += reply.seconds
+            for name, count in asdict(reply.usage).items():
+                self._usage[name] += count or 0
+        if ran is not None:
+            self.tool_calls += 1
+        if tool_seconds is not None:
+            self._tool_seconds += tool_seconds
+        return record
 
-    def _saw(self, system: str, messages: Sequence[Message]) -> dict:
+    def _saw(self, system: str, messages: Sequence[Message], hashes: list[str]) -> dict:
         """What the model saw, as hashes and sizes: the turns since the last step, and if earlier ones changed."""
-        hashes = [text_sha256(m.content) for m in messages]
         same = 0
         while same < min(len(hashes), len(self._seen)) and hashes[same] == self._seen[same]:
             same += 1
@@ -209,7 +226,6 @@ class Trace:
         }
         if same < len(self._seen):
             saw["earlier_turns_changed"] = True  # the loop rewrote what the model had seen before
-        self._seen = hashes
         return saw
 
     def stop(self, reason: str, detail: str = "", diagnosis: object = None) -> dict:
@@ -218,7 +234,6 @@ class Trace:
             raise TraceError("a run stops once, after it starts")
         if reason not in STOP_REASONS:
             raise TraceError(f"unknown stop reason {reason!r}: one of {', '.join(STOP_REASONS)}")
-        self._state = "stopped"
         body = {"reason": reason, "meaning": STOP_REASONS[reason], "detail": clean_text(detail, MAX_SHORT)}
         if diagnosis is not None:
             body["diagnosis"] = clean(diagnosis)
@@ -230,21 +245,30 @@ class Trace:
             "tool_seconds": round(self._tool_seconds, 3),
             "usage": dict(self._usage),
         }
+        if self._source == "replay":
+            body["totals"]["note"] = "model time and usage as recorded in the live run, not spent in this one"
         record = self._write("stop", body)
+        self._state = "stopped"
         self._file.close()
         return record
 
     def close(self, error: BaseException | None = None) -> None:
-        """End the trace. A run still going is stopped here, with the reason it ended: interrupted or crashed."""
-        if self._state == "running":
-            if isinstance(error, KeyboardInterrupt):
-                self.stop("interrupted", "stopped from the keyboard")
-            elif error is not None:
-                self.stop("crashed", f"{type(error).__name__}: {error}")
-            else:
-                self.stop("crashed", "the run ended without a stop reason")
-        if not self._file.closed:
-            self._file.close()
+        """End the trace. A run still going is stopped here, with the reason it ended: interrupted or crashed.
+        When it ends on an error, a failure to write that last record never hides the error itself."""
+        try:
+            if self._state == "running":
+                if isinstance(error, KeyboardInterrupt):
+                    self.stop("interrupted", "stopped from the keyboard")
+                elif error is not None:
+                    self.stop("crashed", f"{type(error).__name__}: {error}")
+                else:
+                    self.stop("crashed", "the run ended without a stop reason")
+        except Exception:
+            if error is None:
+                raise
+        finally:
+            if not self._file.closed:
+                self._file.close()
 
     def __enter__(self) -> Trace:
         return self

@@ -399,3 +399,75 @@ def test_a_tool_result_or_reply_must_be_text(tmp_path, value):
             ran={"tool": "query_metrics", "arguments": {}},
             came_back=value,
         )
+
+
+def test_a_refused_step_leaves_neither_a_line_nor_a_count(tmp_path):
+    trace = started(tmp_path)
+    with pytest.raises(t.TraceError):
+        trace.step(
+            system=SYSTEM,
+            messages=[Message("user", ALERT)],
+            reply=made_up_reply("x", [Message("user", ALERT)]),
+            proposed={"tool": "query_metrics"},
+            allowed=True,
+            ran={"tool": "query_metrics", "arguments": {}},
+            came_back={"not": "text"},
+        )
+    totals = trace.stop("crashed", "a bug in the loop")["totals"]
+    assert totals["steps"] == 0 and totals["tool_calls"] == 0 and totals["usage"]["input_tokens"] == 0
+    assert [r["kind"] for r in lines(tmp_path)] == ["start", "stop"]
+
+
+def test_the_tool_that_ran_must_be_the_one_proposed_and_allowed(tmp_path):
+    trace = started(tmp_path)
+    with pytest.raises(t.TraceError, match="not the one proposed"):
+        trace.step(
+            system=SYSTEM,
+            messages=[Message("user", ALERT)],
+            proposed={"tool": "query_metrics", "arguments": {}},
+            allowed=True,
+            ran={"tool": "money_check", "arguments": {}},
+        )
+
+
+@pytest.mark.parametrize("seconds", [float("nan"), float("inf"), -1.0])
+def test_times_are_finite_numbers_or_the_step_is_refused(tmp_path, seconds):
+    trace = started(tmp_path)
+    turns = [Message("user", ALERT)]
+    with pytest.raises(t.TraceError, match="finite number of seconds"):
+        trace.step(
+            system=SYSTEM, messages=turns, proposed={"tool": "x"}, allowed=True, ran={"tool": "x"}, tool_seconds=seconds
+        )
+    slow = m.Reply(
+        "x",
+        "claude-opus-5-5",
+        USAGE,
+        seconds,
+        "claude-code",
+        m.prompt_sha256(SYSTEM, turns),
+        "2026-10-15T17:00:00.000Z",
+    )
+    with pytest.raises(t.TraceError, match="finite number of seconds"):
+        trace.step(system=SYSTEM, messages=turns, reply=slow)
+    assert trace.stop("crashed")["totals"]["steps"] == 0  # and the trace still closes cleanly
+
+
+def test_a_cost_that_is_not_a_number_is_kept_as_none(tmp_path):
+    trace = started(tmp_path)
+    turns = [Message("user", ALERT)]
+    odd = m.Reply(
+        "x", "claude-opus-5-5", USAGE, 1.0, "replay", m.prompt_sha256(SYSTEM, turns), "2026-10-15", float("nan")
+    )
+    assert trace.step(system=SYSTEM, messages=turns, reply=odd)["reply"]["cost_usd"] is None
+
+
+def test_a_last_record_that_cannot_be_written_never_hides_the_runs_own_error(tmp_path):
+    with pytest.raises(RuntimeError, match="the real problem"):
+        with started(tmp_path) as trace:
+            trace._file.close()  # the disk went away, say
+            raise RuntimeError("the real problem")
+
+
+def test_a_replayed_run_says_its_totals_were_spent_in_the_live_run(tmp_path):
+    trace = started(tmp_path, source="replay")
+    assert "as recorded in the live run" in trace.stop("diagnosed")["totals"]["note"]

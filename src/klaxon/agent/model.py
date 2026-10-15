@@ -31,7 +31,8 @@ ROLES = ("user", "assistant")
 FORMAT = 1  # of a recording's records
 LABEL = (
     "Recorded responses: each one received from Claude through Claude Code in headless mode (claude -p) on"
-    " Aravind's seat, and saved as received, before Klaxon used it. Not a simulation, and not edited."
+    " Aravind's seat, and saved before Klaxon used it. Not a simulation. The text is exactly as received; in the"
+    " raw output, this Mac's home folder is written as ~."
 )
 
 
@@ -234,41 +235,51 @@ def read_records(path: Path | str) -> list[dict]:
     return records
 
 
+LIVE = ("claude-code",)  # the sources whose replies come from a model, live; a recording keeps only these
+
+
 class Recording:
     """Every live call, as it happened: one JSON line each, appended to a file that is never rewritten.
 
     The records, in the order written:
-        header        once, when the file is made: the label, and where and from what code the calls came
+        header        each time the file is opened for writing: the label, and where and from what code the
+                      calls came
         prompt_part   a system prompt or a turn, stored once under its SHA-256, the first time a call uses it
         response      a reply as received: its date, the model id it reports, the prompt's hash and parts,
-                      the text, the usage, and the adapter's raw output; with accepted false, and why, when
-                      Klaxon refused it (another model answered, for example)
-        failure       a call that gave no usable reply: why, and how long it took
+                      the text, the usage, and the adapter's raw output; with accepted false, the error and
+                      why, when Klaxon refused it (another model answered, for example)
+        failure       a call that gave no usable reply: the error, why, and how long it took
     """
 
     def __init__(self, path: Path | str, header: dict | None = None) -> None:
         self.path = Path(path)
         existing = read_records(self.path) if self.path.exists() else []
         self._stored = {r.get("sha256") for r in existing if r.get("kind") == "prompt_part"}
-        if not existing:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            header_record = {"kind": "header", "format": FORMAT, "label": LABEL, "created_at": utc_now()}
-            self._write([header_record | (header or {})])
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        opened = {"kind": "header", "format": FORMAT, "label": LABEL, "opened_at": utc_now()}
+        self._write([opened | (header or {})])
 
     def _write(self, records: list[dict]) -> None:
+        """Append records, all or none: a write that fails is cut back off, so no half line is left behind."""
         # ASCII only: every other character is escaped, so no line separator inside a text can split a record.
-        lines = "".join(
+        data = "".join(
             json.dumps(r, ensure_ascii=True, separators=(",", ":"), allow_nan=False) + "\n" for r in records
-        )
-        with open(self.path, "a", encoding="utf-8") as out:
-            out.write(lines)
+        ).encode("ascii")
+        with open(self.path, "ab") as out:
+            start = out.seek(0, 2)
+            try:
+                out.write(data)
+                out.flush()
+            except BaseException:
+                out.truncate(start)
+                raise
+        self._stored.update(r["sha256"] for r in records if r["kind"] == "prompt_part")  # only once on disk
 
     def _part(self, content: str, new_parts: list[dict]) -> str:
-        """A text's hash; the text itself is added to new_parts if this file does not hold it yet."""
+        """A text's hash; the text itself goes into new_parts if this file does not hold it yet."""
         digest = text_sha256(content)
-        if digest not in self._stored:
+        if digest not in self._stored and all(part["sha256"] != digest for part in new_parts):
             new_parts.append({"kind": "prompt_part", "sha256": digest, "characters": len(content), "content": content})
-            self._stored.add(digest)
         return digest
 
     def _prompt(self, system: str, messages: Sequence[Message], new_parts: list[dict]) -> dict:
@@ -281,9 +292,16 @@ class Recording:
         }
 
     def response(
-        self, system: str, messages: Sequence[Message], reply: Reply, details: dict, refused: str | None = None
+        self,
+        system: str,
+        messages: Sequence[Message],
+        reply: Reply,
+        details: dict,
+        refused: ModelError | None = None,
     ) -> dict:
-        """Record a reply as received. refused: why Klaxon will not use it, if it will not."""
+        """Record a reply as received. refused: the error Klaxon raised instead of using it, if it did."""
+        if reply.source not in LIVE:
+            raise ValueError(f"a recording keeps live replies only, not {reply.source!r} ones")
         new_parts: list[dict] = []
         record = {
             "kind": "response",
@@ -298,7 +316,7 @@ class Recording:
             "cost_usd": reply.cost_usd,
             "seconds": reply.seconds,
             "accepted": refused is None,
-            **({"refused": refused} if refused else {}),
+            **({"error": type(refused).__name__, "refused": str(refused)} if refused is not None else {}),
             "details": details,
             "raw": reply.raw,
         }
@@ -325,9 +343,9 @@ class Recording:
         return record
 
 
-def rebuild_prompt(records: list[dict], response: dict) -> tuple[str, tuple[Message, ...]]:
-    """The exact prompt a recorded response answered, from the recording's stored parts. Refuses a recording
-    whose parts or prompt do not match their hashes: it was damaged or edited."""
+def rebuild_prompt(records: list[dict], record: dict) -> tuple[str, tuple[Message, ...]]:
+    """The exact prompt a recorded response or failure answered, from the recording's stored parts. Refuses a
+    recording whose parts or prompt do not match their hashes: it was damaged or edited."""
     parts = {r.get("sha256"): r.get("content") for r in records if r.get("kind") == "prompt_part"}
 
     def text(digest: object) -> str:
@@ -336,17 +354,23 @@ def rebuild_prompt(records: list[dict], response: dict) -> tuple[str, tuple[Mess
             raise ValueError(f"the recording's prompt part {str(digest)[:12]} is missing or does not match its hash")
         return content
 
-    prompt = response["prompt"]
+    prompt = record["prompt"]
     system = text(prompt["system"])
     messages = tuple(Message(role, text(digest)) for role, digest in prompt["turns"])
-    if prompt_sha256(system, messages) != response["prompt_sha256"] or prompt["sha256"] != response["prompt_sha256"]:
+    claimed = {prompt["sha256"], record.get("prompt_sha256", prompt["sha256"])}
+    if claimed != {prompt_sha256(system, messages)}:
         raise ValueError("a recorded prompt does not match its hash")
     return system, messages
 
 
+ERRORS = {kind.__name__: kind for kind in (ModelError, ModelTimeout, ModelUnsafe, ModelMismatch)}
+
+
 class ReplayModel:
-    """Regression tests: replies recorded from live calls, each served only for the exact prompt it answered,
-    in the order they were recorded. Nothing is called. A changed prompt gets no reply: record a new run."""
+    """Regression tests: what live calls gave, served again for the exact prompt each one answered, in the order
+    recorded. A recorded reply comes back as a reply; a recorded failure or refusal comes back as the error it
+    was, so a run that retried after a timeout retries again. Nothing is called. A changed prompt gets nothing:
+    record a new run. The match is on the prompt itself, not on how the live adapter framed it."""
 
     source = "replay"
 
@@ -355,14 +379,16 @@ class ReplayModel:
         records = read_records(self.path)
         self._waiting: dict[str, deque[dict]] = {}
         for record in records:
-            if record.get("kind") == "response" and record.get("accepted") is True:
-                rebuild_prompt(records, record)  # a damaged or edited recording is refused here, not served
+            if record.get("kind") not in ("response", "failure"):
+                continue
+            rebuild_prompt(records, record)  # a damaged or edited recording is refused here, not served
+            if record["kind"] == "response" and record.get("accepted") is True:
                 kinds = (record.get("text"), record.get("model"), record.get("received_at"))
                 if not all(isinstance(value, str) for value in kinds) or finite(record.get("seconds")) is None:
                     raise ValueError(
                         "a recorded response lacks its text, model, date or time: it was damaged or edited"
                     )
-                self._waiting.setdefault(record["prompt_sha256"], deque()).append(record)
+            self._waiting.setdefault(record["prompt"]["sha256"], deque()).append(record)
         self.served = 0
 
     @property
@@ -375,11 +401,14 @@ class ReplayModel:
         waiting = self._waiting.get(digest)
         if not waiting:
             raise NotRecorded(
-                f"{self.path.name} has no recorded reply left for this prompt (sha256 {digest[:12]}): the prompt"
+                f"{self.path.name} has nothing recorded left for this prompt (sha256 {digest[:12]}): the prompt"
                 " changed since the recording, or this run went further than the recorded one"
             )
         record = waiting.popleft()
         self.served += 1
+        if record["kind"] == "failure" or record.get("accepted") is not True:
+            error = ERRORS.get(str(record.get("error")), ModelError)
+            raise error(f"replayed from {self.path.name}: {record.get('reason') or record.get('refused')}")
         return Reply(
             text=record["text"],
             model=record["model"],
