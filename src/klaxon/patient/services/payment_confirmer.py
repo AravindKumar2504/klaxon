@@ -149,12 +149,20 @@ class OutdatedDatabase(Exception):
 
 
 def require_grants(pool: ConnectionPool) -> None:
-    """Refuse to start without them: otherwise every refund event would fail, and be retried forever."""
-    with pool.connection() as conn:
-        (ok,) = conn.execute(
-            "SELECT has_column_privilege('payments.refunds', 'provider_refund_id', 'UPDATE')"
-            "   AND has_column_privilege('payments.refunds', 'payment_id', 'SELECT')"
-        ).fetchone()
+    """Refuse to start without them: otherwise every refund event would fail, and be retried forever.
+
+    A database that is down is not refused: the consumer loop waits for it, as for any outage, and must not skip
+    a message meanwhile. So the check is skipped then, with a warning.
+    """
+    try:
+        with pool.connection() as conn:
+            (ok,) = conn.execute(
+                "SELECT has_column_privilege('payments.refunds', 'provider_refund_id', 'UPDATE')"
+                "   AND has_column_privilege('payments.refunds', 'payment_id', 'SELECT')"
+            ).fetchone()
+    except psycopg.OperationalError as exc:  # unreachable, or no connection within the pool's timeout
+        log(logger, logging.WARNING, "could not check the database's grants: it is not reachable", error=str(exc))
+        return
     if not ok:
         raise OutdatedDatabase(
             "this database predates the payment confirmer's refund grants: run make reset (synthetic data only),"

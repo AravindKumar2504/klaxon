@@ -1,6 +1,7 @@
 """The payment confirmer's decisions, offline. Its SQL runs against real PostgreSQL in tests/integration."""
 
 import pytest
+from psycopg_pool import PoolTimeout
 
 from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED
 from klaxon.patient.services.events import ProviderEvent
@@ -8,6 +9,7 @@ from klaxon.patient.services.payment_confirmer import (
     OurPayment,
     OurRefund,
     PgConfirmer,
+    require_grants,
     why_refund_unchanged,
     why_unchanged,
 )
@@ -118,6 +120,19 @@ def test_a_refund_event_without_the_providers_refund_id_is_reported_without_a_qu
     [line] = [r for r in caplog.records if r.name == "klaxon.payment_confirmer"]
     assert line.getMessage() == "refund not confirmed: the provider's refund event names no plain refund id of its own"
     assert line.fields["refund_id"] == "rfd_000001"
+
+
+def test_the_startup_check_lets_the_confirmer_start_while_the_database_is_down(caplog):
+    """It must wait for the database like the loop does, not crash-loop: an outage at startup is still an outage."""
+
+    class DownPool:
+        def connection(self):
+            raise PoolTimeout("couldn't get a connection after 5.00 sec")
+
+    with caplog.at_level("WARNING"):
+        require_grants(DownPool())  # no OutdatedDatabase, no crash
+    [line] = [r for r in caplog.records if r.name == "klaxon.payment_confirmer"]
+    assert line.getMessage() == "could not check the database's grants: it is not reachable"
 
 
 def test_the_naive_confirmer_without_the_providers_refund_id_does_not_query_either():

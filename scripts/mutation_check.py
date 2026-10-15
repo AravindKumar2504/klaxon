@@ -438,6 +438,9 @@ MUTANTS = [
     ("consumer spans leave out a refund's ids", S + "consumer.py",
      '            if event.klaxon_refund_id is not None:\n                attributes["klaxon.refund_id"] = event.klaxon_refund_id\n',
      "", False),
+    # After make e2e caught the startup check crash-looping the confirmer while PostgreSQL was down:
+    ("the startup check crashes the confirmer while the database is down", S + "payment_confirmer.py",
+     "    except psycopg.OperationalError as exc:", "    except ZeroDivisionError as exc:", False),
     # Need the stack's PostgreSQL and Kafka:
     ("ledger posts a repeated event anyway", S + "pg_ledger.py", "                if inserted == 0:", "                if False:", True),
     ("dedupe row committed in its own transaction", S + "pg_ledger.py",
