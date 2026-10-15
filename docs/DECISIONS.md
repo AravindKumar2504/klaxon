@@ -166,3 +166,8 @@ Built on the branch `week-2-first-faults`, from `main`. Aravind reviews it befor
   7. *Honesty:* the head-of-line claim was written as measured without evidence, and some symptoms printed as facts before any run. The claim is now asserted end to end and shown in evidence; `make faults` prints symptoms as "expected".
   8. *Two end-to-end tests did not clear their fault when an assertion failed.* Now they do, in a `finally`.
 
+## 2026-10-14 (Aravind's review of week 2, item 4)
+
+- **His run is committed as evidence** (Claude, as for the earlier items): `evidence/week2/2026-10-15T033251Z_live-fault_poison-message_seed7.json`, at commit `fc4b80a` with clean code and stack, after `make reset` and `make up`. It said what the poison-message fault expects in every phase. He also ran `make faults`.
+- **Week 2, item 4 merged into `main`** (Aravind, 2026-10-14): after reading the study notes and `faults.py`, he accepted it, and `week-2-first-faults` was fast-forwarded into `main`, on his Mac only; nothing is pushed. The branch is kept, like the others.
+
