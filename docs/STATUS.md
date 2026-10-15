@@ -99,17 +99,16 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. Optional: the retries and dead-letter panels could show 0 instead of "No data" (a one-line change each; default: leave it).
-2. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
-3. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
-4. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
+1. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
+2. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
+3. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
 
 ## Next: the rest of week 2 (PLAN: Oct 20-26), monitoring, traffic and the first 3 faults
 
 1. ~~Payment confirmation~~ Done and merged (above).
 2. ~~OpenTelemetry~~ Done and merged (above).
 3. ~~A traffic generator~~ Done, with the money check's cutoff, and merged (above). For item 4: a fault scenario that sets the provider's behavior while the generator runs replaces the generator's noise (PUT replaces the whole behavior); the generator then leaves the scenario's setting alone when it stops.
-4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumers dead-letter poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker. The lost-answer scenario (`klaxon.demo.lost_answer`) already runs on any clean stack, so with `CONFIRMER=by_provider_id` it is a ready-made "payments stuck pending" fault.
+4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumers dead-letter poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker. The lost-answer scenario (`klaxon.demo.lost_answer`) already runs on any clean stack, so with `CONFIRMER=by_provider_id` it is a ready-made "payments stuck pending" fault. With the poison-message fault: the consumers will report their retry and dead-letter counters as 0 at startup, so those two dashboard panels show a real 0 instead of "No data", and still go blank if metrics break (Aravind, 2026-10-14).
 5. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 2 concepts: OpenTelemetry traces, metrics and logs; what Grafana shows).
 6. Later (Aravind, 2026-10-12): confirm refunds the same way (known gap 1); suggested after the first 3 faults.
 
