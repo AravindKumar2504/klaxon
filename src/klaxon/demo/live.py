@@ -205,6 +205,16 @@ def our_payments() -> list[dict]:
     ]
 
 
+def our_refunds() -> list[dict]:
+    """Our refunds table, as the read-only role sees it."""
+    return [
+        {"id": refund, "payment_id": payment, "status": status, "amount_cents": amount, "provider_refund_id": provider}
+        for refund, payment, status, amount, provider in _readonly_rows(
+            "SELECT id, payment_id, status, amount_cents, provider_refund_id FROM refunds ORDER BY id"
+        )
+    ]
+
+
 def verdict(run: LiveRun) -> str:
     report, dashboard = run.report, run.dashboard
     balanced = "ledger balanced" if report.invariant("ledger_balanced").passed else "ledger NOT balanced"

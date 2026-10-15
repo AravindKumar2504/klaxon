@@ -1,11 +1,11 @@
-"""The money check, run against the live Docker Compose stack: all four invariants.
+"""The money check, run against the live Docker Compose stack: all five invariants.
 
 The check compares two views of the same money:
 - the provider's records, read through the provider's own API (GET /v1/events,
-  GET /v1/payments and GET /v1/balance), the way a payments team pulls its
-  provider's reports;
-- our ledger and our payments table, read from PostgreSQL as klaxon_readonly,
-  a role that can read everything and write nothing.
+  GET /v1/payments, GET /v1/refunds and GET /v1/balance), the way a payments
+  team pulls its provider's reports;
+- our ledger and our payments and refunds tables, read from PostgreSQL as
+  klaxon_readonly, a role that can read everything and write nothing.
 
 Traffic keeps flowing while it runs (week 2), so it works to a cutoff, the
 way payment teams reconcile: a closing time, after which records count for
@@ -18,10 +18,10 @@ the next run, like a bank statement's closing date.
    the event), then note where the topic ends, then wait until both consumer
    groups have handled every message before that point: the ledger by booking
    it, skipping it as a duplicate or dead-lettering it; the payment confirmer
-   by confirming the payment, finding nothing to do, logging a conflict or
-   dead-lettering it. Newer traffic does not count, so it cannot keep the
-   check waiting. When a consumer is stalled on purpose, `--no-wait` runs the
-   check anyway; events still in flight then look lost.
+   by confirming the payment or refund, finding nothing to do, logging a
+   conflict or dead-lettering it. Newer traffic does not count, so it cannot
+   keep the check waiting. When a consumer is stalled on purpose, `--no-wait`
+   runs the check anyway; events still in flight then look lost.
 3. Read our books, in one REPEATABLE READ snapshot, then the provider's
    records, then its clock again. In that order, everything we booked from
    the provider is already in its records when they are read, so "the
@@ -54,7 +54,7 @@ import httpx
 import psycopg
 from confluent_kafka import KafkaException
 
-from klaxon.checks.money import MoneyReport, ProviderPayment, check_money
+from klaxon.checks.money import MONEY_EFFECT, MoneyReport, ProviderPayment, ProviderRefund, check_money
 from klaxon.patient.provider import Event
 from klaxon.patient.services.events import ID
 from klaxon.patient.services.kafka_io import CONSUMER_GROUPS, EVENTS_TOPIC, end_offsets, not_yet_handled
@@ -85,6 +85,33 @@ def _stamp(item: dict, required: bool) -> int | None:
     return created
 
 
+def _required_id(item: dict, key: str) -> str:
+    """A provider record's id. As with its stamps, anything but a short plain id is refused: the evidence the check
+    writes goes to an AI agent, and text can carry instructions. The text itself is never echoed."""
+    value = item.get(key)
+    if not isinstance(value, str) or ID.fullmatch(value) is None:
+        raise ValueError(f"the provider sent a record whose {key} is not a plain id")
+    return value
+
+
+def _cents(item: dict) -> int:
+    value = item.get("amount_cents")
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError("the provider sent an amount that is not whole cents")
+    return value
+
+
+def _event(item: dict) -> Event:
+    """A provider event. Only money events are judged, and reach the evidence, so only theirs are held to plain ids
+    and whole cents: an unreadable event of another type (the poison-message fault's) must not stop the check."""
+    data = item["data"]
+    if item["type"] not in MONEY_EFFECT:
+        return Event(item["id"], item["type"], data.get("payment_id"), data.get("amount_cents"), _stamp(item, True))
+    return Event(
+        _required_id(item, "id"), item["type"], _required_id(data, "payment_id"), _cents(data), _stamp(item, True)
+    )
+
+
 def provider_http(base_url: str) -> httpx.Client:
     return httpx.Client(base_url=base_url, timeout=10.0, trust_env=False)  # no proxies: this Mac only
 
@@ -92,7 +119,7 @@ def provider_http(base_url: str) -> httpx.Client:
 class ProviderAPI:
     """The provider's records, fetched once: a snapshot. Fits the money check's ProviderRecords.
 
-    as_of: the balance as of that second (the check's cutoff). Every event and payment is read either way.
+    as_of: the balance as of that second (the check's cutoff). Every event, payment and refund is read either way.
     """
 
     def __init__(
@@ -104,15 +131,20 @@ class ProviderAPI:
     ) -> None:
         self.http = http or provider_http(base_url)
         self.as_of = as_of
-        self.events = [
-            Event(
-                item["id"], item["type"], item["data"]["payment_id"], item["data"]["amount_cents"], _stamp(item, True)
-            )
-            for item in self._pages("/v1/events", page_size)
-        ]
+        self.events = [_event(item) for item in self._pages("/v1/events", page_size)]
         self.payments = [
-            ProviderPayment(item["id"], item["amount_cents"], our_payment_id(item), _stamp(item, False))
+            ProviderPayment(_required_id(item, "id"), _cents(item), our_payment_id(item), _stamp(item, False))
             for item in self._pages("/v1/payments", page_size)
+        ]
+        self.refunds = [
+            ProviderRefund(
+                _required_id(item, "id"),
+                _required_id(item, "payment_id"),
+                _cents(item),
+                our_refund_id(item),
+                _stamp(item, False),
+            )
+            for item in self._pages("/v1/refunds", page_size)
         ]
         self._balance = self._fetch_balance()
 
@@ -140,6 +172,10 @@ class ProviderAPI:
         return response.json()["available_cents"]
 
 
+def plain_id(value: object) -> str | None:
+    return value if isinstance(value, str) and ID.fullmatch(value) else None
+
+
 def our_payment_id(payment: dict) -> str | None:
     """Our payment id, from a provider payment's metadata.
 
@@ -147,8 +183,13 @@ def our_payment_id(payment: dict) -> str | None:
     anything but a short plain id counts as no id of ours (the check then reports the charge as not ours).
     """
     metadata = payment.get("metadata")
-    ours = metadata.get("klaxon_payment_id") if isinstance(metadata, dict) else None
-    return ours if isinstance(ours, str) and ID.fullmatch(ours) else None
+    return plain_id(metadata.get("klaxon_payment_id") if isinstance(metadata, dict) else None)
+
+
+def our_refund_id(refund: dict) -> str | None:
+    """Our refund id, from a provider refund's metadata, under the same rule."""
+    metadata = refund.get("metadata")
+    return plain_id(metadata.get("klaxon_refund_id") if isinstance(metadata, dict) else None)
 
 
 @dataclass
@@ -195,6 +236,7 @@ def require_stamps_before(provider: ProviderAPI, cutoff: int, now: int) -> None:
         raise ClockProblem(f"the provider's clock went back during the check (cutoff {cutoff}, clock {now})")
     late = [e.id for e in provider.events if e.created > now]
     late += [p.id for p in provider.payments if p.created is not None and p.created > now]
+    late += [r.id for r in provider.refunds if r.created is not None and r.created > now]
     if late:
         example = late[0] if ID.fullmatch(str(late[0])) else "(an id that is not a plain id)"
         raise ClockProblem(
@@ -270,7 +312,7 @@ def read_ledger_and_check(
     read_provider: Callable[[int | None], ProviderAPI] = lambda as_of: ProviderAPI(as_of=as_of),
     clock: Callable[[], float] = provider_clock,
 ) -> tuple[ProviderAPI, MoneyReport]:
-    """Our books first, in one snapshot; then the provider's records; then all four invariants, to the cutoff."""
+    """Our books first, in one snapshot; then the provider's records; then all five invariants, to the cutoff."""
     with psycopg.connect(readonly_dsn, connect_timeout=5) as conn:
         conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ  # one snapshot for every query
         conn.read_only = True
@@ -279,7 +321,9 @@ def read_ledger_and_check(
         provider = read_provider(cutoff)
         if cutoff is not None:
             require_stamps_before(provider, cutoff, int(clock()))
-        return provider, check_money(provider, conn, provider.payments, cutoff=cutoff)
+        return provider, check_money(
+            provider, conn, provider.payments, cutoff=cutoff, provider_refunds=provider.refunds
+        )
 
 
 @dataclass
@@ -330,10 +374,10 @@ def render(result: LiveCheck) -> str:
         f"Cutoff {utc(result.cutoff)} (the provider's clock): checked up to the end of that second",
     ]
     left = result.report.left_for_next_check
-    if left.get("provider_events") or left.get("provider_charges"):
+    if left.get("provider_events") or left.get("provider_charges") or left.get("provider_refunds"):
         out.append(
             f"  Left for the next check, newer than the cutoff: {left.get('provider_events', 0)} provider event(s),"
-            f" {left.get('provider_charges', 0)} charge(s)"
+            f" {left.get('provider_charges', 0)} charge(s), {left.get('provider_refunds', 0)} refund(s)"
         )
     if result.settling is not None:
         out.append(

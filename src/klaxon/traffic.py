@@ -10,14 +10,15 @@ One seeded plan: the same seed and rate give the same customers, amounts, gaps a
 - About 1 in 10 is refunded a few seconds later, in full or in half.
 - Retries like a careful client: after a 503 (outcome unknown), a 409 (still running), a 5xx or no
   answer at all, the same request with the same key, after 0.5, 1 and 2 s. Then it gives up, and
-  asks for the payment's status 5 s and 60 s later, the way a shop checks an order it is unsure of.
+  asks for the payment's status (or the refund's) 5 s and 60 s later, the way a shop checks an order
+  it is unsure of.
 
 It also turns on two kinds of noise at the fake provider (seeded): acknowledgements lost on purpose,
-so some webhooks arrive twice (lose_ack_rate), and charges whose answer is lost (lost_answer_rate,
-the provider's fail_after_charge_rate). A healthy stack absorbs both: the ledger ignores the repeats,
-and the payment confirmer settles the payments whose answer was lost. It changes only those settings
-and keeps the rest (a fault's outage, say); when it stops, it puts them back as it found them, unless
-something else changed them meanwhile.
+so some webhooks arrive twice (lose_ack_rate), and charges and refunds whose answer is lost
+(lost_answer_rate, the provider's fail_after_charge_rate and fail_after_refund_rate). A healthy stack
+absorbs both: the ledger ignores the repeats, and the payment confirmer settles the payments and
+refunds whose answer was lost. It changes only those settings and keeps the rest (a fault's outage,
+say); when it stops, it puts them back as it found them, unless something else changed them meanwhile.
 
 Open loop: customers keep arriving when the stack slows down, as real ones do. At most
 --max-in-flight requests run at once; an arrival past that is counted as shed and not sent.
@@ -95,7 +96,12 @@ class Settings:
     @property
     def noise(self) -> dict:
         """The fake provider's behavior while the traffic runs."""
-        return {"lose_ack_rate": self.lose_ack_rate, "fail_after_charge_rate": self.lost_answer_rate, "seed": self.seed}
+        return {
+            "lose_ack_rate": self.lose_ack_rate,
+            "fail_after_charge_rate": self.lost_answer_rate,
+            "fail_after_refund_rate": self.lost_answer_rate,
+            "seed": self.seed,
+        }
 
 
 @dataclass(frozen=True)
@@ -167,14 +173,18 @@ def payment_outcome(response: httpx.Response | None) -> tuple[str, dict | None]:
     return "error", None
 
 
-def refund_outcome(response: httpx.Response | None) -> str:
-    if response is None or response.status_code >= 500 or retryable(response):
-        return "unknown"
+def refund_outcome(response: httpx.Response | None) -> tuple[str, dict | None]:
+    """As for a payment: succeeded, refused, unknown or error, and the refund when the answer names one."""
+    if response is None:
+        return "unknown", None
+    body = _json(response)
+    if response.status_code >= 500 or retryable(response):
+        return "unknown", body.get("refund")  # a 503 still names our refund, so its status can be asked later
     if response.status_code == 201:
-        return "succeeded"
+        return "succeeded", body
     if response.status_code in (409, 422):
-        return "refused"
-    return "error"
+        return "refused", body.get("refund")
+    return "error", None
 
 
 class Stats:
@@ -453,26 +463,40 @@ class TrafficGenerator:
     def _refund(self, planned: PlannedPayment, payment_id: str) -> None:
         key = f"traffic-{self.settings.run_id}-refund-{planned.n}"
         response = self._send(f"/payments/{payment_id}/refunds", {"amount_cents": planned.refund_cents}, key)
-        outcome = refund_outcome(response)
+        outcome, refund = refund_outcome(response)
         self.stats.add(f"refunds.{outcome}")
         if outcome == "error":
             self.stats.note(f"refund of payment {planned.n}: an answer the generator did not expect")
+        if outcome == "unknown" and refund and isinstance(refund.get("id"), str) and not self._closing.is_set():
+            self._follow_up(STATUS_CHECKS[0], self._check_status, payment_id, 0, refund["id"])
 
-    def _check_status(self, payment_id: str, nth: int) -> None:
+    def _check_status(self, payment_id: str, nth: int, refund_id: str | None = None) -> None:
+        """Did a payment whose outcome was unknown go through after all? Or, given refund_id, one of its refunds?"""
+        what = "unknown_payments" if refund_id is None else "unknown_refunds"
         try:
             response = self.api.get(f"/payments/{payment_id}")
         except httpx.HTTPError:
-            self.stats.add("unknown_payments.no_answer")
+            self.stats.add(f"{what}.no_answer")
             return
-        status = _json(response).get("status") if response.status_code == 200 else None
+        found = _json(response) if response.status_code == 200 else {}
+        if refund_id is not None:  # a payment's status lists its refunds, each with its own status
+            refunds = found.get("refunds")
+            mine = (
+                [r for r in refunds if isinstance(r, dict) and r.get("id") == refund_id]
+                if isinstance(refunds, list)
+                else []
+            )
+            found = mine[0] if mine else {}
+        status = found.get("status")
         if status == "succeeded":
-            self.stats.add("unknown_payments.confirmed_later")  # by its webhook, through the payment confirmer
+            self.stats.add(f"{what}.confirmed_later")  # by its webhook, through the payment confirmer
         elif status == "pending" and nth + 1 < len(STATUS_CHECKS) and not self._closing.is_set():
-            self._follow_up(STATUS_CHECKS[nth + 1] - STATUS_CHECKS[nth], self._check_status, payment_id, nth + 1)
+            later = STATUS_CHECKS[nth + 1] - STATUS_CHECKS[nth]
+            self._follow_up(later, self._check_status, payment_id, nth + 1, refund_id)
         elif status == "pending":
-            self.stats.add("unknown_payments.still_pending")
+            self.stats.add(f"{what}.still_pending")
         else:
-            self.stats.add("unknown_payments.other")
+            self.stats.add(f"{what}.other")
 
 
 def _counts(counts: dict[str, int]) -> Callable[[str], int]:
@@ -505,7 +529,8 @@ def summary(counts: dict[str, int]) -> list[str]:
         f" {n('payments.unknown')} outcome unknown ({n('unknown_payments.confirmed_later')} confirmed later,"
         f" {n('unknown_payments.still_pending')} still pending), {n('payments.error')} unexpected",
         f"  refunds   {refunds} answered: {n('refunds.succeeded')} succeeded, {n('refunds.refused')} refused,"
-        f" {n('refunds.unknown')} outcome unknown, {n('refunds.error')} unexpected",
+        f" {n('refunds.unknown')} outcome unknown ({n('unknown_refunds.confirmed_later')} confirmed later,"
+        f" {n('unknown_refunds.still_pending')} still pending), {n('refunds.error')} unexpected",
         f'  double clicks {n("double_clicks.sent")}: {n("double_clicks.in_progress")} told "still running",'
         f" {n('double_clicks.replayed')} given the saved answer, {n('double_clicks.ran_first')} ran first",
         f"  retries {n('retries')} ({_retry_reasons(counts)}), shed {n('shed')}, generator errors {n('generator_errors')};"
@@ -520,7 +545,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seconds", type=float, default=None, help="how long to send (default: until Ctrl-C)")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--lose-ack-rate", type=float, default=0.05, help="share of webhook acknowledgements lost")
-    parser.add_argument("--lost-answer-rate", type=float, default=0.02, help="share of charges whose answer is lost")
+    parser.add_argument(
+        "--lost-answer-rate", type=float, default=0.02, help="share of charges and refunds whose answer is lost"
+    )
     parser.add_argument("--double-click-share", type=float, default=0.02)
     parser.add_argument("--refund-share", type=float, default=0.10)
     parser.add_argument("--max-in-flight", type=int, default=64)

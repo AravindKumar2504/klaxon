@@ -157,6 +157,10 @@ class EventConsumer:
             attributes |= {"provider.event_id": event.id, "provider.payment_id": event.payment_id}
             if event.klaxon_payment_id is not None:
                 attributes["klaxon.payment_id"] = event.klaxon_payment_id
+            if event.klaxon_refund_id is not None:
+                attributes["klaxon.refund_id"] = event.klaxon_refund_id
+            if event.refund_id is not None:
+                attributes["provider.refund_id"] = event.refund_id
         return tracer.start_as_current_span(
             f"process {msg.topic()}", context=parent, kind=SpanKind.CONSUMER, attributes=attributes
         )
@@ -202,6 +206,7 @@ class EventConsumer:
                         provider_payment_id=event.payment_id,
                         amount_cents=event.amount_cents,
                         source=source,
+                        **_refund_ids(event),
                     )
                     return _finish(span, outcome)
             delay = self.retry_delays[min(attempt, len(self.retry_delays) - 1)]
@@ -280,6 +285,12 @@ class EventConsumer:
 def _finish(span: Span, outcome: str | None) -> str | None:
     span.set_attribute("klaxon.outcome", outcome or "interrupted")
     return outcome
+
+
+def _refund_ids(event: ProviderEvent) -> dict[str, str]:
+    """A refund event's ids, ours and the provider's, for its log line, as in the payments API's; none otherwise."""
+    ids = {"refund_id": event.klaxon_refund_id, "provider_refund_id": event.refund_id}
+    return {name: value for name, value in ids.items() if value is not None}
 
 
 def open_pool(name: str) -> ConnectionPool:

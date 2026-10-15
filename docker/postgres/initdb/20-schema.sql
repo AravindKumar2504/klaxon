@@ -106,12 +106,14 @@ GRANT UPDATE (status, provider_payment_id, updated_at) ON payments.payments TO p
 GRANT UPDATE (status, provider_refund_id, updated_at) ON payments.refunds TO payments_api;
 GRANT USAGE ON SEQUENCE payments.payment_number, payments.refund_number TO payments_api;
 
--- The payment confirmer: marks payments succeeded from the provider's webhooks.
--- It reads the four columns it compares (not customers or idempotency keys)
--- and may change a status and the provider's id, nothing else: no new rows,
--- no amounts, no refunds, no ledger.
+-- The payment confirmer: marks payments and refunds succeeded from the provider's
+-- webhooks. It reads the columns it compares (not customers or idempotency keys)
+-- and may change a status and the provider's id, nothing else: no new rows, no
+-- amounts, no ledger.
 GRANT SELECT (id, status, amount_cents, provider_payment_id) ON payments.payments TO payment_confirmer;
 GRANT UPDATE (status, provider_payment_id, updated_at) ON payments.payments TO payment_confirmer;
+GRANT SELECT (id, payment_id, status, amount_cents, provider_refund_id) ON payments.refunds TO payment_confirmer;
+GRANT UPDATE (status, provider_refund_id, updated_at) ON payments.refunds TO payment_confirmer;
 
 -- Klaxon and the money check: read everything, write nothing.
 GRANT SELECT ON ALL TABLES IN SCHEMA ledger, payments TO klaxon_readonly;

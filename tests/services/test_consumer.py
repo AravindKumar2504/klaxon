@@ -218,6 +218,22 @@ def test_payment_id_in_the_logs_is_always_ours(caplog):
     assert (line.fields["payment_id"], line.fields["provider_payment_id"]) == ("pmt_000001", "pay_000001")
 
 
+def test_a_refunds_ids_ours_and_the_providers_are_in_its_log_line_and_on_its_span(caplog, telemetry):
+    """So one search for a refund finds it in every service, as for a payment."""
+    body = json.loads(event(1))
+    body["type"] = "refund.succeeded"
+    body["data"] |= {"metadata": {"klaxon_refund_id": "rfd_000001"}, "refund_id": "re_000001"}
+    payment = event(2)
+    worker, *_, stop, _ = consumer_for([FakeMessage(json.dumps(body).encode(), 1), FakeMessage(payment, 2)])
+    with caplog.at_level("INFO"):
+        worker.run(stop)
+    refund, paid = [r for r in caplog.records if r.name == "klaxon.consumer" and r.getMessage() == "posted"]
+    assert (refund.fields["refund_id"], refund.fields["provider_refund_id"]) == ("rfd_000001", "re_000001")
+    assert "refund_id" not in paid.fields and "provider_refund_id" not in paid.fields  # no empty fields on a payment
+    first = telemetry.finished(kind=SpanKind.CONSUMER)[0]
+    assert (first.attributes["klaxon.refund_id"], first.attributes["provider.refund_id"]) == ("rfd_000001", "re_000001")
+
+
 def test_each_message_continues_the_trace_the_receiver_put_in_its_headers(telemetry):
     with trace.get_tracer("tests").start_as_current_span("send provider-events", kind=SpanKind.PRODUCER) as producer:
         carrier = kafka_trace_headers()  # what the webhook receiver does

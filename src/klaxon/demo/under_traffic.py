@@ -122,7 +122,10 @@ def _line(c: CheckRun) -> str:
         return f"{head}  {c.error[:150]}"
     if c.left_for_next_check:
         left = c.left_for_next_check
-        return f"{head}  left for the next check: {left['provider_events']} events, {left['provider_charges']} charges"
+        return (
+            f"{head}  left for the next check: {left['provider_events']} events, {left['provider_charges']} charges,"
+            f" {left.get('provider_refunds', 0)} refunds"
+        )
     return head
 
 

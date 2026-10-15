@@ -1,7 +1,8 @@
 """End to end: the whole Compose stack, driven over HTTP the way a client and an operator would.
 
-These reset the stack (its data is synthetic) and take about two minutes: make e2e.
-The tests in this file run in order and share one stack, except the last two, which build their own.
+These reset the stack (its data is synthetic) and take a few minutes: make e2e.
+The tests in this file run in order and share one stack, except the known-bad baselines at the end,
+which build their own.
 """
 
 import threading
@@ -12,7 +13,7 @@ import pytest
 
 from klaxon import traffic
 from klaxon.checks.live import PROVIDER_URL, ProviderAPI, check_live
-from klaxon.demo import live, lost_answer, under_traffic
+from klaxon.demo import live, lost_answer, lost_refund, under_traffic
 from klaxon.patient import stack
 from klaxon.patient.provider import PAYMENT_SUCCEEDED
 from klaxon.patient.services.kafka_io import CONFIRMER_GROUP, EVENTS_TOPIC, LEDGER_GROUP, consumer_lag
@@ -143,6 +144,31 @@ def test_a_charge_whose_answer_is_lost_is_confirmed_by_its_webhook(idempotent_st
     assert check_live().report.passed
 
 
+def test_a_refund_whose_answer_is_lost_is_confirmed_by_its_webhook(idempotent_stack, api):
+    """Known gap 1, closed: the provider saves the refund and answers 500 to every retry; its webhook settles it."""
+    run = lost_refund.run_live("by_our_id")
+    assert run.report.passed, lost_refund.render(run)
+    lost = run.requests[-1]
+    assert (lost["status"], lost["body"]["refund"]["status"]) == (503, "pending")  # the client heard "unknown"
+    [made] = [r for r in run.provider.refunds if r.klaxon_refund_id == run.stuck_refund_id]
+    assert (run.stuck_refund["status"], run.stuck_refund["provider_refund_id"]) == ("succeeded", made.id)
+    # Asked again as a new request, our own API refuses it: nothing is left to refund. The provider is never asked.
+    assert run.asked_again["body"]["error"]["code"] == "refund_exceeds_payment"
+    assert len([r for r in ProviderAPI(PROVIDER_URL).refunds if r.payment_id == made.payment_id]) == 1
+    # A client that does retry later gets the confirmed refund.
+    payment_id = lost["body"]["refund"]["payment_id"]
+    retry = api.post(
+        f"/payments/{payment_id}/refunds",
+        json={"amount_cents": lost["body"]["refund"]["amount_cents"]},
+        headers={"Idempotency-Key": lost["idempotency_key"]},
+    )
+    assert retry.status_code == 201 and (retry.json()["id"], retry.json()["status"]) == (
+        run.stuck_refund_id,
+        "succeeded",
+    )
+    assert check_live().report.passed
+
+
 def test_while_traffic_keeps_flowing_every_money_check_passes(idempotent_stack):
     """Known gap 3, closed: before the cutoff, 19 of 100 checks failed like this on a healthy stack."""
     run = under_traffic.run_live(rate=5.0, checks=8, warmup_seconds=3.0)
@@ -251,9 +277,14 @@ def payment_rows() -> list[tuple]:
     return live._readonly_rows("SELECT id, status, provider_payment_id, updated_at FROM payments ORDER BY id")
 
 
+def refund_rows() -> list[tuple]:
+    return live._readonly_rows("SELECT id, status, provider_refund_id, updated_at FROM refunds ORDER BY id")
+
+
 def test_replaying_the_whole_topic_from_the_start_changes_nothing_for_either_consumer(idempotent_stack):
     assert check_live().report.passed
-    booked, payments = ledger_transactions(), payment_rows()
+    booked, payments, refunds = ledger_transactions(), payment_rows(), refund_rows()
+    assert refunds  # earlier tests made refunds, so their events are replayed too
     # A clean stop leaves the consumer group, so its offsets can be reset.
     stack.compose("stop", "ledger-consumer", "payment-confirmer")
     for group in (LEDGER_GROUP, CONFIRMER_GROUP):
@@ -278,6 +309,7 @@ def test_replaying_the_whole_topic_from_the_start_changes_nothing_for_either_con
     assert result.report.passed, result.report
     assert ledger_transactions() == booked
     assert payment_rows() == payments  # not even an updated_at moved: a confirmed payment is never written again
+    assert refund_rows() == refunds  # nor a confirmed refund
 
 
 def test_with_kafka_down_webhooks_wait_at_the_provider_and_are_booked_once_it_returns(idempotent_stack, api):
@@ -354,6 +386,7 @@ def test_under_traffic_the_naive_consumer_is_caught_for_counting_twice_and_for_n
         assert posted and all(item["expected"] == 1 and item["times_posted"] > 1 for item in posted)
         assert result.report.invariant("ledger_balanced").passed
         assert result.report.invariant("payments_match_provider").passed
+        assert result.report.invariant("refunds_match_provider").passed
 
 
 @pytest.fixture(scope="module")
@@ -385,7 +418,34 @@ def test_under_traffic_the_naive_confirmer_is_caught_for_charged_payments_left_p
     lost_answers = traffic.Settings(rate=5.0, seed=3, lose_ack_rate=0.0, lost_answer_rate=0.2)
     results = checks_under_traffic(lost_answers)
     for result in results:
-        assert [i.name for i in result.report.invariants if not i.passed] == ["payments_match_provider"]
+        failed = [i.name for i in result.report.invariants if not i.passed]
+        assert failed in (["payments_match_provider"], ["payments_match_provider", "refunds_match_provider"])
         stuck = result.report.invariant("payments_match_provider").evidence
         assert stuck and {item["problem"] for item in stuck} == {"pending but charged"}
+        stuck_refunds = result.report.invariant("refunds_match_provider").evidence  # refunds lose answers too
+        assert {item["problem"] for item in stuck_refunds} <= {"pending but refunded"}
     assert len(results[-1].report.invariant("payments_match_provider").evidence) > 3  # the lost answers pile up
+
+
+@pytest.fixture(scope="module")
+def naive_refund_confirmer_stack():
+    stack.reset()  # its own fresh stack: the stuck refund would fail the next demo's clean start
+    stack.up("idempotent", confirmer="by_provider_id")
+    yield
+    stack.reset()  # do not leave the known-bad baseline running
+
+
+def test_the_naive_confirmer_leaves_a_refund_pending_and_only_the_fifth_invariant_sees_it(
+    naive_refund_confirmer_stack,
+):
+    run = lost_refund.run_live("by_provider_id")
+    assert [i.name for i in run.report.invariants if not i.passed] == ["refunds_match_provider"]
+    [stuck] = run.report.invariant("refunds_match_provider").evidence
+    assert (stuck["refund_id"], stuck["problem"], stuck["status"]) == (
+        run.stuck_refund_id,
+        "pending but refunded",
+        "pending",
+    )
+    # Our API counts only succeeded refunds, so it sent the second request on; only the provider's limit refused it.
+    assert run.asked_again["body"]["error"]["code"] == "refund_failed"
+    assert (run.dashboard.status, run.dashboard.error_rate) == ("GREEN", 0.0)

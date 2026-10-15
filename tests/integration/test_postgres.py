@@ -211,7 +211,7 @@ class Records:
 
     def __init__(self, *events: Event) -> None:
         self.events = list(events)
-        self.payments = []
+        self.payments, self.refunds = [], []
 
     def balance_cents(self) -> int:
         return sum(MONEY_EFFECT[e.type] * e.amount_cents for e in self.events)

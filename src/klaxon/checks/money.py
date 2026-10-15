@@ -3,7 +3,7 @@
 Klaxon will run this after every fix, next to the health checks, because a
 system can look healthy while the money is wrong.
 
-Four invariants, each with evidence:
+Five invariants, each with evidence:
 1. posted_exactly_once: every provider money event is in the ledger exactly
    once (0 times = lost, 2 or more = counted twice), and the ledger has nothing
    the provider never sent. A posting cancelled by a reversal does not count.
@@ -16,12 +16,18 @@ Four invariants, each with evidence:
    same amount, linked to that charge, and charged exactly once; one we call
    succeeded was charged; and the provider charged nothing that is not ours.
    A pending or failed payment with no charge is fine: no money moved.
+5. refunds_match_provider: our refunds table agrees with the provider's
+   refunds, the same way (week 2). Each refund of ours the provider made is
+   succeeded, for the same amount and the same payment, linked to that
+   refund, and made exactly once; one we call succeeded was made; and the
+   provider refunded nothing that is not ours. A pending or failed refund
+   the provider never made is fine: no money moved back.
 
 Invariant 2 alone is not enough: a double posting is itself balanced. And
 invariants 1-3 compare the ledger with the provider, so they pass whenever
 the ledger copies the provider faithfully, even when the provider charged a
-customer twice for one payment, or charged the wrong amount. Only invariant
-4 compares the provider with what we asked for.
+customer twice for one payment, or charged the wrong amount. Only invariants
+4 and 5 compare the provider with what we asked for.
 
 With a cutoff (week 2, for a check while traffic flows; see klaxon.checks.live):
 only what the provider did up to the end of the cutoff's second is judged.
@@ -29,8 +35,9 @@ A provider record stamped later, and anything our side made from it, may
 still be on its way, so it is left for the next check. Everything up to the
 cutoff is judged exactly as without one. Four things are judged whatever the
 cutoff, because no timing explains them: a posting the provider never sent,
-a payment charged twice, a payment we call succeeded with no charge at all,
-and one linked to a charge the provider gives to another payment of ours.
+a payment charged twice (or a refund made twice), a payment we call
+succeeded with no charge at all (or a refund with no refund), and one linked
+to a charge (or a refund) the provider gives to another of ours.
 (The live check reads our books before the provider's records, so whatever
 our books hold from the provider is already in those records.)
 
@@ -39,8 +46,9 @@ through the Ledger class, the handlers or the payments API, so it does not
 depend on their bookkeeping being right. Invariants 1-3 run on the first
 piece's SQLite ledger and on the live PostgreSQL ledger (week 1), where the
 check connects through a read-only role (see `klaxon.checks.live`). Sums are
-cast to BIGINT so both return plain ints. Invariant 4 needs a payments table
-and the provider's payment records, which only the live stack has (week 2).
+cast to BIGINT so both return plain ints. Invariants 4 and 5 need our
+payments and refunds tables and the provider's payment and refund records,
+which only the live stack has (week 2).
 """
 
 from __future__ import annotations
@@ -75,6 +83,22 @@ class ProviderPayment:
     id: str
     amount_cents: int
     klaxon_payment_id: str | None
+    created: int | None = None
+
+
+@dataclass(frozen=True)
+class ProviderRefund:
+    """One refund as the provider records it. Every refund at this provider succeeds at once, or not at all.
+
+    payment_id is the provider's id for the payment it refunded. klaxon_refund_id is our own refund id, which
+    the payments API sends with every refund as metadata; None when the metadata holds none. created: as for
+    a payment.
+    """
+
+    id: str
+    payment_id: str | None
+    amount_cents: int
+    klaxon_refund_id: str | None
     created: int | None = None
 
 
@@ -123,9 +147,10 @@ def check_money(
     ledger: SqlConnection,
     provider_payments: list[ProviderPayment] | None = None,
     cutoff: int | None = None,
+    provider_refunds: list[ProviderRefund] | None = None,
 ) -> MoneyReport:
-    """Invariants 1-3; and invariant 4 when the provider's payments are given (ledger must then reach a
-    payments table too, as the live stack's read-only role does).
+    """Invariants 1-3; invariant 4 when the provider's payments are given, and invariant 5 when its refunds are
+    (ledger must then reach our payments and refunds tables too, as the live stack's read-only role does).
 
     cutoff: judge only what the provider did up to the end of that second (its clock, unix seconds). Then
     provider.balance_cents() must be its balance as of the cutoff, and provider.events must hold its newer
@@ -149,6 +174,11 @@ def check_money(
         invariants.append(fourth)
         if cutoff is not None:
             left["provider_charges"] = newer_charges
+    if provider_refunds is not None:
+        fifth, newer_refunds = _refunds_match_provider(provider_refunds, ledger, cutoff)
+        invariants.append(fifth)
+        if cutoff is not None:
+            left["provider_refunds"] = newer_refunds
     return MoneyReport(
         passed=all(i.passed for i in invariants),
         ledger_clearing_cents=ledger_clearing,
@@ -437,6 +467,157 @@ def _describe_payment(item: dict, named: dict[str, str | None]) -> str:
         sentences.append(f"is linked to {linked}, but the provider's charge for it is {charge['id']}")
     if "not named in its charge's metadata" in problem:
         sentences.append(f"is not named in the metadata of its charge {charge['id']}")
+    return f"{ours} " + ", and ".join(sentences)
+
+
+def _refunds_match_provider(
+    provider_refunds: list[ProviderRefund], db: SqlConnection, cutoff: int | None = None
+) -> tuple[InvariantResult, int]:
+    """Invariant 5, invariant 4's twin for refunds, and how many of the provider's refunds it left for the next
+    check. One more thing can be wrong with a refund: the provider refunded another payment than ours."""
+
+    def newer(refund: ProviderRefund) -> bool:
+        return cutoff is not None and refund.created is not None and refund.created > cutoff
+
+    # A LEFT JOIN: a refund whose payment is missing must still be judged, not dropped from the check.
+    ours = {
+        refund_id: (payment_id, status, amount, provider_id, provider_payment_id)
+        for refund_id, payment_id, status, amount, provider_id, provider_payment_id in db.execute(
+            "SELECT r.id, r.payment_id, r.status, r.amount_cents, r.provider_refund_id, p.provider_payment_id"
+            " FROM refunds r LEFT JOIN payments p ON p.id = r.payment_id ORDER BY r.id"
+        ).fetchall()
+    }
+    linked = {
+        provider_id: refund_id for refund_id, (_, _, _, provider_id, _) in ours.items() if provider_id is not None
+    }
+    named = {refund.id: refund.klaxon_refund_id for refund in provider_refunds}
+    # Our refund id -> the provider's refunds for it: through the metadata first, then through our link.
+    made: dict[str, list[ProviderRefund]] = defaultdict(list)
+    strangers = []
+    for refund in provider_refunds:
+        if refund.klaxon_refund_id in ours:
+            made[refund.klaxon_refund_id].append(refund)
+        elif refund.id in linked:
+            made[linked[refund.id]].append(refund)
+        else:
+            strangers.append(refund)
+
+    evidence = []
+    never_made = left_ours = left_strangers = 0
+    for refund_id, (payment_id, status, amount, provider_id, provider_payment_id) in ours.items():
+        found = made.get(refund_id, [])
+        if len(found) > 1:  # judged whatever the cutoff: no timing explains two refunds
+            problems = ["refunded twice" if len(found) == 2 else f"refunded {len(found)} times"]
+        elif not found:
+            if status != "succeeded":
+                never_made += 1  # pending or failed, and no money moved back: our records and the provider agree
+                continue
+            if provider_id in named:  # the refund exists, but its metadata gives it to another refund of ours
+                problems = ["linked to another refund's provider refund"]
+            else:
+                problems = ["succeeded but never refunded"]
+        else:
+            [refund] = found
+            if newer(refund):  # its answer or its webhook may still be on its way: the next check judges it
+                left_ours += 1
+                continue
+            problems = []  # every problem, as for payments: a stuck refund of the wrong amount is not "just confirm it"
+            if status != "succeeded":
+                problems.append(f"{status} but refunded")
+            if refund.amount_cents != amount:
+                problems.append("amount differs")
+            if refund.payment_id != provider_payment_id:
+                problems.append("refunded another payment")
+            if status == "succeeded" and provider_id != refund.id:
+                problems.append("linked to another provider refund")
+            if refund.klaxon_refund_id != refund_id:
+                problems.append("not named in its provider refund's metadata")
+            if not problems:
+                continue
+        evidence.append(
+            {
+                "refund_id": refund_id,
+                "payment_id": payment_id,
+                "status": status,
+                "amount_cents": amount,
+                "provider_refund_id": provider_id,
+                "provider_payment_id": provider_payment_id,
+                "provider_refunds": [_refund_item(r) for r in found],
+                "problem": ", ".join(problems),
+            }
+        )
+    for refund in strangers:
+        if newer(refund):  # its refund of ours may not be in our snapshot yet
+            left_strangers += 1
+            continue
+        evidence.append(
+            {
+                "refund_id": refund.klaxon_refund_id,
+                "payment_id": None,
+                "status": None,
+                "amount_cents": None,
+                "provider_refund_id": None,
+                "provider_payment_id": None,
+                "provider_refunds": [_refund_item(refund)],
+                "problem": "refunded but not ours",
+            }
+        )
+
+    left = left_ours + left_strangers
+    if not evidence:
+        judged = len(ours) - left_ours
+        summary = (
+            f"all {judged} of our refunds agree with the provider"
+            f" ({judged - never_made} refunded once, {never_made} never refunded)"
+            if ours or left
+            else "no refunds yet, ours or the provider's"
+        )
+        if left:
+            summary += f"; {_n(left, 'refund', 'refunds')} newer than the cutoff left for the next check"
+        return InvariantResult("refunds_match_provider", True, summary), left
+    summary = "; ".join(_describe_refund(item, named) for item in evidence)
+    return InvariantResult("refunds_match_provider", False, summary, evidence), left
+
+
+def _refund_item(refund: ProviderRefund) -> dict:
+    return {"id": refund.id, "provider_payment_id": refund.payment_id, "amount_cents": refund.amount_cents}
+
+
+def _describe_refund(item: dict, named: dict[str, str | None]) -> str:
+    """One evidence item of invariant 5, as a sentence."""
+    found, refund_id, problem = item["provider_refunds"], item["refund_id"], item["problem"]
+    if item["status"] is None:
+        refunded = f"the provider refunded {found[0]['id']} ({format_cents(found[0]['amount_cents'])})"
+        if refund_id is None:
+            return f"{refunded}, and its metadata names no refund of ours"
+        return f"{refunded} for {refund_id}, which is not in our refunds table"
+    ours = f"{refund_id} ({format_cents(item['amount_cents'])}, a refund of {item['payment_id']})"
+    if len(found) > 1:
+        return f"{ours} was refunded {len(found)} times at the provider ({', '.join(r['id'] for r in found)})"
+    if problem == "succeeded but never refunded":
+        return f"{ours} is succeeded in our records, but the provider has no refund for it"
+    if problem == "linked to another refund's provider refund":
+        other = named[item["provider_refund_id"]]
+        return f"{ours} is linked to {item['provider_refund_id']}, but the provider's metadata gives that refund to {other}"
+    [refund] = found
+    sentences = []
+    if item["status"] != "succeeded":
+        sentences.append(
+            f"is {item['status']} in our records, but the provider refunded it"
+            f" ({refund['id']}, {format_cents(refund['amount_cents'])})"
+        )
+    elif "amount differs" in problem:
+        sentences.append(f"was refunded {format_cents(refund['amount_cents'])} at the provider ({refund['id']})")
+    if "refunded another payment" in problem:
+        sentences.append(
+            f"is for {item['provider_payment_id'] or 'a payment with no provider id in our records'}, but the provider's"
+            f" refund {refund['id']} is for {refund['provider_payment_id'] or 'no plain payment id'}"
+        )
+    if "linked to another provider refund" in problem:
+        linked = item["provider_refund_id"] or "no refund"
+        sentences.append(f"is linked to {linked}, but the provider's refund for it is {refund['id']}")
+    if "not named in its provider refund's metadata" in problem:
+        sentences.append(f"is not named in the metadata of its provider refund {refund['id']}")
     return f"{ours} " + ", and ".join(sentences)
 
 

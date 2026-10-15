@@ -18,7 +18,7 @@ unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PR
 PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
-.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer \
+.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only
 
 help: ## list the commands
@@ -37,7 +37,7 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py src/klaxon/demo/under_traffic.py src/klaxon/traffic.py \
 		tests/services tests/integration tests/e2e tests/test_live_check.py tests/test_payments_match_provider.py \
 		tests/test_observability_config.py tests/test_traffic.py tests/test_money_cutoff.py tests/test_faults.py \
-		src/klaxon/faults.py src/klaxon/demo/fault_scenario.py
+		src/klaxon/faults.py src/klaxon/demo/fault_scenario.py src/klaxon/demo/lost_refund.py tests/test_refunds_match_provider.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -61,7 +61,7 @@ logs: ## follow every service's logs
 test-integration: ## tests against the running stack's PostgreSQL and Kafka (make up first)
 	$(PY) -m pytest -q -m integration
 
-e2e: ## reset the stack and drive it end to end (about two minutes)
+e2e: ## reset the stack and drive it end to end (about five minutes)
 	$(PY) -m pytest -q -m e2e
 
 mutants: ## break the code on purpose, on a copy, and check the tests notice (make up first)
@@ -97,3 +97,8 @@ demo-lost-answer: ## a charge whose answer is lost, on fresh data: make demo-los
 	$(MAKE) reset
 	$(MAKE) up
 	$(PY) -m klaxon.demo live-lost-answer --confirmer $(CONFIRMER_HANDLER)
+
+demo-lost-refund: ## a refund whose answer is lost, on fresh data: make demo-lost-refund CONFIRMER=by_our_id|by_provider_id
+	$(MAKE) reset
+	$(MAKE) up
+	$(PY) -m klaxon.demo live-lost-refund --confirmer $(CONFIRMER_HANDLER)

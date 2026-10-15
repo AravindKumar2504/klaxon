@@ -11,7 +11,7 @@ refund half of that payment.
 
 - With the payment confirmer (CONFIRMER_HANDLER=by_our_id), the provider's
   webhook confirms the payment through our id in its metadata. It ends
-  succeeded, the refund goes through, and all four invariants pass.
+  succeeded, the refund goes through, and all five invariants pass.
 - With the known-bad confirmer (by_provider_id), the payment stays pending
   and the refund is refused. The webhook endpoint stays green, and the ledger
   balances and matches the provider, because it booked the charge from the
@@ -197,9 +197,10 @@ def run_live(
 def verdict(run: LostAnswerRun) -> str:
     report, dashboard = run.report, run.dashboard
     if report.passed:
-        return f"RESULT: money check PASSED (dashboard {dashboard.status}, all four invariants hold)"
+        return f"RESULT: money check PASSED (dashboard {dashboard.status}, all five invariants hold)"
     failed = ", ".join(i.name for i in report.invariants if not i.passed)
-    ledger_ok = all(i.passed for i in report.invariants if i.name != "payments_match_provider")
+    ours = ("payments_match_provider", "refunds_match_provider")  # our records, not the ledger
+    ledger_ok = all(i.passed for i in report.invariants if i.name not in ours)
     books = "ledger balanced and matches the provider" if ledger_ok else "the ledger is wrong too"
     return f"RESULT: money check FAILED (dashboard {dashboard.status}, {books}; failed: {failed})"
 

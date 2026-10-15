@@ -148,6 +148,7 @@ def test_a_deploy_without_dedupe_counts_payments_twice_and_the_rollback_stops_ne
             result = check_live(timeout_seconds=60)
             assert result.report.money_off_cents > 0  # the books claim money the provider never had
             assert result.report.invariant("payments_match_provider").passed  # our payments are right, the books not
+            assert result.report.invariant("refunds_match_provider").passed
         finally:
             faults.get("duplicate-delivery").clear(fault_stack)
         at_rollback = counted_twice()

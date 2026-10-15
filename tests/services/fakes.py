@@ -173,16 +173,19 @@ class FakeProvider:
         self.charged: list[str] = []  # payment ids actually created
         self.unavailable = False
         self.reject: tuple[int, str, str] | None = None
+        self.next_refund_id: str | None = None  # the id the next new refund gets; None: re_000001, re_000002, ...
 
     def create_payment(self, customer, amount_cents, currency, idempotency_key, metadata):
         body = {"customer": customer, "amount_cents": amount_cents, "currency": currency, "metadata": metadata}
         self.calls.append(("create_payment", idempotency_key, body))
         return self._answer(idempotency_key, lambda: self._charge(body))
 
-    def create_refund(self, payment_id, amount_cents, idempotency_key):
-        body = {"payment_id": payment_id, "amount_cents": amount_cents}
+    def create_refund(self, payment_id, amount_cents, idempotency_key, metadata=None):
+        body = {"payment_id": payment_id, "amount_cents": amount_cents, "metadata": metadata or {}}
         self.calls.append(("create_refund", idempotency_key, body))
-        return self._answer(idempotency_key, lambda: {"id": f"re_{len(self.results) + 1:06d}", **body})
+        return self._answer(
+            idempotency_key, lambda: {"id": self.next_refund_id or f"re_{len(self.results) + 1:06d}", **body}
+        )
 
     def _charge(self, body: dict) -> dict:
         payment = {"id": f"pay_{len(self.charged) + 1:06d}", "status": "succeeded", **body}

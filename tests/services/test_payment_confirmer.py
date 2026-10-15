@@ -4,7 +4,13 @@ import pytest
 
 from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED
 from klaxon.patient.services.events import ProviderEvent
-from klaxon.patient.services.payment_confirmer import OurPayment, PgConfirmer, why_unchanged
+from klaxon.patient.services.payment_confirmer import (
+    OurPayment,
+    OurRefund,
+    PgConfirmer,
+    why_refund_unchanged,
+    why_unchanged,
+)
 
 EVENT = ProviderEvent("evt_000003", PAYMENT_SUCCEEDED, 1, "pay_000003", 6_968, "usd", "pmt_000003")
 
@@ -48,9 +54,75 @@ class NoDatabase:
         raise AssertionError("this event should not touch the database")
 
 
-def test_refund_events_are_not_the_confirmers_business():
-    refund = ProviderEvent("evt_2", REFUND_SUCCEEDED, 1, "pay_000001", 100, "usd", None)
-    assert PgConfirmer(NoDatabase()).confirm(refund, "provider-events/0@1") == "ignored_type"
+def test_events_that_are_neither_a_charge_nor_a_refund_are_not_the_confirmers_business():
+    other = ProviderEvent("evt_2", "payment.updated", 1, "pay_000001", 100, "usd", None)
+    assert PgConfirmer(NoDatabase()).confirm(other, "provider-events/0@1") == "ignored_type"
+
+
+# Refunds (week 2, item 6) ---------------------------------------------------------------
+
+REFUND = ProviderEvent("evt_000007", REFUND_SUCCEEDED, 1, "pay_000003", 3_484, "usd", None, "rfd_000001", "re_000001")
+
+
+def our_refund(status="succeeded", amount=3_484, provider_refund="re_000001", payment="pay_000003") -> OurRefund:
+    return OurRefund("rfd_000001", status, amount, provider_refund, payment)
+
+
+@pytest.mark.parametrize(
+    ("refund", "outcome", "problem"),
+    [
+        (our_refund(), "refund_already_confirmed", None),  # the API's own answer got there first
+        (
+            our_refund(status="failed", provider_refund=None),
+            "refund_conflict",
+            "the provider refunded a refund we recorded as failed",
+        ),
+        (our_refund(amount=1), "refund_conflict", "the provider refunded a different amount than our refund's"),
+        (
+            our_refund(provider_refund="re_000009"),
+            "refund_conflict",
+            "our refund is linked to another provider refund (re_000009)",
+        ),
+        (
+            our_refund(payment="pay_000009"),
+            "refund_conflict",
+            "the provider refunded another payment than the one our refund is for",
+        ),
+        (None, "unknown_refund", "the provider refunded rfd_000001, which is not in our records"),
+    ],
+)
+def test_why_a_refunds_confirmation_changed_nothing(refund, outcome, problem):
+    got_outcome, got_problem = why_refund_unchanged(REFUND, refund, "by_our_id")
+    assert got_outcome == outcome
+    assert got_problem is None if problem is None else got_problem == problem
+
+
+def test_the_naive_confirmer_reads_a_refund_not_found_as_nothing_to_do():
+    assert why_refund_unchanged(REFUND, None, "by_provider_id") == ("refund_not_found", None)
+
+
+def test_a_refund_event_without_our_id_is_reported_without_a_query(caplog):
+    event = ProviderEvent("evt_1", REFUND_SUCCEEDED, 1, "pay_000001", 100, "usd", None, None, "re_000001")
+    with caplog.at_level("ERROR"):
+        assert PgConfirmer(NoDatabase()).confirm(event, "provider-events/0@1") == "unknown_refund"
+    [line] = [r for r in caplog.records if r.name == "klaxon.payment_confirmer"]
+    assert line.getMessage() == "refund not confirmed: the provider refunded with metadata that names no refund of ours"
+    assert (line.fields["provider_refund_id"], line.fields["refund_id"]) == ("re_000001", None)
+
+
+def test_a_refund_event_without_the_providers_refund_id_is_reported_without_a_query(caplog):
+    """Our refund could only be confirmed unlinked, or one already linked be called a conflict: neither is true."""
+    event = ProviderEvent("evt_1", REFUND_SUCCEEDED, 1, "pay_000001", 100, "usd", None, "rfd_000001", None)
+    with caplog.at_level("ERROR"):
+        assert PgConfirmer(NoDatabase()).confirm(event, "provider-events/0@1") == "unknown_refund"
+    [line] = [r for r in caplog.records if r.name == "klaxon.payment_confirmer"]
+    assert line.getMessage() == "refund not confirmed: the provider's refund event names no plain refund id of its own"
+    assert line.fields["refund_id"] == "rfd_000001"
+
+
+def test_the_naive_confirmer_without_the_providers_refund_id_does_not_query_either():
+    event = ProviderEvent("evt_1", REFUND_SUCCEEDED, 1, "pay_000001", 100, "usd", None, "rfd_000001", None)
+    assert PgConfirmer(NoDatabase(), "by_provider_id").confirm(event, "provider-events/0@1") == "refund_not_found"
 
 
 def test_a_payment_event_without_our_id_is_reported_without_a_query(caplog):

@@ -19,7 +19,8 @@ same key. If the provider did charge, its webhook settles it: the payment
 confirmer marks it succeeded (see payment_confirmer), so a retry finds it
 confirmed, and it does not stay pending when the client never retries. If the
 provider never charged, it stays pending: no money moved, and the money
-check accepts that.
+check accepts that. Refunds work the same way (week 2): our refund id goes to
+the provider as metadata, and the refund's webhook confirms it.
 
 The ledger is not written here. Money is booked only from the provider's
 webhooks, one path for every payment (see ledger_consumer).
@@ -73,6 +74,7 @@ logger = logging.getLogger("klaxon.payments_api")
 
 REPLAYED_HEADER = "Idempotent-Replayed"
 KEY_REUSED = "this Idempotency-Key was used for a different request"
+OUTCOME_UNKNOWN = "the outcome is unknown; retry with the same Idempotency-Key"
 STUCK_AFTER_SECONDS = 60  # a payment pending longer than this is reported as stuck
 
 
@@ -106,6 +108,13 @@ def fingerprint(endpoint: str, body: BaseModel) -> str:
     """What the request was, so the same key with a different request can be refused."""
     canonical = json.dumps({"endpoint": endpoint, "body": body.model_dump()}, separators=(",", ":"), sort_keys=True)
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def provider_id(answer: object) -> str | None:
+    """The id in the provider's answer, if it is a plain id. The answer is outside input: anything else is not
+    trusted, and never reaches our records, our logs or a span."""
+    found = answer.get("id") if isinstance(answer, dict) else None
+    return found if isinstance(found, str) and ID.fullmatch(found) else None
 
 
 def payment_view(payment: PaymentRow, refunds: list[RefundRow] | None = None) -> dict:
@@ -202,15 +211,22 @@ def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: Pr
                     payment_id=row.id,
                     error=str(exc),
                 )
-                message = "the outcome is unknown; retry with the same Idempotency-Key"
-                return refused(503, "provider_unavailable", message, final=False, payment=payment_view(row))
+                return refused(503, "provider_unavailable", OUTCOME_UNKNOWN, final=False, payment=payment_view(row))
             except ProviderRejected as exc:
                 row = store.mark_payment(row.id, "failed", None)
                 log(logger, logging.WARNING, "provider refused the payment", payment_id=row.id, error=str(exc))
                 return refused(402, "payment_failed", exc.message or exc.code, final=True, payment=payment_view(row))
-            row = store.mark_payment(row.id, "succeeded", charge["id"])
-            if ID.fullmatch(row.provider_payment_id or ""):  # the provider's answer is outside input too
-                trace.get_current_span().set_attribute("provider.payment_id", row.provider_payment_id)
+            charge_id = provider_id(charge)
+            if charge_id is None:  # an answer we cannot trust is as good as none: the webhook will settle it
+                log(
+                    logger,
+                    logging.ERROR,
+                    "the provider's answer names no plain id; payment left pending",
+                    payment_id=row.id,
+                )
+                return refused(503, "provider_unavailable", OUTCOME_UNKNOWN, final=False, payment=payment_view(row))
+            row = store.mark_payment(row.id, "succeeded", charge_id)
+            trace.get_current_span().set_attribute("provider.payment_id", charge_id)
             log(
                 logger,
                 logging.INFO,
@@ -257,18 +273,28 @@ def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: Pr
                     message = "more than what is left to refund"
                     return refused(422, "refund_exceeds_payment", message, final=True, refund=refund_view(row))
             try:
-                result = provider.create_refund(payment.provider_payment_id, row.amount_cents, row.id)
+                result = provider.create_refund(
+                    payment.provider_payment_id, row.amount_cents, row.id, metadata={"klaxon_refund_id": row.id}
+                )
             except ProviderUnavailable as exc:
                 log(
                     logger, logging.ERROR, "provider unavailable; refund left pending", refund_id=row.id, error=str(exc)
                 )
-                message = "the outcome is unknown; retry with the same Idempotency-Key"
-                return refused(503, "provider_unavailable", message, final=False, refund=refund_view(row))
+                return refused(503, "provider_unavailable", OUTCOME_UNKNOWN, final=False, refund=refund_view(row))
             except ProviderRejected as exc:
                 row = store.mark_refund(row.id, "failed", None)
                 log(logger, logging.WARNING, "provider refused the refund", refund_id=row.id, error=str(exc))
                 return refused(422, "refund_failed", exc.message or exc.code, final=True, refund=refund_view(row))
-            row = store.mark_refund(row.id, "succeeded", result["id"])
+            refund_id = provider_id(result)
+            if refund_id is None:  # as for a payment: the refund's webhook will settle it
+                log(
+                    logger,
+                    logging.ERROR,
+                    "the provider's answer names no plain id; refund left pending",
+                    refund_id=row.id,
+                )
+                return refused(503, "provider_unavailable", OUTCOME_UNKNOWN, final=False, refund=refund_view(row))
+            row = store.mark_refund(row.id, "succeeded", refund_id)
             log(
                 logger,
                 logging.INFO,

@@ -11,7 +11,15 @@ import httpx
 import pytest
 
 from klaxon import traffic
-from klaxon.traffic import PlannedPayment, Settings, TrafficGenerator, payment_outcome, plan, retryable
+from klaxon.traffic import (
+    PlannedPayment,
+    Settings,
+    TrafficGenerator,
+    payment_outcome,
+    plan,
+    refund_outcome,
+    retryable,
+)
 
 DEFAULT_BEHAVIOR = {
     "lose_ack_rate": 0.0,
@@ -19,6 +27,8 @@ DEFAULT_BEHAVIOR = {
     "lose_ack_event_ids": [],
     "fail_after_charge_rate": 0.0,
     "fail_after_charge_keys": [],
+    "fail_after_refund_rate": 0.0,
+    "fail_after_refund_keys": [],
 }
 
 
@@ -311,6 +321,43 @@ def test_a_refund_the_api_refuses_is_counted_as_refused_and_not_retried():
     assert stats["refunds.refused"] == 1 and stats["retries"] == 0
 
 
+def refund_unknown_then(status_later: str):
+    """The payment succeeds; its refund's answer is lost every time (503); asked later, the refund is status_later."""
+
+    def answers(request, n):
+        if request.method == "GET":
+            refunds = [{"id": "rfd_000009", "status": "succeeded"}, {"id": "rfd_000001", "status": status_later}]
+            return httpx.Response(200, json={"id": "pmt_000001", "status": "succeeded", "refunds": refunds})
+        if request.url.path.endswith("/refunds"):
+            error = {"code": "provider_unavailable", "message": "the outcome is unknown"}
+            return httpx.Response(503, json={"error": error, "refund": {"id": "rfd_000001", "status": "pending"}})
+        return httpx.Response(201, json={"id": "pmt_000001", "status": "succeeded"})
+
+    return answers
+
+
+def test_a_refund_whose_outcome_is_unknown_is_asked_about_5_seconds_after_giving_up():
+    clock = Clock()
+    stack = Stack(clock, refund_unknown_then("succeeded"))
+    stats = stack.generator(quiet(seconds=20.0), payments=one_payment(refund_after=3.0)).run()
+    refund_posts = stack.posts("/payments/pmt_000001/refunds")
+    assert [key for *_, key, _ in refund_posts] == ["traffic-r1-refund-1"] * 4  # retried with its own key
+    [(asked_at, _, path, _, _)] = [s for s in stack.sent if s[1] == "GET"]
+    assert path == "/payments/pmt_000001" and asked_at - refund_posts[-1][0] == pytest.approx(5.0, abs=0.3)
+    assert (stats["refunds.unknown"], stats["unknown_refunds.confirmed_later"]) == (1, 1)
+    assert stats["unknown_payments.confirmed_later"] == 0  # the payment's own status does not count
+
+
+def test_a_refund_still_pending_is_asked_about_once_more_a_minute_after_giving_up():
+    clock = Clock()
+    stack = Stack(clock, refund_unknown_then("pending"))  # nothing ever confirms it
+    stats = stack.generator(quiet(seconds=80.0), payments=one_payment(refund_after=3.0)).run()
+    gave_up_at = stack.posts("/payments/pmt_000001/refunds")[-1][0]
+    gets = [at - gave_up_at for at, method, *_ in stack.sent if method == "GET"]
+    assert gets == pytest.approx([5.0, 60.0], abs=0.3)
+    assert stats["unknown_refunds.still_pending"] == 1
+
+
 def test_a_double_click_sends_the_same_request_twice_with_one_key():
     clock = Clock()
     stack = Stack(clock)
@@ -351,6 +398,7 @@ def test_noise_is_switched_on_for_the_run_and_put_back_as_it_was_found():
     assert stack.behavior_puts[0] == DEFAULT_BEHAVIOR | {
         "lose_ack_rate": 0.05,
         "fail_after_charge_rate": 0.02,
+        "fail_after_refund_rate": 0.02,  # refunds lose their answers as often as charges
         "seed": 9,
     }
     assert stack.behavior == DEFAULT_BEHAVIOR | {"lose_ack_rate": 0.3, "seed": 11}
@@ -431,6 +479,12 @@ def test_what_the_client_learned():
     assert payment_outcome(None) == ("unknown", None)
     assert payment_outcome(response(402, {"payment": {"id": "pmt_1"}})) == ("failed", {"id": "pmt_1"})
     assert payment_outcome(response(422)) == ("error", None)
+    assert refund_outcome(response(201, {"id": "rfd_1"})) == ("succeeded", {"id": "rfd_1"})
+    assert refund_outcome(response(503, {"refund": {"id": "rfd_1"}})) == ("unknown", {"id": "rfd_1"})
+    assert refund_outcome(None) == ("unknown", None)
+    assert refund_outcome(response(422, {"refund": {"id": "rfd_1"}})) == ("refused", {"id": "rfd_1"})
+    assert refund_outcome(response(409, {"error": {"code": "payment_not_settled"}})) == ("refused", None)
+    assert refund_outcome(response(404)) == ("error", None)
 
 
 def test_a_double_click_as_the_pool_shuts_down_is_not_sent_and_its_payment_still_is():
@@ -483,9 +537,11 @@ def test_the_measurement_says_how_much_traffic_each_check_left_for_the_next_one(
     from klaxon.demo.under_traffic import CheckRun, _line, left_in_total
 
     at = "2026-10-13T21:00:01.000+00:00"
-    busy = CheckRun(1, at, 1.0, "passed", [], None, {}, {"provider_events": 4, "provider_charges": 3})
+    busy = CheckRun(
+        1, at, 1.0, "passed", [], None, {}, {"provider_events": 4, "provider_charges": 3, "provider_refunds": 2}
+    )
     calm = CheckRun(2, at, 0.9, "passed", [], None, {}, {"provider_events": 0, "provider_charges": 0})
-    assert _line(busy).endswith("left for the next check: 4 events, 3 charges")
+    assert _line(busy).endswith("left for the next check: 4 events, 3 charges, 2 refunds")
     assert left_in_total([busy, calm]) == (
         "Newer than their cutoffs, left for the next check: 4 provider events in all, 0 to 4 per check (2 checks)."
     )
