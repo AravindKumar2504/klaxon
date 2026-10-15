@@ -348,25 +348,60 @@ def test_noise_is_switched_on_for_the_run_and_put_back_as_it_was_found():
     stack.behavior = DEFAULT_BEHAVIOR | {"lose_ack_rate": 0.3, "seed": 11}  # someone's earlier setting
     generator = stack.generator(quiet(seconds=1.0, lose_ack_rate=0.05, lost_answer_rate=0.02, seed=9))
     generator.run()
-    assert stack.behavior_puts[0] == {"lose_ack_rate": 0.05, "fail_after_charge_rate": 0.02, "seed": 9}
+    assert stack.behavior_puts[0] == DEFAULT_BEHAVIOR | {
+        "lose_ack_rate": 0.05,
+        "fail_after_charge_rate": 0.02,
+        "seed": 9,
+    }
     assert stack.behavior == DEFAULT_BEHAVIOR | {"lose_ack_rate": 0.3, "seed": 11}
     assert generator.behavior_note == "the provider's behavior was put back as it was found"
 
 
-def test_noise_changed_by_someone_else_meanwhile_is_left_alone():
+def test_a_setting_someone_else_made_meanwhile_survives_the_noise_being_put_back():
     clock = Clock()
     stack = Stack(clock)
     generator = stack.generator(quiet(seconds=1.0, lose_ack_rate=0.05))
     original_wait = clock.wait
 
     def wait(seconds):
-        stack.behavior = DEFAULT_BEHAVIOR | {"fail_after_charge_keys": ["pmt_000003"]}  # a fault scenario's setting
+        stack.behavior = stack.behavior | {"fail_after_charge_keys": ["pmt_000003"]}  # a fault scenario's setting
         original_wait(seconds)
 
     generator._wait = wait
     generator.run()
-    assert stack.behavior["fail_after_charge_keys"] == ["pmt_000003"]
+    assert stack.behavior["fail_after_charge_keys"] == ["pmt_000003"]  # kept
+    assert stack.behavior["lose_ack_rate"] == 0.0  # and the noise put back
+    assert generator.behavior_note == "the provider's behavior was put back as it was found"
+
+
+def test_noise_settings_someone_else_changed_meanwhile_are_left_alone():
+    clock = Clock()
+    stack = Stack(clock)
+    generator = stack.generator(quiet(seconds=1.0, lose_ack_rate=0.05))
+    original_wait = clock.wait
+
+    def wait(seconds):
+        stack.behavior = stack.behavior | {"lose_ack_rate": 0.5}  # someone else's choice for the same setting
+        original_wait(seconds)
+
+    generator._wait = wait
+    generator.run()
+    assert stack.behavior["lose_ack_rate"] == 0.5
     assert "left alone" in generator.behavior_note
+
+
+def test_an_outage_injected_before_the_traffic_stays_through_it_and_after():
+    """The fault and the traffic each change only their own settings, in either order."""
+    clock = Clock()
+    stack = Stack(clock)
+    stack.behavior = DEFAULT_BEHAVIOR | {"outage_delay_seconds": 5.0}
+    seen = []
+    generator = stack.generator(quiet(seconds=1.0, lose_ack_rate=0.05, lost_answer_rate=0.02))
+    original_wait = clock.wait
+    generator._wait = lambda seconds: seen.append(stack.behavior["outage_delay_seconds"]) or original_wait(seconds)
+    generator.run()
+    assert seen and set(seen) == {5.0}  # never switched off while the traffic ran
+    assert stack.behavior == DEFAULT_BEHAVIOR | {"outage_delay_seconds": 5.0}  # noise gone, outage still there
 
 
 def test_without_noise_the_providers_behavior_is_never_touched():

@@ -72,7 +72,10 @@ def reset() -> None:
 def up(handler: str = "idempotent", confirmer: str = "by_our_id") -> None:
     """Build, start, and wait until every service reports healthy."""
     ensure_local()
-    compose("up", "--detach", "--build", "--wait", env={"LEDGER_HANDLER": handler, "CONFIRMER_HANDLER": confirmer})
+    settings = {"LEDGER_HANDLER": handler, "CONFIRMER_HANDLER": confirmer}
+    # The known-bad "retry forever" setting only ever comes from a fault (klaxon.faults), never from a stray variable.
+    settings |= {"LEDGER_BAD_EVENTS": "dead_letter", "CONFIRMER_BAD_EVENTS": "dead_letter"}
+    compose("up", "--detach", "--build", "--wait", env=settings)
 
 
 def start_container(service: str) -> None:

@@ -15,8 +15,9 @@ One seeded plan: the same seed and rate give the same customers, amounts, gaps a
 It also turns on two kinds of noise at the fake provider (seeded): acknowledgements lost on purpose,
 so some webhooks arrive twice (lose_ack_rate), and charges whose answer is lost (lost_answer_rate,
 the provider's fail_after_charge_rate). A healthy stack absorbs both: the ledger ignores the repeats,
-and the payment confirmer settles the payments whose answer was lost. When it stops, it puts the
-provider's behavior back as it found it, unless something else changed it meanwhile.
+and the payment confirmer settles the payments whose answer was lost. It changes only those settings
+and keeps the rest (a fault's outage, say); when it stops, it puts them back as it found them, unless
+something else changed them meanwhile.
 
 Open loop: customers keep arriving when the stack slows down, as real ones do. At most
 --max-in-flight requests run at once; an arrival past that is counted as shed and not sent.
@@ -276,20 +277,25 @@ class TrafficGenerator:
             return self._in_flight
 
     def _noise_on(self) -> None:
+        """Set the noise's own fields, and keep the rest of the provider's behavior (a fault's outage, say)."""
         if not (self.settings.lose_ack_rate or self.settings.lost_answer_rate):
             return  # no noise asked for: leave the provider's behavior as it is
-        self._previous_behavior = self.provider.get("/admin/behavior").raise_for_status().json()
-        self._noise = self.provider.put("/admin/behavior", json=self.settings.noise).raise_for_status().json()
+        found = self.provider.get("/admin/behavior").raise_for_status().json()
+        self._previous_behavior = {name: found.get(name) for name in self.settings.noise}
+        self.provider.put("/admin/behavior", json=found | self.settings.noise).raise_for_status()
+        self._noise = dict(self.settings.noise)
 
     def _noise_back(self) -> None:
+        """Put the noise's fields back as they were found, if they still hold the noise; never touch the rest."""
         if self._noise is None:
             return
         try:
             now = self.provider.get("/admin/behavior").raise_for_status().json()
-            if now != self._noise:
-                self.behavior_note = "something else changed the provider's behavior meanwhile, so it was left alone"
+            if any(now.get(name) != value for name, value in self._noise.items()):
+                self.behavior_note = "something else changed the noise's settings meanwhile, so they were left alone"
                 return
-            self.provider.put("/admin/behavior", json=self._previous_behavior or {}).raise_for_status()
+            back = {name: value for name, value in (self._previous_behavior or {}).items() if value is not None}
+            self.provider.put("/admin/behavior", json=now | back).raise_for_status()
             self.behavior_note = "the provider's behavior was put back as it was found"
         except httpx.HTTPError as exc:
             self.behavior_note = f"could not put the provider's behavior back: {exc}"[:300]

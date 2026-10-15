@@ -1,0 +1,155 @@
+"""The fault catalog, offline: what each fault does to the stack, and what undoes it."""
+
+import json
+
+import httpx
+import pytest
+
+from klaxon import faults
+from klaxon.faults import FAULTS, LocalStack
+
+
+class FakeStack:
+    """Records what a fault asks of the stack."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+        self.noise = {"lose_ack_rate": 0.05, "fail_after_charge_rate": 0.02, "seed": 7, "outage_delay_seconds": 0.0}
+
+    def redeploy(self, service, env):
+        self.calls.append(("redeploy", service, dict(env)))
+
+    def change_behavior(self, **changes):
+        self.calls.append(("behavior", changes))
+        self.noise |= changes
+        return self.noise
+
+    def send_malformed_event(self):
+        self.calls.append(("malformed event",))
+        return {"event_id": "evt_000042", "payment_id": "pay_000041"}
+
+
+GOOD = {"LEDGER_HANDLER": "idempotent", "LEDGER_BAD_EVENTS": "dead_letter"}
+
+
+def test_duplicate_delivery_deploys_the_naive_ledger_and_clearing_rolls_it_back():
+    s = FakeStack()
+    FAULTS["duplicate-delivery"].inject(s)
+    FAULTS["duplicate-delivery"].clear(s)
+    assert s.calls == [
+        ("redeploy", "ledger-consumer", GOOD | {"LEDGER_HANDLER": "naive"}),
+        ("redeploy", "ledger-consumer", GOOD),
+    ]
+
+
+def test_poison_message_deploys_the_retrying_ledger_first_then_sends_the_poison():
+    """In the other order the old consumer would dead-letter the poison, and nothing would stall."""
+    s = FakeStack()
+    done = FAULTS["poison-message"].inject(s)
+    FAULTS["poison-message"].clear(s)
+    assert s.calls == [
+        ("redeploy", "ledger-consumer", GOOD | {"LEDGER_BAD_EVENTS": "retry"}),
+        ("malformed event",),
+        ("redeploy", "ledger-consumer", GOOD),
+    ]
+    assert done["poison"]["event_id"] == "evt_000042"
+
+
+def test_provider_outage_starts_and_ends_without_touching_the_traffics_noise():
+    s = FakeStack()
+    FAULTS["provider-outage"].inject(s)
+    assert s.noise == {"lose_ack_rate": 0.05, "fail_after_charge_rate": 0.02, "seed": 7, "outage_delay_seconds": 5.0}
+    FAULTS["provider-outage"].clear(s)
+    assert s.noise["outage_delay_seconds"] == 0.0 and s.noise["lose_ack_rate"] == 0.05
+
+
+def test_changing_the_providers_behavior_keeps_the_rest_of_it():
+    put = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            put.append(json.loads(request.content))
+            return httpx.Response(200, json=put[-1])
+        return httpx.Response(200, json={"lose_ack_rate": 0.05, "seed": 7, "fail_after_charge_rate": 0.02})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://127.0.0.1:8081")
+    LocalStack(http=http, compose=None, ensure_local=None).change_behavior(outage_delay_seconds=5.0)
+    assert put == [{"lose_ack_rate": 0.05, "seed": 7, "fail_after_charge_rate": 0.02, "outage_delay_seconds": 5.0}]
+
+
+def test_a_redeploy_is_one_service_on_this_macs_project_only():
+    asked = []
+    checked = []
+    s = LocalStack(compose=lambda *args, env: asked.append((args, env)), ensure_local=lambda: checked.append(True))
+    s.redeploy("ledger-consumer", GOOD)
+    assert checked == [True]  # docker is checked to point at this Mac first
+    assert asked == [(("up", "--detach", "--no-deps", "--wait", "ledger-consumer"), GOOD)]
+
+
+@pytest.mark.parametrize("url", ["http://10.0.0.5:8081", "https://provider.example.com"])
+def test_faults_only_ever_go_to_this_mac(url):
+    with pytest.raises(ValueError, match="only this Mac"):
+        LocalStack(provider_url=url)
+    with pytest.raises(ValueError, match="only this Mac"):
+        LocalStack(http=httpx.Client(base_url=url))
+    assert LocalStack().http.trust_env is False  # and never through a proxy
+
+
+class NoPayments(FakeStack):
+    def send_malformed_event(self):
+        self.calls.append(("malformed event",))
+        refused = httpx.Response(409, request=httpx.Request("POST", "http://127.0.0.1:8081/admin/malformed-event"))
+        raise httpx.HTTPStatusError("409 no_payment", request=refused.request, response=refused)
+
+
+def test_a_poison_that_cannot_be_sent_rolls_its_deploy_back():
+    """Never half a fault: without a payment to name, the poison is refused, and the retrying deploy is undone."""
+    s = NoPayments()
+    with pytest.raises(httpx.HTTPStatusError):
+        FAULTS["poison-message"].inject(s)
+    assert s.calls == [
+        ("redeploy", "ledger-consumer", GOOD | {"LEDGER_BAD_EVENTS": "retry"}),
+        ("malformed event",),
+        ("redeploy", "ledger-consumer", GOOD),
+    ]
+
+
+def test_each_fault_says_what_the_money_check_should_show_in_each_phase():
+    assert {name: fault.expected_money for name, fault in FAULTS.items()} == {
+        "duplicate-delivery": {"during": "failed", "after": "failed", "quiet": "failed"},  # the damage stays
+        "poison-message": {"during": "could not run", "after": "passed", "quiet": "passed"},
+        "provider-outage": {"during": "passed", "after": "passed", "quiet": "passed"},  # nothing was charged
+    }
+
+
+def test_every_fault_names_its_cause_its_symptoms_and_its_remedy():
+    for fault in FAULTS.values():
+        assert fault.cause and fault.symptoms and fault.remedy and fault.title
+        assert fault.describe()["name"] == fault.name
+    assert set(FAULTS) == {"duplicate-delivery", "poison-message", "provider-outage"}
+    with pytest.raises(KeyError, match="the faults are"):
+        faults.get("disk-full")
+
+
+def test_the_cli_lists_every_fault(capsys):
+    assert faults.main(["list"]) == 0
+    out = capsys.readouterr().out
+    assert all(f"{name}:" in out for name in FAULTS)
+    assert "  expected: " in out and "symptom:" not in out  # what a fault should do, until a run shows it
+
+
+def test_the_stack_comes_up_with_dead_lettering_whatever_this_shells_variables_say(monkeypatch):
+    """The known-bad "retry forever" setting must only ever come from a fault, never from a stray variable."""
+    from klaxon.patient import stack
+
+    seen = []
+    monkeypatch.setenv("LEDGER_BAD_EVENTS", "retry")
+    monkeypatch.setattr(stack, "ensure_local", lambda: None)
+    monkeypatch.setattr(stack, "compose", lambda *args, env: seen.append(env))
+    stack.up("idempotent")
+    assert seen[0]["LEDGER_BAD_EVENTS"] == seen[0]["CONFIRMER_BAD_EVENTS"] == "dead_letter"
+    makefile = (stack.REPO / "Makefile").read_text()
+    assert (
+        "export LEDGER_BAD_EVENTS := dead_letter" in makefile
+        and "export CONFIRMER_BAD_EVENTS := dead_letter" in makefile
+    )

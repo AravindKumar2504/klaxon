@@ -8,6 +8,9 @@ export PATH := $(HOME)/.docker/bin:$(PATH)
 export DOCKER_CLI_HINTS := false
 export LEDGER_HANDLER := $(or $(HANDLER),idempotent)
 export CONFIRMER_HANDLER := $(or $(CONFIRMER),by_our_id)
+# The known-bad "retry forever" setting only ever comes from a fault (make fault-inject), never from a stray variable.
+export LEDGER_BAD_EVENTS := dead_letter
+export CONFIRMER_BAD_EVENTS := dead_letter
 
 # Only ever this repo's own project on this Mac: ignore variables that could point docker somewhere else.
 unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
@@ -16,7 +19,7 @@ PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer \
-	traffic check-under-traffic local-docker-only
+	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -33,7 +36,8 @@ lint: ## ruff: style and common mistakes
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
 		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py src/klaxon/demo/under_traffic.py src/klaxon/traffic.py \
 		tests/services tests/integration tests/e2e tests/test_live_check.py tests/test_payments_match_provider.py \
-		tests/test_observability_config.py tests/test_traffic.py tests/test_money_cutoff.py
+		tests/test_observability_config.py tests/test_traffic.py tests/test_money_cutoff.py tests/test_faults.py \
+		src/klaxon/faults.py src/klaxon/demo/fault_scenario.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -71,6 +75,18 @@ traffic: ## synthetic customers until Ctrl-C (RATE=2 payments/s, DURATION=second
 
 check-under-traffic: ## the money check again and again while traffic flows (CHECKS=20, RATE=5)
 	$(PY) -m klaxon.demo live-check-under-traffic --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)
+
+faults: ## the faults Klaxon will be graded on: their causes, symptoms and remedies
+	$(PY) -m klaxon.faults list
+
+fault-inject: ## inject one fault into the running stack: make fault-inject FAULT=poison-message
+	$(PY) -m klaxon.faults inject $(FAULT)
+
+fault-clear: ## remove its cause (a rollback, or the outage ending): make fault-clear FAULT=poison-message
+	$(PY) -m klaxon.faults clear $(FAULT)
+
+demo-fault: ## a fault under traffic, recorded as evidence (about 3 minutes): make demo-fault FAULT=provider-outage
+	$(PY) -m klaxon.demo live-fault --fault $(FAULT)
 
 demo-live: ## the first piece's scenario on the real stack, on fresh data: make demo-live HANDLER=naive|idempotent
 	$(MAKE) reset
