@@ -1,0 +1,946 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic (made-up customers and amounts, a simulated provider, no real money). It measures the money check Klaxon will use to verify fixes, run while traffic flows; it is not the Klaxon agent.",
+  "scenario": "live-check-under-traffic",
+  "rerun_command": "python -m klaxon.demo live-check-under-traffic --checks 20 --rate 5",
+  "ran_at_utc": "2026-10-15T04:46:23+00:00",
+  "ran_at_local": "2026-10-14T21:46:23-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "c7be9217d814445de79663b5433eced17231cf7ebc90f19e4cac176e4b458c94",
+  "stack_files_sha256": "3dc8652280a1bb0624d7183b05fb69ebbba3562b1a06b3a9b7af3c5d9221f893",
+  "git_commit": "2c020f8a52cfd1e6f50950f902d313c30d983b32",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:7e0f5977cc5674d28e2c3385105ee60d6a547377faef0c329812b15b41ce76d9"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:7e0f5977cc5674d28e2c3385105ee60d6a547377faef0c329812b15b41ce76d9"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:7e0f5977cc5674d28e2c3385105ee60d6a547377faef0c329812b15b41ce76d9"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:7e0f5977cc5674d28e2c3385105ee60d6a547377faef0c329812b15b41ce76d9"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:7e0f5977cc5674d28e2c3385105ee60d6a547377faef0c329812b15b41ce76d9"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      }
+    ]
+  },
+  "every_check_passed": true,
+  "traffic_settings": {
+    "rate": 5.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "479711c4"
+  },
+  "warmup_seconds": 5.0,
+  "counted": {
+    "passed": 20,
+    "failed": 0,
+    "could not run": 0
+  },
+  "checks": [
+    {
+      "n": 1,
+      "started_utc": "2026-10-15T04:46:02.005+00:00",
+      "seconds": 1.24,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039562,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.2,
+          "cutoff": 1792039562,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 0,
+        "provider_refunds": 1
+      }
+    },
+    {
+      "n": 2,
+      "started_utc": "2026-10-15T04:46:03.241+00:00",
+      "seconds": 0.97,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039563,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039563,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 3,
+      "started_utc": "2026-10-15T04:46:04.208+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039564,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039564,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 4,
+      "started_utc": "2026-10-15T04:46:05.211+00:00",
+      "seconds": 1.01,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039565,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039565,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 5,
+      "started_utc": "2026-10-15T04:46:06.224+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039566,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792039566,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 6,
+      "started_utc": "2026-10-15T04:46:07.228+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039567,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792039567,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 7,
+      "started_utc": "2026-10-15T04:46:08.225+00:00",
+      "seconds": 0.98,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039568,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.17,
+          "cutoff": 1792039568,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 8,
+      "started_utc": "2026-10-15T04:46:09.204+00:00",
+      "seconds": 1.01,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039569,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792039569,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 9,
+      "started_utc": "2026-10-15T04:46:10.217+00:00",
+      "seconds": 1.01,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039570,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039570,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 10,
+      "started_utc": "2026-10-15T04:46:11.225+00:00",
+      "seconds": 0.99,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039571,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039571,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 11,
+      "started_utc": "2026-10-15T04:46:12.218+00:00",
+      "seconds": 1.0,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039572,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039572,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 12,
+      "started_utc": "2026-10-15T04:46:13.220+00:00",
+      "seconds": 1.02,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039573,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.19,
+          "cutoff": 1792039573,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 13,
+      "started_utc": "2026-10-15T04:46:14.242+00:00",
+      "seconds": 1.23,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039574,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.43,
+          "cutoff": 1792039574,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 14,
+      "started_utc": "2026-10-15T04:46:15.467+00:00",
+      "seconds": 0.76,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039575,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039575,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 15,
+      "started_utc": "2026-10-15T04:46:16.227+00:00",
+      "seconds": 0.99,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039576,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039576,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 16,
+      "started_utc": "2026-10-15T04:46:17.219+00:00",
+      "seconds": 1.02,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039577,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.2,
+          "cutoff": 1792039577,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 0,
+        "provider_charges": 0,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 17,
+      "started_utc": "2026-10-15T04:46:18.243+00:00",
+      "seconds": 0.98,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039578,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039578,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 18,
+      "started_utc": "2026-10-15T04:46:19.219+00:00",
+      "seconds": 1.01,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039579,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039579,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 1,
+        "provider_charges": 1,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 19,
+      "started_utc": "2026-10-15T04:46:20.229+00:00",
+      "seconds": 1.25,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039580,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.44,
+          "cutoff": 1792039580,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 2,
+        "provider_refunds": 0
+      }
+    },
+    {
+      "n": 20,
+      "started_utc": "2026-10-15T04:46:21.480+00:00",
+      "seconds": 0.74,
+      "outcome": "passed",
+      "failed": [],
+      "error": null,
+      "details": {
+        "cutoff": 1792039581,
+        "settling": {
+          "settled": true,
+          "waited_seconds": 0.18,
+          "cutoff": 1792039581,
+          "pending_deliveries": 0,
+          "behind": {
+            "ledger": 0,
+            "payment-confirmer": 0
+          },
+          "behind_by_partition": {
+            "ledger": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            },
+            "payment-confirmer": {
+              "0": 0,
+              "1": 0,
+              "2": 0
+            }
+          }
+        }
+      },
+      "left_for_next_check": {
+        "provider_events": 2,
+        "provider_charges": 1,
+        "provider_refunds": 1
+      }
+    }
+  ],
+  "quiet_check": {
+    "n": 0,
+    "started_utc": "2026-10-15T04:46:22.225+00:00",
+    "seconds": 1.02,
+    "outcome": "passed",
+    "failed": [],
+    "error": null,
+    "details": {
+      "cutoff": 1792039582,
+      "settling": {
+        "settled": true,
+        "waited_seconds": 0.19,
+        "cutoff": 1792039582,
+        "pending_deliveries": 0,
+        "behind": {
+          "ledger": 0,
+          "payment-confirmer": 0
+        },
+        "behind_by_partition": {
+          "ledger": {
+            "0": 0,
+            "1": 0,
+            "2": 0
+          },
+          "payment-confirmer": {
+            "0": 0,
+            "1": 0,
+            "2": 0
+          }
+        }
+      }
+    },
+    "left_for_next_check": {
+      "provider_events": 0,
+      "provider_charges": 0,
+      "provider_refunds": 0
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.ran_first": 2,
+      "double_clicks.sent": 2,
+      "not_sent.refunds": 6,
+      "payments.arrived": 117,
+      "payments.succeeded": 117,
+      "refunds.succeeded": 6,
+      "retries": 4,
+      "retries.after_409": 2,
+      "retries.after_503": 2
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "printed_output": [
+    "Klaxon week 2: the money check, run while synthetic traffic flows",
+    "REAL RUN on this Mac's Docker Compose stack. Traffic run 479711c4, seed 7: 5 payments per second, provider noise lose_ack_rate 0.05, lost_answer_rate 0.02.",
+    "Synthetic data, simulated provider, no real money. It measures the money check; it is not the agent.",
+    "",
+    "Checks while the traffic flows (after 5 s of warm-up)",
+    "  #1   04:46:02  PASSED         1.24 s  left for the next check: 1 events, 0 charges, 1 refunds",
+    "  #2   04:46:03  PASSED         0.97 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #3   04:46:04  PASSED         1.00 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #4   04:46:05  PASSED         1.01 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "  #5   04:46:06  PASSED         1.00 s  left for the next check: 2 events, 2 charges, 0 refunds",
+    "  #6   04:46:07  PASSED         1.00 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #7   04:46:08  PASSED         0.98 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "  #8   04:46:09  PASSED         1.01 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #9   04:46:10  PASSED         1.01 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #10  04:46:11  PASSED         0.99 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "  #11  04:46:12  PASSED         1.00 s  left for the next check: 2 events, 2 charges, 0 refunds",
+    "  #12  04:46:13  PASSED         1.02 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #13  04:46:14  PASSED         1.23 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #14  04:46:15  PASSED         0.76 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "  #15  04:46:16  PASSED         0.99 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "  #16  04:46:17  PASSED         1.02 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "  #17  04:46:18  PASSED         0.98 s  left for the next check: 2 events, 2 charges, 0 refunds",
+    "  #18  04:46:19  PASSED         1.01 s  left for the next check: 1 events, 1 charges, 0 refunds",
+    "  #19  04:46:20  PASSED         1.25 s  left for the next check: 2 events, 2 charges, 0 refunds",
+    "  #20  04:46:21  PASSED         0.74 s  left for the next check: 2 events, 1 charges, 1 refunds",
+    "",
+    "The traffic generator",
+    "  payments  117 answered: 117 succeeded, 0 refused, 0 outcome unknown (0 confirmed later, 0 still pending), 0 unexpected",
+    "  refunds   6 answered: 6 succeeded, 0 refused, 0 outcome unknown (0 confirmed later, 0 still pending), 0 unexpected",
+    "  double clicks 2: 0 told \"still running\", 0 given the saved answer, 2 ran first",
+    "  retries 4 (after 409: 2, after 503: 2), shed 0, generator errors 0; not sent because the run ended: 6 refunds, 0 status checks, 0 double clicks",
+    "  the provider's behavior was put back as it was found",
+    "",
+    "One more check, after the traffic stopped",
+    "  #0   04:46:22  PASSED         1.02 s  left for the next check: 0 events, 0 charges, 0 refunds",
+    "",
+    "Under traffic: 20 checks, 20 passed, 0 failed, 0 could not run. Quiet stack: passed.",
+    "Newer than their cutoffs, left for the next check: 19 provider events in all, 0 to 2 per check (20 checks).",
+    "RESULT: every check passed"
+  ]
+}
