@@ -131,9 +131,9 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 1. ~~Payment confirmation~~ Done and merged (above).
 2. ~~OpenTelemetry~~ Done and merged (above).
-3. ~~A traffic generator~~ Done, with the money check's cutoff, and merged (above). For item 4: a fault scenario that sets the provider's behavior while the generator runs replaces the generator's noise (PUT replaces the whole behavior); the generator then leaves the scenario's setting alone when it stops.
+3. ~~A traffic generator~~ Done, with the money check's cutoff, and merged (above). Since item 4's review, the generator and a fault each change only their own settings at the provider, in either order.
 4. ~~The first 3 faults~~ Done and merged (above).
-5. ~~Update STATUS, DECISIONS and STUDY-NOTES~~ Done for items 1 to 4.
+5. ~~Update STATUS, DECISIONS and STUDY-NOTES~~ Done (2026-10-14): each item's notes, a one-page week 2 summary in STUDY-NOTES, and PLAN.md's fault list brought in line with Aravind's decisions.
 6. Later (Aravind, 2026-10-12): confirm refunds the same way (known gap 1); suggested after the first 3 faults.
 
 Then week 3 (PLAN: Oct 27-Nov 2): an MCP server with read-only ops tools (metrics, logs, traces, recent deploys, the money check with and without waiting), Klaxon's first loop diagnosing faults 1-3, and a trace recorder.

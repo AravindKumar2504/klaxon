@@ -9,7 +9,7 @@ Klaxon is an AI on-call engineer for a payments system. When an alert fires, it 
 ## Concepts to own (by milestone)
 
 - **First piece:** at-least-once delivery (why providers send duplicates), idempotency keys, double-entry ledgers, why a dashboard can be green while money is wrong, HMAC signature verification.
-- **Week 1-2:** Kafka topics, partitions, consumer groups and offsets; Redis as an idempotency store; Docker Compose networking; OpenTelemetry traces, metrics and logs; what Grafana shows.
+- **Week 1-2:** Kafka topics, partitions, consumer groups and offsets; Redis as an idempotency store; Docker Compose networking; OpenTelemetry traces, metrics and logs; what Grafana shows; reconciling to a cutoff; poison messages and dead letters; circuit breakers and cascading failures; injecting faults with known causes.
 - **Week 3-4:** the agent loop (goal, state, action, observation, stop); the MCP protocol (JSON-RPC, tools, schemas); prompt contracts (validated output formats); approval gates; rollback; verification.
 - **Week 5-6:** evaluation design (known-cause faults, seeds, held-out cases, graders, cost); Kubernetes basics (pods, deployments, rollouts, `kubectl rollout undo`); LangGraph state, nodes, interrupts.
 - **Week 7-9:** multi-agent handoffs and their failure modes; prompt injection through logs; budgets and stop conditions; CI.
@@ -272,3 +272,24 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 - *Why does the confirmer dead-letter the poison but the ledger does not?* Each consumer group has its own policy; only the ledger got the bad deploy. Two groups reading the same topic can fail independently.
 - *What does the money check say during the poison fault?* It cannot settle, so it exits 2 ("not settled"). Run without waiting, it shows the events behind the poison as lost: that is the money's state at that moment, not a final verdict.
 - *Why does the money check pass during the outage?* No money moved: a payment that was never charged is fine to leave pending.
+
+## Week 2 in one page (2026-10-14)
+
+**What week 2 added, in order, and why each needed the one before.**
+1. *Payments confirmed by webhooks* (item 1). A payment whose answer was lost no longer stays pending forever, and a fourth money-check invariant compares our payments with the provider's. Without it, the money check could not see a charged payment we never recorded.
+2. *Traces, metrics and logs in Grafana* (item 2). The signals Klaxon will read to investigate. A trace follows one webhook through Kafka to both consumers; metrics count and time what happens; every log line carries its trace id.
+3. *Traffic, and a money check that works while it flows* (item 3). A system with customers never goes quiet, so the check now reconciles to a cutoff, like a bank statement: 19 of 100 checks failed falsely before, 0 of 100 after.
+4. *Three faults with known causes* (item 4). The incidents Klaxon will be graded on.
+
+**The three faults look different, which is the point.** An agent that only reads dashboards solves one of them.
+
+| Fault | Dashboards | Health | Money check |
+|---|---|---|---|
+| A deploy without dedupe | green | healthy | fails: counted twice |
+| A poison message | the ledger's lag climbs, retries, dead letters | the ledger turns unhealthy | cannot settle |
+| A provider outage | 503s, 10 s latency, timeouts | the API turns unhealthy | passes: no money moved |
+
+**The ideas to be able to explain** (each has its own section above): at-least-once delivery and idempotency; a consistent cut across two systems (read ours first, then the provider's); head-of-line blocking; dead-letter queues; cascading failure and circuit breakers; why clearing a cause is not repairing the damage; and test that a metric shows the failure it is meant to show.
+
+**What comes next.** Week 3 gives Klaxon read-only tools over exactly these signals (metrics, logs, traces, recent deploys, and the money check with and without waiting), and a first loop that tries to name each fault's cause.
+

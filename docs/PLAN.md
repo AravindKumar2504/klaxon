@@ -11,9 +11,9 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
    - Instrumented with OpenTelemetry, viewed in Grafana (via `grafana/otel-lgtm`).
    - Runs in Docker Compose first, then Kubernetes (kind).
 2. **A fault injector:** a library of realistic incidents, each with a known root cause, so Klaxon can be graded. Planned incident types (each is a bug class Aravind has seen in real code review):
-   - duplicate webhook delivery with idempotency broken (Redis down) -> double charge
-   - poison message stalls a Kafka consumer -> payments stuck pending
-   - payment provider outage with no circuit breaker -> cascading timeouts
+   - duplicate webhook delivery with idempotency broken: a ledger deploy without its dedupe -> payments counted twice in the books (built in week 2; first planned as "Redis down -> double charge", which our design prevents; see DECISIONS, 2026-10-14)
+   - poison message stalls the ledger consumer (a deploy that retries it forever) -> the books stop, the money check cannot settle (built in week 2)
+   - payment provider outage with no circuit breaker -> cascading timeouts (built in week 2; the breaker is its fix, week 4)
    - bad deploy with a 100x money-unit bug (cents vs dollars)
    - HMAC secret rotation mismatch -> webhooks rejected, payments never confirmed
    - database connection pool exhaustion -> latency spike and errors
