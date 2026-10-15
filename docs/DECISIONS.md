@@ -135,3 +135,9 @@ Built on the branch `week-2-traffic-generator`, from `main`. Aravind reviews it 
   5. *The "this Mac only" rule could be bypassed by proxy settings:* httpx sends 127.0.0.1 requests through `HTTP_PROXY`, `ALL_PROXY` or the system's proxy unless told not to. Every client of the generator, the check, the demos and the end-to-end tests now has `trust_env=False`, and a client passed to the generator must aim at this Mac too.
   6. *Settling could overrun its deadline by one round of slow reads,* and the wait for the cutoff's second had no limit. Both are bounded now (a clock that goes back or stops is refused).
   7. *A docstring said two things are judged whatever the cutoff; the code judges four* (also a payment we call succeeded with no charge, and one linked to a charge the provider gives to another payment). Corrected.
+
+## 2026-10-14 (Aravind's review of week 2, item 3)
+
+- **His run is committed as evidence** (Claude, as for the earlier items): `evidence/week2/2026-10-15T003540Z_live-check-under-traffic_rate5_seed7.json`, at commit `766ff90` with clean code and stack. He also ran `make test` (390 passed) and `make up`. 20 of 20 checks passed under traffic, and the quiet check too.
+- **Week 2, item 3 merged into `main`** (Aravind, 2026-10-14): after reading the study notes, `checks/live.py` and `traffic.py`, he accepted it, and `week-2-traffic-generator` was fast-forwarded into `main`, on his Mac only; nothing is pushed. The branch is kept, like the others.
+

@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-13 (evening). Week 2, item 3 (a traffic generator, and the money check working to a cutoff, which closes known gap 3) is built on the branch `week-2-traffic-generator`. It is not merged and not pushed; it waits for Aravind's review. Items 1 (payment confirmation) and 2 (OpenTelemetry) are done, merged into `main` and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license; item 2 pushed 2026-10-13). Next: week 2, items 4-6.
+Last updated: 2026-10-14. Week 2, item 3 (a traffic generator, and the money check working to a cutoff, which closes known gap 3) is done: Aravind reviewed it on 2026-10-14 (his own runs passed) and it was fast-forwarded into `main`. It is not pushed yet. Items 1 (payment confirmation) and 2 (OpenTelemetry) are done, merged and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license; item 2 pushed 2026-10-13). Next: week 2, items 4-6.
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -8,7 +8,9 @@ The week 1 commit IDs quoted below were written before the one-time history rewr
 
 ### Week 2, item 3: synthetic traffic, and a money check that stays right while it flows (2026-10-13)
 
-Built on the branch `week-2-traffic-generator`, from `main`: `1300fef` (the generator and the measurement), `c6a94db` (the cutoff, with the review's fixes), `8195074` (the "before" evidence), `6c3b708` (the first "after" evidence), `4162abf` (the measurement also counts what each check left for the next one), then the second "after" evidence and these docs. Not merged, not pushed. Gap 3 was settled with Aravind first: he chose the cutoff (`DECISIONS.md`, 2026-10-13).
+Built on the branch `week-2-traffic-generator`, from `main`: `1300fef` (the generator and the measurement), `c6a94db` (the cutoff, with the review's fixes), `8195074` (the "before" evidence), `6c3b708` (the first "after" evidence), `4162abf` (the measurement also counts what each check left for the next one), then the second "after" evidence and these docs. Aravind reviewed it on 2026-10-14 and it was fast-forwarded into `main`; not pushed yet. Gap 3 was settled with Aravind first: he chose the cutoff (`DECISIONS.md`, 2026-10-13).
+
+- **Aravind's review, 2026-10-14:** on the branch at `766ff90`, he ran `make test` (390 passed, 2.56 s), `make up` (all containers healthy) and `make check-under-traffic CHECKS=20` himself: 20 of 20 checks passed under traffic at 5 payments per second, and the quiet check after them too; the checks left 22 newer provider events for the next check (0 to 4 per check). His evidence: `evidence/week2/2026-10-15T003540Z_...` (clean code and stack). He read the study notes, `checks/live.py` and `traffic.py`, and accepted the item.
 
 - **The traffic generator** (`src/klaxon/traffic.py`, `make traffic`): synthetic customers on this Mac, talking to the stack from outside. Seeded payments at a steady random rate (2 per second by default), 2% double clicks, 10% refunds, retries with the same key, status checks when the outcome stays unknown, and provider noise (5% of acknowledgements lost, 2% of answers lost) that it puts back afterwards. Open loop; past 64 requests in flight, arrivals are shed. It refuses any address but this Mac, and ignores proxy settings.
 - **The measurement** (`make check-under-traffic`, `src/klaxon/demo/under_traffic.py`): the live money check, again and again while the traffic flows, then once more on the quiet stack, saved as evidence.
@@ -97,7 +99,7 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. **Review week 2, item 3 on `week-2-traffic-generator`** (about 30 minutes). Run `make test`, then with the stack up (`make up`): `make check-under-traffic CHECKS=20` (every check should pass), and `make traffic DURATION=60` in one Terminal window with `make check` in another. Read "Week 2, item 3" in `docs/STUDY-NOTES.md`, then `src/klaxon/checks/live.py` (the cutoff) and `src/klaxon/traffic.py`. Then decide: merge into `main`? Push? Optional: the retries and dead-letter panels could show 0 instead of "No data" (a one-line change each; default: leave it).
+1. **Push week 2, item 3 to GitHub?** `main` is ahead of `origin/main` by the item's commits; nothing is pushed until you say so. Optional: the retries and dead-letter panels could show 0 instead of "No data" (a one-line change each; default: leave it).
 2. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
 3. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
 4. Optional, from before: `docker` is missing from the PATH of shells that started before Docker was installed (a new Terminal window works, or add `export PATH="$HOME/.docker/bin:$PATH"` to `~/.zshrc`; the Makefile works either way; open Docker Desktop before `make up`). Keep the name Klaxon? (default yes.) A few dollars of Anthropic API credit later for the HolmesGPT comparison?
@@ -106,7 +108,7 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 1. ~~Payment confirmation~~ Done and merged (above).
 2. ~~OpenTelemetry~~ Done and merged (above).
-3. ~~A traffic generator~~ Built, with the money check's cutoff (above); waiting for Aravind's review. For item 4: a fault scenario that sets the provider's behavior while the generator runs replaces the generator's noise (PUT replaces the whole behavior); the generator then leaves the scenario's setting alone when it stops.
+3. ~~A traffic generator~~ Done, with the money check's cutoff, and merged (above). For item 4: a fault scenario that sets the provider's behavior while the generator runs replaces the generator's noise (PUT replaces the whole behavior); the generator then leaves the scenario's setting alone when it stops.
 4. The first 3 faults with known causes, injected on purpose: duplicate delivery with idempotency broken, a poison message stalling a consumer (the default consumers dead-letter poison messages, so this will be a known-bad consumer variant, like `LEDGER_HANDLER=naive`), and a provider outage without a circuit breaker. The lost-answer scenario (`klaxon.demo.lost_answer`) already runs on any clean stack, so with `CONFIRMER=by_provider_id` it is a ready-made "payments stuck pending" fault.
 5. Update STATUS, DECISIONS and STUDY-NOTES at the end (week 2 concepts: OpenTelemetry traces, metrics and logs; what Grafana shows).
 6. Later (Aravind, 2026-10-12): confirm refunds the same way (known gap 1); suggested after the first 3 faults.
