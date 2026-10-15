@@ -25,6 +25,7 @@ client -> payments API -> fake provider (charges; keeps its own books)
 - `src/klaxon/patient/services/`: the five services. The **payments API** (FastAPI) keeps a retried request from charging twice: Redis claims the `Idempotency-Key`, PostgreSQL has it UNIQUE, and the provider gets our payment id as its own key. The **fake provider** keeps its own SQLite books and sends HMAC-signed webhooks at least once, with retries; it can lose acknowledgements on purpose to cause duplicates, or save a charge and answer 500 so we never hear about it. The **webhook receiver** checks the signature and answers 200 only after Kafka has the event. Two Kafka consumer groups read it: the **ledger consumer** books each event in a double-entry ledger in the same transaction as its dedupe row, then commits its offset; the **payment confirmer** (week 2) marks a payment succeeded from the provider's webhook when the API never heard the provider's answer. They share one loop (`consumer.py`).
 - `compose.yaml`, `docker/`: official images only (`postgres:18.6-alpine`, `redis:8.8.3-alpine`, `apache/kafka:4.3.1` in KRaft mode, `python:3.12.15-slim`). Every port listens on 127.0.0.1. One database role per service, each with only what it needs.
 - `src/klaxon/checks/live.py`: the money check against the running stack. It compares the ledger and our payments table with the provider's own records, up to a cutoff: the second the check starts in. It waits until everything up to the cutoff is handled, and leaves newer records for the next check, so it stays right while traffic keeps flowing (week 2).
+- `src/klaxon/faults.py` (week 2): the first three faults Klaxon will be graded on, each with a known cause: a ledger deploy without its dedupe (payments counted twice, dashboard green), a poison message that stops a retrying ledger consumer, and a provider outage with no circuit breaker. Each can be injected and cleared on this Mac's stack, and each says what the money check should show.
 - `src/klaxon/traffic.py` (week 2): synthetic customers. Seeded payments at a steady random rate, some double clicks and refunds, retries with the same key, and a little provider noise (lost acknowledgements, lost answers) that a healthy stack absorbs. It only sends to this Mac.
 
 ### Observability: traces, metrics and logs (week 2)
@@ -65,10 +66,13 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling week 2, `make reset` once: it adds a database role) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about two minutes) |
-| `make mutants` | breaks the code on purpose 128 ways, on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 157 ways, on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make traffic` | synthetic customers until Ctrl-C (`RATE=2` payments per second, `DURATION=` seconds, `SEED=7`) |
 | `make check-under-traffic` | the money check again and again while traffic flows (`CHECKS=20`, `RATE=5`); writes evidence to `evidence/week2/` |
+| `make faults` | the faults, their causes, their expected symptoms and their remedies |
+| `make fault-inject FAULT=...` / `make fault-clear FAULT=...` | cause one fault on the running stack / remove its cause (a rollback, or the outage ending) |
+| `make demo-fault FAULT=...` | one fault under traffic, about 3 minutes: what it looked like, saved to `evidence/week2/` |
 | Grafana | http://127.0.0.1:3000 while the stack runs (sign-in: the image's defaults, in `compose.yaml`); dashboard "Klaxon patient" |
 | `make demo-live HANDLER=naive` | the first piece's scenario through the real stack, with the known-bad consumer; writes evidence to `evidence/week1/` |
 | `make demo-live HANDLER=idempotent` | the same with the correct consumer |
@@ -89,7 +93,9 @@ The same scenario through the live stack (2026-10-09, commit `408670a`, an ID fr
 
 A lost provider answer through the live stack (2026-10-11, commit `0babb86`, on the week 2 branch; files in `evidence/week2/`): the fake provider saved payment 3's charge ($69.68) and answered 500 to every retry, so our API had to leave it pending. With the known-bad confirmer, it stayed pending and its refund was refused, while the webhook dashboard stayed GREEN and the ledger balanced and matched the provider; only the fourth invariant FAILED. With the payment confirmer, the webhook confirmed it, the refund went through, and all four invariants passed.
 
-The money check while synthetic traffic flows (2026-10-13, `make check-under-traffic CHECKS=100 RATE=5`, 5 payments per second; files in `evidence/week2/`): before the check had a cutoff, 19 of 100 checks failed on a healthy stack, because a payment landing between the check's reads looked like lost money. With the cutoff, 100 of 100 passed, twice, while most checks had newer payments still landing past their cutoff. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
+The money check while synthetic traffic flows (2026-10-13, `make check-under-traffic CHECKS=100 RATE=5`, 5 payments per second; files in `evidence/week2/`): before the check had a cutoff, 19 of 100 checks failed on a healthy stack, because a payment landing between the check's reads looked like lost money. With the cutoff, 100 of 100 passed, twice, while most checks had newer payments still landing past their cutoff.
+
+The first three faults, each injected once under traffic (2026-10-14, `make demo-fault`; files in `evidence/week2/`): a ledger deploy without its dedupe left every dashboard green while the money check found 8 events counted twice; a poison message stopped the retrying ledger on all three partitions until a rollback dead-lettered it; a provider outage pushed the payments API's latency to 10 s and made it unhealthy, while the money check showed no money wrong. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
 - Current status: [docs/STATUS.md](docs/STATUS.md)
