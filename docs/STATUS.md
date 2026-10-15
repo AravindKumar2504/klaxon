@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-14 (late night). Week 2 is done, refunds included. Item 6 (refunds confirmed from webhooks, known gap 1; Aravind chose on 2026-10-14 to do it now) is built on the branch `week-2-refund-confirmation`: not merged, not pushed, waiting for Aravind's review. Items 1 to 4 (payment confirmation, OpenTelemetry, the traffic generator with the money check's cutoff, the first three faults) are reviewed, merged and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). `main` also has one local commit, item 5's docs (`a433044`), not pushed yet. Next: Aravind's review of item 6, then week 3 (the MCP server and Klaxon's first loop).
+Last updated: 2026-10-14 (late night), after Aravind's review runs. Week 2 is done, refunds included. Item 6 (refunds confirmed from webhooks, known gap 1; Aravind chose on 2026-10-14 to do it now) is built on the branch `week-2-refund-confirmation`; Aravind ran it himself on 2026-10-14, and it waits for his reading and merge decision. Not merged, not pushed. Items 1 to 4 (payment confirmation, OpenTelemetry, the traffic generator with the money check's cutoff, the first three faults) are reviewed, merged and on GitHub (public: https://github.com/AravindKumar2504/klaxon, `main` only, no license). `main` also has one local commit, item 5's docs (`a433044`), not pushed yet. Next: Aravind's reading of item 6 and his merge decision, then week 3 (the MCP server and Klaxon's first loop).
 
 The week 1 commit IDs quoted below were written before the one-time history rewrite of 2026-10-11; `docs/HISTORY.md` maps each one to its current ID.
 
@@ -27,6 +27,7 @@ Built on the branch `week-2-refund-confirmation`, from `main` at `a433044`: `4c3
   - `make mutants` (stack up): 198 of 198 deliberate breaks caught, 660 s. 41 are new, and one replaces an older one: the fifth invariant, the refund ids' round trip, the confirmer's refund UPDATE and grants, the traffic's refunds, the review's fixes, and the startup check while the database is down.
 - **Independent review:** a separate Claude review, read-only, found nothing serious: no way to mark a refund succeeded that the provider did not make, overwrite a final status, change an amount, link a refund to the wrong provider refund or payment, refund twice, or crash-loop the confirmer on a good event; and no false pass or false alarm in the fifth invariant. Its six smaller findings (`DECISIONS.md`) were fixed before the measurements above, except one: Aravind chose on 2026-10-14 to fix it in week 4 (known gap 1, below).
 - The first piece still reproduces: both `python -m klaxon.demo duplicate-webhook` runs print exactly their saved evidence (checked 2026-10-14 after the last `src/klaxon` change).
+- **Aravind's runs, 2026-10-14:** on the branch at `1b2178c`, after `make reset`, he ran `make up` (all 9 containers healthy), `make test` (485 passed), `make demo-lost-refund CONFIRMER=by_provider_id` (failed as designed: only `refunds_match_provider`) and `make demo-lost-refund CONFIRMER=by_our_id` (passed, all five invariants) himself. His two demo runs are in `evidence/week2/` (`2026-10-15T054809Z_...by_provider_id...` and `2026-10-15T054921Z_...by_our_id...`), with clean code and stack and the same results as Claude's runs.
 
 ### Week 2, item 4: the first three faults, injected on purpose (2026-10-14)
 
@@ -145,7 +146,7 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 
 ## Needs Aravind
 
-1. **Review week 2, item 6** (refund confirmation): on the branch `week-2-refund-confirmation`, after `make reset`, run `make up`, `make test`, `make demo-lost-refund CONFIRMER=by_provider_id` (fails as designed: only `refunds_match_provider`) and `make demo-lost-refund CONFIRMER=by_our_id` (passes), then read the item 6 study notes, `_confirm_refund` and `require_grants` (the startup check) in `payment_confirmer.py`, and `_refunds_match_provider` in `money.py`. Merging and pushing wait for your word.
+1. **Finish the review of week 2, item 6** (refund confirmation), on the branch `week-2-refund-confirmation`. The runs are done (2026-10-14, above). Still to do: read the item 6 study notes, `_confirm_refund` and `require_grants` (the startup check) in `payment_confirmer.py`, and `_refunds_match_provider` in `money.py`. Merging and pushing wait for your word.
 2. **Push `main`'s local docs commit** (`a433044`, item 5)? It is one commit ahead of GitHub. Default: push it with item 6, once you merge that.
 3. Before the course demos, the week 2 OpenTelemetry reading: "What my Grafana review found" in `docs/STUDY-NOTES.md`, then `src/klaxon/patient/services/telemetry.py`. Grafana now asks you to sign in (the defaults in `compose.yaml`; it offers a password change, which can be skipped).
 4. Before the course demos, if not done yet: the week 2 payment-confirmation reading (`STUDY-NOTES.md`, `payment_confirmer.py`, `consumer.py`, `_payments_match_provider` in `money.py`).
@@ -158,7 +159,7 @@ Aravind's decision of 2026-10-11, built as he decided it, on the branch `week-2-
 3. ~~A traffic generator~~ Done, with the money check's cutoff, and merged (above). Since item 4's review, the generator and a fault each change only their own settings at the provider, in either order.
 4. ~~The first 3 faults~~ Done and merged (above).
 5. ~~Update STATUS, DECISIONS and STUDY-NOTES~~ Done (2026-10-14): each item's notes, a one-page week 2 summary in STUDY-NOTES, and PLAN.md's fault list brought in line with Aravind's decisions.
-6. ~~Confirm refunds the same way (known gap 1)~~ Built (2026-10-14, above); waiting for Aravind's review.
+6. ~~Confirm refunds the same way (known gap 1)~~ Built (2026-10-14, above); Aravind ran it the same day; waiting for his reading and merge decision.
 
 Then week 3 (PLAN: Oct 27-Nov 2): an MCP server with read-only ops tools (metrics, logs, traces, recent deploys, the money check with and without waiting), Klaxon's first loop diagnosing faults 1-3, and a trace recorder.
 
