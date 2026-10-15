@@ -24,12 +24,20 @@ What happens to each message:
   until it works. A money event is never skipped because something on our
   side is broken; the growing lag is what an alert watches.
 
+A known-bad baseline for the poison-message fault (week 2): BAD_EVENTS=retry
+makes a consumer retry a message it can never use, forever, instead of
+dead-lettering it. One consumer reads all its partitions in one loop, so it
+then books nothing at all (head-of-line blocking). The default is
+BAD_EVENTS=dead_letter.
+
 Telemetry (week 2): each attempt at a message gets its own span, which
 continues the trace the webhook receiver put in the message's headers, so the
 work shows up under the webhook that brought it. A failed attempt's span ends
 at once, marked as an error, so a consumer retrying for an hour shows every
 failure as it happens. Counters: klaxon.consumer.events (by outcome, dead
 letters included), klaxon.consumer.retries and klaxon.consumer.dead_letters.
+The last two start at 0 for each consumer, so a dashboard shows a real 0
+rather than "No data", and goes blank only if the metrics themselves stop.
 """
 
 from __future__ import annotations
@@ -69,6 +77,10 @@ DEAD_LETTERS = meter.create_counter(
 )
 
 RETRY_DELAYS_SECONDS = (0.5, 1.0, 2.0, 4.0, 8.0, 15.0)
+# What to do with a message that can never be applied: dead-letter it (the default), or the known-bad
+# baseline, retry it forever.
+BAD_EVENT_POLICIES = ("dead_letter", "retry")
+DEAD_LETTER_REASONS = ("bad_event", "refused_values")
 # The database refuses these values; retrying the same message cannot change that.
 REFUSED_VALUES = (psycopg.DataError, psycopg.IntegrityError, psycopg.errors.ProgramLimitExceeded, UnicodeError)
 
@@ -94,7 +106,11 @@ class EventConsumer:
         dlq_topic: str = DLQ_TOPIC,
         heartbeat: Heartbeat | None = None,
         retry_delays: tuple[float, ...] = RETRY_DELAYS_SECONDS,
+        bad_events: str = "dead_letter",
     ) -> None:
+        if bad_events not in BAD_EVENT_POLICIES:
+            raise ValueError(f"unknown bad-event policy {bad_events!r}; expected one of {BAD_EVENT_POLICIES}")
+        self.bad_events = bad_events
         self.consumer = consumer
         self.apply = apply
         self.dead_letters = dead_letters
@@ -105,6 +121,9 @@ class EventConsumer:
         self.retry_delays = retry_delays
 
     def run(self, stop: threading.Event) -> None:
+        RETRIES.add(0, {"consumer": self.name})  # every series starts at 0: "no retries", not "no data"
+        for reason in DEAD_LETTER_REASONS:
+            DEAD_LETTERS.add(0, {"consumer": self.name, "reason": reason})
         while not stop.is_set():
             self.heartbeat.beat()
             msg = self.consumer.poll(1.0)
@@ -149,10 +168,11 @@ class EventConsumer:
         try:
             event = parse_event(msg.value())
         except BadEvent as exc:
+            reason = f"cannot {self.verb} this event: {exc}"
+            if self.bad_events == "retry":
+                return self._retry_forever(msg, parent, source, reason, stop)
             with self._attempt(msg, parent) as span:
-                return _finish(
-                    span, self._dead_letter(msg, source, f"cannot {self.verb} this event: {exc}", "bad_event", stop)
-                )
+                return _finish(span, self._dead_letter(msg, source, reason, "bad_event", stop))
 
         attempt = 0
         while True:
@@ -161,7 +181,11 @@ class EventConsumer:
                     outcome = self.apply(event, source)
                 except REFUSED_VALUES as exc:
                     reason = f"database refused the values: {type(exc).__name__}: {exc}"
-                    return _finish(span, self._dead_letter(msg, source, reason, "refused_values", stop))
+                    if self.bad_events == "dead_letter":
+                        return _finish(span, self._dead_letter(msg, source, reason, "refused_values", stop))
+                    error = reason  # the known-bad baseline: retried like an outage, forever
+                    span.set_status(StatusCode.ERROR, capped(error))
+                    span.set_attribute("klaxon.outcome", "will_retry")
                 except Exception as exc:  # down, permissions, schema, a bug: ours to fix, so wait and retry
                     error = f"{type(exc).__name__}: {exc}"
                     span.set_status(StatusCode.ERROR, capped(error))
@@ -193,6 +217,29 @@ class EventConsumer:
                 attempt=attempt,
                 retry_in_seconds=delay,
                 error=error,
+            )
+            if stop.wait(delay):
+                return None  # shutting down: leave it uncommitted, it will be read again
+
+    def _retry_forever(self, msg: Any, parent: Context, source: str, reason: str, stop: threading.Event) -> None:
+        """The known-bad baseline for a message no retry can fix: try it again, forever. Nothing behind it moves."""
+        attempt = 0
+        while True:
+            with self._attempt(msg, parent) as span:
+                span.set_status(StatusCode.ERROR, capped(reason))
+                span.set_attribute("klaxon.outcome", "will_retry")
+            delay = self.retry_delays[min(attempt, len(self.retry_delays) - 1)]
+            attempt += 1
+            RETRIES.add(1, {"consumer": self.name})
+            log(
+                logger,
+                logging.ERROR if attempt >= 3 else logging.WARNING,
+                f"could not {self.verb}; will retry the same message",
+                consumer=self.name,
+                source=source,
+                attempt=attempt,
+                retry_in_seconds=delay,
+                error=reason,
             )
             if stop.wait(delay):
                 return None  # shutting down: leave it uncommitted, it will be read again
@@ -254,6 +301,8 @@ def serve(apply: Apply, *, group: str, verb: str, heartbeat_path: str) -> None:
     bootstrap = env_str("KAFKA_BOOTSTRAP", "kafka:9092")
     topic = env_str("KAFKA_TOPIC", EVENTS_TOPIC)
     group = env_str("KAFKA_GROUP", group)
+    bad_events = env_str("BAD_EVENTS", "dead_letter")
+    log(logger, logging.INFO, "consumer settings", consumer=group, bad_events=bad_events)
     consumer = make_consumer(bootstrap, group, client_id=f"{group}-{socket.gethostname()}")
 
     def assignment(kind: str) -> Callable[[Any, list], None]:
@@ -283,6 +332,7 @@ def serve(apply: Apply, *, group: str, verb: str, heartbeat_path: str) -> None:
             verb=verb,
             dlq_topic=env_str("KAFKA_DLQ_TOPIC", DLQ_TOPIC),
             heartbeat=Heartbeat(env_str("HEARTBEAT_PATH", heartbeat_path)),
+            bad_events=bad_events,
         ).run(stop)
     finally:
         consumer.close()  # leaves the group cleanly, so its partitions move to another consumer at once

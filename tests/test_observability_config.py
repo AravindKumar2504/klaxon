@@ -13,3 +13,28 @@ def test_related_logs_search_a_minute_either_side_of_the_span():
     assert 'trace_id = "$${__trace.traceId}"' in tempo  # the wider window keeps to this trace's lines
     compose = (ROOT / "compose.yaml").read_text()
     assert "./docker/grafana/datasources.yaml:/otel-lgtm/grafana/conf/provisioning/datasources/" in compose
+
+
+def test_each_consumer_takes_its_bad_event_policy_from_its_own_setting_with_dead_lettering_by_default():
+    """The poison-message fault redeploys the ledger with LEDGER_BAD_EVENTS=retry; nothing else may change."""
+    compose = (ROOT / "compose.yaml").read_text()
+    ledger = compose.split("  ledger-consumer:")[1].split("\n  payment-confirmer:")[0]
+    confirmer = compose.split("  payment-confirmer:")[1].split("\n  otel-lgtm:")[0]
+    assert "BAD_EVENTS: ${LEDGER_BAD_EVENTS:-dead_letter}" in ledger
+    assert "BAD_EVENTS: ${CONFIRMER_BAD_EVENTS:-dead_letter}" in confirmer
+
+
+def test_the_dashboard_shows_provider_calls_that_got_no_answer_from_our_own_count():
+    """The httpx instrumentation records no duration for a call that timed out, so its metric never shows one."""
+    import json
+
+    dashboard = json.loads((ROOT / "docker/grafana/klaxon-patient.json").read_text())
+    exprs = [
+        target["expr"]
+        for row in dashboard["panels"]
+        for panel in [row, *row.get("panels", [])]
+        for target in panel.get("targets", [])
+        if "expr" in target
+    ]
+    assert 'sum by (error) (rate(klaxon_provider_attempts_total{result="no_answer"}[1m]))' in exprs
+    assert not any('http_response_status_code=""' in expr for expr in exprs)

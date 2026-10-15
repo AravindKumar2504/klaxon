@@ -189,6 +189,8 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
       # idempotent (default) or naive, the known-bad baseline: make up HANDLER=naive
       LEDGER_HANDLER: ${LEDGER_HANDLER:-idempotent}
+      # dead_letter (default) or retry, the known-bad baseline that retries an unreadable message forever
+      BAD_EVENTS: ${LEDGER_BAD_EVENTS:-dead_letter}
       HEARTBEAT_PATH: /tmp/ledger-consumer.heartbeat
     depends_on:
       postgres:
@@ -216,6 +218,7 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
       # by_our_id (default) or by_provider_id, the known-bad baseline: make up CONFIRMER=by_provider_id
       CONFIRMER_HANDLER: ${CONFIRMER_HANDLER:-by_our_id}
+      BAD_EVENTS: ${CONFIRMER_BAD_EVENTS:-dead_letter}
       HEARTBEAT_PATH: /tmp/payment-confirmer.heartbeat
     depends_on:
       postgres:

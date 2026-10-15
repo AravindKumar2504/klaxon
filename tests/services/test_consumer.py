@@ -46,16 +46,37 @@ class Booker:
         return "posted"
 
 
-def consumer_for(messages, errors=None, dead_letters=None, heartbeat=None):
-    stop = threading.Event()
+def consumer_for(messages, errors=None, dead_letters=None, heartbeat=None, bad_events="dead_letter", stop=None):
+    stop = stop or threading.Event()
     log: list[str] = []
     booker = Booker(log, errors)
     kafka = FakeConsumer(messages, stop, log)
     dead_letters = dead_letters or FakePublisher()
     worker = EventConsumer(
-        kafka, booker.book, dead_letters, name=LEDGER_GROUP, verb="book", heartbeat=heartbeat, retry_delays=(0.0,)
+        kafka,
+        booker.book,
+        dead_letters,
+        name=LEDGER_GROUP,
+        verb="book",
+        heartbeat=heartbeat,
+        retry_delays=(0.0,),
+        bad_events=bad_events,
     )
     return worker, kafka, booker, dead_letters, stop, log
+
+
+class StopAfter(threading.Event):
+    """A stop signal that arrives after this many waits: how a test ends a loop that would never end."""
+
+    def __init__(self, waits: int) -> None:
+        super().__init__()
+        self.left = waits
+
+    def wait(self, timeout=None) -> bool:
+        self.left -= 1
+        if self.left <= 0:
+            self.set()
+        return self.is_set()
 
 
 def test_each_message_is_booked_and_only_then_committed():
@@ -271,3 +292,62 @@ def test_trace_state_and_baggage_on_a_message_are_not_taken(telemetry):
     assert format(span.context.trace_id, "032x") == "0af7651916cd43dd8448eb211c80319c"  # the traceparent is used
     assert len(span.context.trace_state) == 0
     assert "IGNORE" not in str(span.attributes) + str(span.events)
+
+
+# The known-bad baseline for the poison-message fault (week 2) -------------------------------------------
+
+
+def test_the_known_bad_policy_retries_an_unreadable_message_forever_so_its_partition_stops(telemetry):
+    before = telemetry.counter("klaxon.consumer.retries", consumer=LEDGER_GROUP)
+    poison = FakeMessage(b'{"id": "evt_000009", "data": {"amount_cents": "12.50"}}', 9, partition=0)
+    behind_it = FakeMessage(event(10), 10, partition=2)  # on another partition: one loop, so it waits too
+    worker, kafka, booker, dead_letters, stop, _ = consumer_for(
+        [poison, behind_it], bad_events="retry", stop=StopAfter(5)
+    )
+    worker.run(stop)
+    assert dead_letters.messages == [] and kafka.committed == []  # never dead-lettered, never committed
+    assert booker.booked == []  # and the event behind it waits too
+    assert telemetry.counter("klaxon.consumer.retries", consumer=LEDGER_GROUP) - before == 5
+    spans = telemetry.finished(kind=SpanKind.CONSUMER)
+    assert {(s.attributes["klaxon.outcome"], s.status.status_code) for s in spans} == {("will_retry", StatusCode.ERROR)}
+
+
+def test_the_known_bad_policy_retries_values_the_database_refuses_too():
+    errors = [psycopg.errors.NumericValueOutOfRange("bigint out of range")] * 3
+    worker, kafka, booker, dead_letters, stop, _ = consumer_for(
+        [FakeMessage(event(1), 4)], errors=errors, bad_events="retry"
+    )
+    worker.run(stop)
+    assert dead_letters.messages == [] and booker.booked == [("evt_000001", "provider-events/0@4")]
+
+
+def test_the_default_policy_still_dead_letters_the_same_poison_and_moves_on():
+    poison = FakeMessage(b'{"id": "evt_000009", "data": {"amount_cents": "12.50"}}', 9)
+    worker, kafka, booker, dead_letters, stop, _ = consumer_for([poison, FakeMessage(event(10), 10)])
+    worker.run(stop)
+    assert len(dead_letters.messages) == 1 and kafka.committed == [9, 10]
+    assert booker.booked == [("evt_000010", "provider-events/0@10")]
+
+
+def test_an_unknown_bad_event_policy_is_refused():
+    with pytest.raises(ValueError, match="bad-event policy"):
+        consumer_for([], bad_events="skip")
+
+
+def test_retries_and_dead_letters_start_at_zero_for_each_consumer(telemetry):
+    """So a dashboard shows a real 0, not "No data", and goes blank only if the metrics themselves stop."""
+    stop = threading.Event()
+    stop.set()  # the loop starts and ends at once
+    EventConsumer(FakeConsumer([], stop), lambda e, s: "posted", FakePublisher(), name="zero-test", verb="book").run(
+        stop
+    )
+    retries = [
+        p for p in telemetry.points("klaxon.consumer.retries") if dict(p.attributes) == {"consumer": "zero-test"}
+    ]
+    assert [p.value for p in retries] == [0]
+    letters = {
+        dict(p.attributes)["reason"]: p.value
+        for p in telemetry.points("klaxon.consumer.dead_letters")
+        if dict(p.attributes).get("consumer") == "zero-test"
+    }
+    assert letters == {"bad_event": 0, "refused_values": 0}

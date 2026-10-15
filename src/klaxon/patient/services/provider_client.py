@@ -8,6 +8,11 @@ retried.
 There is no circuit breaker yet: when the provider hangs, every request waits
 for its timeouts. That gap is deliberate for now; a provider outage is one of
 the planned incidents (week 2).
+
+Telemetry: klaxon.provider.attempts counts every attempt by its result, an
+HTTP status or "no_answer" (with the error's type). The httpx instrumentation
+records a call's duration only when an answer came back, so without this
+count a provider that times out would not show in the metrics at all.
 """
 
 from __future__ import annotations
@@ -16,8 +21,14 @@ import time
 from collections.abc import Callable
 
 import httpx
+from opentelemetry import metrics
 
 RETRYABLE_STATUSES = {409, 429}  # "a request with this key is still running" and "slow down"
+ATTEMPTS = metrics.get_meter("klaxon.provider_client").create_counter(
+    "klaxon.provider.attempts",
+    unit="{attempt}",
+    description="Every call to the provider, retries included, by result: an HTTP status, or no_answer.",
+)
 
 
 class ProviderUnavailable(Exception):
@@ -65,7 +76,9 @@ class ProviderClient:
                 response = self.http.post(path, json=body, headers={"Idempotency-Key": idempotency_key})
             except httpx.TransportError as exc:
                 problem = f"{type(exc).__name__}: {exc}"
+                ATTEMPTS.add(1, {"path": path, "result": "no_answer", "error": type(exc).__name__})
             else:
+                ATTEMPTS.add(1, {"path": path, "result": str(response.status_code)})
                 if response.status_code < 300:
                     return response.json()
                 if response.status_code < 500 and response.status_code not in RETRYABLE_STATUSES:

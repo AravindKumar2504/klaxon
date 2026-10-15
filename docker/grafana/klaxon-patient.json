@@ -496,16 +496,16 @@
             "uid": "prometheus"
           },
           "refId": "B",
-          "legendFormat": "no answer: {{error_type}}",
-          "expr": "sum by (error_type) (rate(http_client_request_duration_seconds_count{server_address=\"fake-provider\", http_response_status_code=\"\"}[1m]))"
+          "legendFormat": "no answer: {{error}}",
+          "expr": "sum by (error) (rate(klaxon_provider_attempts_total{result=\"no_answer\"}[1m]))"
         }
       ],
       "id": 12
     },
     {
       "type": "timeseries",
-      "title": "Provider calls: p95 latency",
-      "description": "",
+      "title": "Provider calls that got an answer: p95 latency",
+      "description": "Only calls that got an answer: the httpx instrumentation records no duration for a call that timed out. Timeouts show as \"no answer\" in the panel to the left.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

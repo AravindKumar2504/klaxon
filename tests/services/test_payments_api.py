@@ -201,6 +201,27 @@ def test_the_client_retries_timeouts_with_the_same_key():
     assert sleeps == [0.2, 0.4]
 
 
+def test_every_attempt_is_counted_including_those_that_got_no_answer(telemetry):
+    """The httpx instrumentation records a duration only for answers, so a timing-out provider would not show."""
+
+    def count(**attributes):
+        return telemetry.counter("klaxon.provider.attempts", path="/v1/payments", **attributes)
+
+    before = (count(result="no_answer", error="ReadTimeout"), count(result="503"), count(result="200"))
+    answers = iter([httpx.ReadTimeout("timed out"), httpx.Response(503), httpx.Response(200, json={"id": "pay_1"})])
+
+    def handler(request):
+        answer = next(answers)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    client, _ = client_with(handler)
+    client.create_payment("cus", 100, "usd", "pmt_000001", {})
+    after = (count(result="no_answer", error="ReadTimeout"), count(result="503"), count(result="200"))
+    assert [b - a for a, b in zip(before, after, strict=True)] == [1, 1, 1]
+
+
 def test_the_client_gives_up_after_its_attempts():
     client, _ = client_with(lambda request: httpx.Response(503))
     with pytest.raises(ProviderUnavailable):

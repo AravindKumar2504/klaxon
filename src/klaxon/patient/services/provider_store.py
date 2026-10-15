@@ -277,6 +277,40 @@ class ProviderStore:
         )
         return event_id
 
+    def add_malformed_event(self, payment_id: str | None = None) -> dict:
+        """Simulator control: one event our consumers cannot read, signed and sent like any other.
+
+        A payment.updated event for a payment (the newest, unless one is named) with its amount as a decimal
+        string, "12.50", where whole cents belong: the kind of change a provider's new API version can bring.
+        It moves no money. The default consumers dead-letter it; one that retries such a message forever
+        stalls its partition (the poison-message fault). Returns the event id and the payment it names.
+        """
+        with self._atomic():
+            if payment_id is None:
+                row = self.conn.execute("SELECT id, amount_cents FROM payments ORDER BY seq DESC LIMIT 1").fetchone()
+            else:
+                row = self.conn.execute("SELECT id, amount_cents FROM payments WHERE id = ?", (payment_id,)).fetchone()
+            if row is None:
+                raise ProviderError(409, "no_payment", "there is no payment for the event to name")
+            created = int(self.clock())
+            event_id = f"evt_{self._next_seq('events'):06d}"
+            amount = f"{row['amount_cents'] // 100}.{row['amount_cents'] % 100:02d}"
+            payload = {
+                "id": event_id,
+                "type": "payment.updated",
+                "created": created,
+                "data": {"payment_id": row["id"], "amount_cents": amount, "currency": SUPPORTED_CURRENCY},
+            }
+            self.conn.execute(
+                "INSERT INTO events (id, type, payment_id, amount_cents, created, body) VALUES (?, ?, ?, ?, ?, ?)",
+                (event_id, "payment.updated", row["id"], row["amount_cents"], created, _canonical(payload).encode()),
+            )
+            self.conn.execute(
+                "INSERT INTO deliveries (event_id, attempts, next_attempt_at) VALUES (?, 0, ?)",
+                (event_id, self.clock()),
+            )
+        return {"event_id": event_id, "payment_id": row["id"], "type": "payment.updated", "amount_cents": amount}
+
     def now(self) -> float:
         """The clock that stamps every record, read once no write is half done.
 

@@ -348,11 +348,18 @@ def test_charged_then_500_saves_the_charge_and_answers_every_retry_the_same(stor
 
 def test_http_behavior_sets_and_shows_every_control(store, clock):
     api = TestClient(create_app(store, sender_for(store, clock, Receiver(clock))))
-    chosen = {"lose_ack_rate": 0.2, "seed": 3, "fail_after_charge_rate": 1.0, "fail_after_charge_keys": ["pmt_1"]}
+    chosen = {
+        "lose_ack_rate": 0.2,
+        "seed": 3,
+        "fail_after_charge_rate": 1.0,
+        "fail_after_charge_keys": ["pmt_1"],
+        "outage_delay_seconds": 0.5,
+    }
     assert api.put("/admin/behavior", json=chosen).status_code == 200
     shown = api.get("/admin/behavior").json()
     assert shown == chosen | {"lose_ack_event_ids": []}
     assert api.put("/admin/behavior", json={"fail_after_charge_rate": 2}).status_code == 422
+    assert api.put("/admin/behavior", json={"outage_delay_seconds": 61}).status_code == 422
 
 
 # What the money check needs to work while traffic flows (week 2) --------------------------
@@ -418,3 +425,99 @@ def test_the_clock_waits_for_a_write_that_is_still_open(store):
     store.now()
     assert time.monotonic() - started >= 0.25
     writer.join()
+
+
+# The fault injector's controls (week 2, item 4) ---------------------------------------------------------
+
+
+def test_a_malformed_event_is_signed_and_sent_like_any_other_and_our_consumers_cannot_read_it(store, clock):
+    from klaxon.patient.services.events import BadEvent, id_and_key, parse_event
+
+    store.create_payment("cus_001", 1_250)
+    sent = store.add_malformed_event()
+    assert sent == {
+        "event_id": "evt_000002",
+        "payment_id": "pay_000001",
+        "type": "payment.updated",
+        "amount_cents": "12.50",
+    }
+    [_, poison] = store.due_deliveries(clock())  # in the outbox: the sender signs and delivers it
+    assert id_and_key(poison.body) == ("evt_000002", "pay_000001")  # so our receiver queues it, on that payment's key
+    with pytest.raises(BadEvent, match="amount must be positive integer cents"):
+        parse_event(poison.body)  # and both consumers refuse it
+    assert store.balance_cents() == 1_250  # it moves no money
+
+
+def test_a_malformed_event_needs_a_payment_to_name(store):
+    with pytest.raises(ProviderError) as refused:
+        store.add_malformed_event()
+    assert refused.value.code == "no_payment"
+    store.create_payment("cus_001", 100)
+    with pytest.raises(ProviderError):
+        store.add_malformed_event("pay_999999")
+
+
+def test_the_money_check_ignores_the_malformed_event_it_moves_no_money(store):
+    from klaxon.checks.money import MONEY_EFFECT
+
+    store.create_payment("cus_001", 1_250)
+    store.add_malformed_event()
+    events, _ = store.list_events()
+    assert [e["type"] for e in events] == ["payment.succeeded", "payment.updated"]
+    assert "payment.updated" not in MONEY_EFFECT
+
+
+def test_http_malformed_event(store, clock):
+    api = TestClient(create_app(store, sender_for(store, clock, Receiver(clock))))
+    assert api.post("/admin/malformed-event", json={}).status_code == 409  # no payment yet
+    api.post("/v1/payments", json={"customer": "cus_001", "amount_cents": 1_250})
+    assert api.post("/admin/malformed-event", json={}).json()["event_id"] == "evt_000002"
+    assert api.post("/admin/malformed-event", json={"surprise": 1}).status_code == 422
+
+
+def test_in_an_outage_charges_and_refunds_hang_then_answer_503_and_nothing_is_charged(store, clock):
+    import time
+
+    api = TestClient(create_app(store, sender_for(store, clock, Receiver(clock))))
+    api.post("/v1/payments", json={"customer": "cus_001", "amount_cents": 2_500})
+    api.put("/admin/behavior", json={"outage_delay_seconds": 0.3})
+    started = time.monotonic()
+    held = api.post(
+        "/v1/payments", json={"customer": "cus_002", "amount_cents": 900}, headers={"Idempotency-Key": "k2"}
+    )
+    assert time.monotonic() - started >= 0.3
+    assert (held.status_code, held.json()["error"]["code"]) == (503, "overloaded")
+    refund = api.post("/v1/refunds", json={"payment_id": "pay_000001", "amount_cents": 100})
+    assert refund.status_code == 503
+    assert store.balance_cents() == 2_500 and len(store.list_payments()[0]) == 1  # nothing charged, nothing refunded
+    # Its reports keep answering, so the money check still works during the outage.
+    assert api.get("/v1/balance").json()["available_cents"] == 2_500
+    api.put("/admin/behavior", json={"outage_delay_seconds": 0})
+    again = api.post(
+        "/v1/payments", json={"customer": "cus_002", "amount_cents": 900}, headers={"Idempotency-Key": "k2"}
+    )
+    assert again.status_code == 200  # the same key works once it is over: the 503 saved nothing under it
+
+
+def test_in_an_outage_the_providers_other_endpoints_keep_answering_while_charges_are_held(store, clock):
+    """The hold is a wait, not a blocked worker: the clock, the reports and the controls answer meanwhile."""
+    import asyncio
+    import time
+
+    app = create_app(store, sender_for(store, clock, Receiver(clock)))
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            await client.put("/admin/behavior", json={"outage_delay_seconds": 0.5})
+            body = {"customer": "cus_001", "amount_cents": 100}
+            started = time.monotonic()
+            held = [asyncio.create_task(client.post("/v1/payments", json=body)) for _ in range(5)]
+            read = asyncio.create_task(client.get("/admin/clock"))  # sent while the five charges are held
+            answer = await read
+            took = time.monotonic() - started
+            return took, answer, await asyncio.gather(*held), time.monotonic() - started
+
+    took, answer, held, all_done = asyncio.run(scenario())
+    assert answer.status_code == 200 and took < 0.25  # answered at once, while the charges were still held
+    assert [h.status_code for h in held] == [503] * 5 and all_done >= 0.5

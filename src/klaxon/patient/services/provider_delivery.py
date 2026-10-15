@@ -18,6 +18,10 @@ which the provider's HTTP API reads too:
   way Stripe replays the first answer for a key, errors included. Our side
   cannot tell whether the customer was charged; only the webhook can say.
 - fail_after_charge_keys: do that for these idempotency keys.
+- outage_delay_seconds: an outage of the provider's charge API (the
+  provider-outage fault). Every payment and refund request is held this
+  long, then answered 503, and nothing is charged. 0 means no outage. The
+  provider's reports (lists, balance) and its webhooks keep working.
 """
 
 from __future__ import annotations
@@ -49,11 +53,14 @@ class Behavior:
     lose_ack_event_ids: frozenset[str] = field(default_factory=frozenset)
     fail_after_charge_rate: float = 0.0
     fail_after_charge_keys: frozenset[str] = field(default_factory=frozenset)
+    outage_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         for name in ("lose_ack_rate", "fail_after_charge_rate"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} must be between 0 and 1")
+        if not 0.0 <= self.outage_delay_seconds <= 60.0:
+            raise ValueError("outage_delay_seconds must be between 0 and 60")
 
     def ack_lost(self, event_id: str, attempt: int) -> bool:
         if attempt == 1 and event_id in self.lose_ack_event_ids:
@@ -76,6 +83,7 @@ class Behavior:
             "lose_ack_event_ids": sorted(self.lose_ack_event_ids),
             "fail_after_charge_rate": self.fail_after_charge_rate,
             "fail_after_charge_keys": sorted(self.fail_after_charge_keys),
+            "outage_delay_seconds": self.outage_delay_seconds,
         }
 
 

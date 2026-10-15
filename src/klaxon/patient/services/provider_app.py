@@ -11,8 +11,10 @@ Simulator controls, not part of any real provider:
 
     GET  /admin/deliveries   delivery counts (created_lte: for the events up to a time); ?attempts=true lists every attempt
     GET  /admin/clock        the provider's clock, which stamps every record it makes
+    POST /admin/malformed-event  send one event our consumers cannot read (the poison-message fault)
     PUT  /admin/behavior     lose acknowledgements on purpose, to cause duplicates; answer a
-                             charge with a 500, to leave our side not knowing it went through
+                             charge with a 500, to leave our side not knowing it went through;
+                             hang every charge and refund, then answer 503 (an outage)
     GET  /healthz
 
 Run: python -m klaxon.patient.services.provider_app
@@ -20,6 +22,7 @@ Run: python -m klaxon.patient.services.provider_app
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -30,6 +33,7 @@ import uvicorn
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from starlette.concurrency import run_in_threadpool
 
 from klaxon.patient.services.common import (
     add_request_logging,
@@ -69,6 +73,12 @@ class BehaviorIn(BaseModel):
     lose_ack_event_ids: list[str] = Field(default_factory=list)
     fail_after_charge_rate: float = Field(0.0, ge=0.0, le=1.0)
     fail_after_charge_keys: list[str] = Field(default_factory=list)
+    outage_delay_seconds: float = Field(0.0, ge=0.0, le=60.0)
+
+
+class MalformedEventIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    payment_id: str | None = Field(None, min_length=1, max_length=64)
 
 
 def _respond(body: dict, replayed: bool) -> JSONResponse:
@@ -94,10 +104,28 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
     async def provider_error(request: Request, exc: ProviderError) -> JSONResponse:
         return JSONResponse({"error": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
 
+    async def in_outage() -> bool:
+        """Simulated outage: hold the request, then refuse it. Async, so the provider's other endpoints still answer."""
+        delay = sender.behavior.outage_delay_seconds if sender is not None else 0.0
+        if delay <= 0:
+            return False
+        await asyncio.sleep(delay)
+        log(logger, logging.WARNING, "overloaded on purpose: answered 503 (simulated outage)", delay_seconds=delay)
+        return True
+
+    def overloaded() -> JSONResponse:
+        error = {"code": "overloaded", "message": "simulated outage: nothing was charged; try again later"}
+        return JSONResponse({"error": error}, status_code=503)
+
     @app.post("/v1/payments")
-    def create_payment(
+    async def create_payment(
         payment: PaymentIn, idempotency_key: str | None = Header(None, min_length=1, max_length=255)
     ) -> JSONResponse:
+        if await in_outage():
+            return overloaded()
+        return await run_in_threadpool(charge, payment, idempotency_key)
+
+    def charge(payment: PaymentIn, idempotency_key: str | None) -> JSONResponse:
         body, replayed = store.create_payment(
             payment.customer, payment.amount_cents, payment.currency, payment.metadata, idempotency_key
         )
@@ -113,9 +141,14 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
         return _respond(body, replayed)
 
     @app.post("/v1/refunds")
-    def create_refund(
+    async def create_refund(
         refund: RefundIn, idempotency_key: str | None = Header(None, min_length=1, max_length=255)
     ) -> JSONResponse:
+        if await in_outage():
+            return overloaded()
+        return await run_in_threadpool(give_back, refund, idempotency_key)
+
+    def give_back(refund: RefundIn, idempotency_key: str | None) -> JSONResponse:
         body, replayed = store.create_refund(refund.payment_id, refund.amount_cents, idempotency_key)
         if sender is not None and not replayed:
             sender.wake()
@@ -147,6 +180,14 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
             out["attempts"] = store.delivery_attempts()
         return out
 
+    @app.post("/admin/malformed-event")
+    def malformed_event(request: MalformedEventIn) -> dict:
+        sent = store.add_malformed_event(request.payment_id)
+        if sender is not None:
+            sender.wake()
+        log(logger, logging.WARNING, "sent an event our consumers cannot read, on purpose", event_id=sent["event_id"])
+        return sent
+
     @app.get("/admin/clock")
     def clock() -> dict:
         # The money check takes its cutoff from this clock, the one that stamps the provider's records.
@@ -162,6 +203,7 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
             lose_ack_event_ids=frozenset(behavior.lose_ack_event_ids),
             fail_after_charge_rate=behavior.fail_after_charge_rate,
             fail_after_charge_keys=frozenset(behavior.fail_after_charge_keys),
+            outage_delay_seconds=behavior.outage_delay_seconds,
         )
         logger.warning("delivery behavior changed", extra={"fields": sender.behavior.to_dict()})
         return sender.behavior.to_dict()
