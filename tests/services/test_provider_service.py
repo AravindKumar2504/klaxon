@@ -71,15 +71,16 @@ def test_a_payment_writes_the_payment_its_event_and_a_pending_delivery_together(
     assert [d.event_id for d in store.due_deliveries(clock())] == ["evt_000001"]
 
 
-def test_event_bodies_are_the_first_pieces_payload_plus_the_payments_metadata(store, clock):
+def test_event_bodies_are_the_first_pieces_payload_plus_metadata_and_the_refunds_id(store, clock):
     store.create_payment("cus_001", 2_500, metadata={"klaxon_payment_id": "pmt_000001"})
-    store.create_refund("pay_000001", 500)
+    store.create_refund("pay_000001", 500, metadata={"klaxon_refund_id": "rfd_000001"})
     paid, refunded = (d.body for d in store.due_deliveries(clock()))
     expected = Event("evt_000001", "payment.succeeded", "pay_000001", 2_500, int(clock())).payload()
     expected["data"]["metadata"] = {"klaxon_payment_id": "pmt_000001"}  # how our side finds its own payment
     assert paid == json.dumps(expected, separators=(",", ":"), sort_keys=True).encode()
     refund = Event("evt_000002", "refund.succeeded", "pay_000001", 500, int(clock())).payload()
-    assert refunded == json.dumps(refund, separators=(",", ":"), sort_keys=True).encode()  # unchanged
+    refund["data"] |= {"metadata": {"klaxon_refund_id": "rfd_000001"}, "refund_id": "re_000001"}  # and its refund
+    assert refunded == json.dumps(refund, separators=(",", ":"), sort_keys=True).encode()
 
 
 def test_a_repeated_idempotency_key_returns_the_first_payment_and_creates_nothing(store):
@@ -353,6 +354,8 @@ def test_http_behavior_sets_and_shows_every_control(store, clock):
         "seed": 3,
         "fail_after_charge_rate": 1.0,
         "fail_after_charge_keys": ["pmt_1"],
+        "fail_after_refund_rate": 0.5,
+        "fail_after_refund_keys": ["rfd_1"],
         "outage_delay_seconds": 0.5,
     }
     assert api.put("/admin/behavior", json=chosen).status_code == 200
@@ -521,3 +524,66 @@ def test_in_an_outage_the_providers_other_endpoints_keep_answering_while_charges
     took, answer, held, all_done = asyncio.run(scenario())
     assert answer.status_code == 200 and took < 0.25  # answered at once, while the charges were still held
     assert [h.status_code for h in held] == [503] * 5 and all_done >= 0.5
+
+
+# Refunds, confirmed from their webhooks like payments (week 2, item 6) --------------------------------------
+
+
+def test_a_refund_keeps_its_metadata_and_the_list_pages_oldest_first(store):
+    store.create_payment("cus_001", 2_500)
+    first, _ = store.create_refund("pay_000001", 500, metadata={"klaxon_refund_id": "rfd_000001"})
+    store.create_refund("pay_000001", 700)
+    assert (first["id"], first["metadata"], first["payment_id"]) == (
+        "re_000001",
+        {"klaxon_refund_id": "rfd_000001"},
+        "pay_000001",
+    )
+    page, more = store.list_refunds(limit=1)
+    assert [r["id"] for r in page] == ["re_000001"] and more is True
+    rest, more = store.list_refunds(starting_after="re_000001")
+    assert [(r["id"], r["metadata"]) for r in rest] == [("re_000002", {})] and more is False
+
+
+def test_a_repeated_refund_key_with_other_metadata_is_refused(store):
+    store.create_payment("cus_001", 2_500)
+    store.create_refund("pay_000001", 500, "k", {"klaxon_refund_id": "rfd_000001"})
+    with pytest.raises(ProviderError) as refused:
+        store.create_refund("pay_000001", 500, "k", {"klaxon_refund_id": "rfd_000002"})
+    assert refused.value.code == "idempotency_key_reused"
+
+
+def test_a_volume_from_before_refunds_had_metadata_still_opens(tmp_path, clock):
+    import sqlite3
+
+    path = tmp_path / "old.sqlite3"
+    old = sqlite3.connect(path)
+    old.execute(
+        "CREATE TABLE refunds (seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, payment_id TEXT NOT NULL,"
+        " amount_cents INTEGER NOT NULL CHECK (amount_cents > 0), created INTEGER NOT NULL) STRICT"
+    )
+    old.execute("INSERT INTO refunds (id, payment_id, amount_cents, created) VALUES ('re_000001', 'pay_000001', 5, 1)")
+    old.commit()
+    old.close()
+    store = ProviderStore(str(path), clock=clock)
+    assert store.list_refunds()[0][0]["metadata"] == {}
+
+
+def test_charged_then_500_for_a_refund_saves_the_refund_and_answers_every_retry_the_same(store, clock):
+    sender = sender_for(store, clock, Receiver(clock))
+    sender.behavior = Behavior(fail_after_refund_keys=frozenset({"rfd_000001"}))
+    api = TestClient(create_app(store, sender))
+    api.post("/v1/payments", json={"customer": "cus_001", "amount_cents": 2_500})
+    body = {"payment_id": "pay_000001", "amount_cents": 500, "metadata": {"klaxon_refund_id": "rfd_000001"}}
+    answers = [api.post("/v1/refunds", json=body, headers={"Idempotency-Key": "rfd_000001"}) for _ in range(3)]
+    assert [a.status_code for a in answers] == [500, 500, 500]
+    assert [r["id"] for r in store.list_refunds()[0]] == ["re_000001"]  # refunded once, not three times
+    assert store.balance_cents() == 2_000
+    assert api.get("/v1/refunds").json()["data"][0]["metadata"] == {"klaxon_refund_id": "rfd_000001"}
+
+
+def test_a_seeded_failure_after_a_refund_picks_the_same_keys_every_time():
+    behavior = Behavior(fail_after_refund_rate=0.5, seed=7)
+    picks = [behavior.fails_after_refund(f"rfd_{n:06d}") for n in range(40)]
+    assert picks == [Behavior(fail_after_refund_rate=0.5, seed=7).fails_after_refund(f"rfd_{n:06d}") for n in range(40)]
+    assert 5 < sum(picks) < 35
+    assert not any(Behavior(fail_after_charge_rate=1.0).fails_after_refund(f"rfd_{n:06d}") for n in range(5))

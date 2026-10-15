@@ -10,6 +10,8 @@ A payment's events also carry the metadata the payment was created with, as
 Stripe's do. Ours holds our own payment id, which the payments API sends with
 every charge. It is how the payment confirmer finds our payment even when the
 provider's answer never reached us, so we never learned the provider's id.
+A refund's events carry its metadata the same way (our own refund id) and
+the provider's refund id (week 2).
 
 The receiver only needs the event id and a partition key, so it uses
 `id_and_key`. The consumers use `parse_event`, which checks every field the
@@ -49,6 +51,8 @@ class ProviderEvent:
     amount_cents: int
     currency: str
     klaxon_payment_id: str | None = None  # our own payment id, from the metadata; None if it holds none
+    klaxon_refund_id: str | None = None  # a refund's: our own refund id, from the metadata
+    refund_id: str | None = None  # a refund's: the provider's refund id
 
 
 def _is_cents(value: object) -> bool:
@@ -103,8 +107,12 @@ def parse_event(body: bytes) -> ProviderEvent:
         raise BadEvent(f"amount {data['amount_cents']} cents is above the {MAX_AMOUNT_CENTS} cents limit")
     if data.get("currency") != CURRENCY:
         raise BadEvent(f"unsupported currency {data.get('currency')!r}")
-    metadata = data.get("metadata")
-    ours = metadata.get("klaxon_payment_id") if isinstance(metadata, dict) else None
+    metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    ours, our_refund, refund = (
+        metadata.get("klaxon_payment_id"),
+        metadata.get("klaxon_refund_id"),
+        data.get("refund_id"),
+    )
     return ProviderEvent(
         id=event["id"],
         type=event["type"],
@@ -113,4 +121,6 @@ def parse_event(body: bytes) -> ProviderEvent:
         amount_cents=data["amount_cents"],
         currency=data["currency"],
         klaxon_payment_id=ours if _is_id(ours) else None,
+        klaxon_refund_id=our_refund if _is_id(our_refund) else None,
+        refund_id=refund if _is_id(refund) else None,
     )

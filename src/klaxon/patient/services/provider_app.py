@@ -3,6 +3,7 @@
     POST /v1/payments        create and capture a payment (Idempotency-Key honored)
     POST /v1/refunds         refund part or all of a payment (Idempotency-Key honored)
     GET  /v1/payments        every payment, oldest first, paginated (limit, starting_after)
+    GET  /v1/refunds         every refund, oldest first, paginated (limit, starting_after)
     GET  /v1/payments/{id}
     GET  /v1/events          every event, oldest first, paginated (limit, starting_after)
     GET  /v1/balance         what the provider holds for us: captured minus refunded (as_of: up to a time)
@@ -13,7 +14,7 @@ Simulator controls, not part of any real provider:
     GET  /admin/clock        the provider's clock, which stamps every record it makes
     POST /admin/malformed-event  send one event our consumers cannot read (the poison-message fault)
     PUT  /admin/behavior     lose acknowledgements on purpose, to cause duplicates; answer a
-                             charge with a 500, to leave our side not knowing it went through;
+                             charge or a refund with a 500, to leave our side not knowing it went through;
                              hang every charge and refund, then answer 503 (an outage)
     GET  /healthz
 
@@ -64,6 +65,7 @@ class RefundIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     payment_id: str = Field(min_length=1, max_length=64)
     amount_cents: StrictInt = Field(gt=0)
+    metadata: dict[str, str] = Field(default_factory=dict, max_length=20)
 
 
 class BehaviorIn(BaseModel):
@@ -73,6 +75,8 @@ class BehaviorIn(BaseModel):
     lose_ack_event_ids: list[str] = Field(default_factory=list)
     fail_after_charge_rate: float = Field(0.0, ge=0.0, le=1.0)
     fail_after_charge_keys: list[str] = Field(default_factory=list)
+    fail_after_refund_rate: float = Field(0.0, ge=0.0, le=1.0)
+    fail_after_refund_keys: list[str] = Field(default_factory=list)
     outage_delay_seconds: float = Field(0.0, ge=0.0, le=60.0)
 
 
@@ -149,15 +153,27 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
         return await run_in_threadpool(give_back, refund, idempotency_key)
 
     def give_back(refund: RefundIn, idempotency_key: str | None) -> JSONResponse:
-        body, replayed = store.create_refund(refund.payment_id, refund.amount_cents, idempotency_key)
+        body, replayed = store.create_refund(refund.payment_id, refund.amount_cents, idempotency_key, refund.metadata)
         if sender is not None and not replayed:
             sender.wake()
+        if sender is not None and sender.behavior.fails_after_refund(idempotency_key or body["id"]):
+            # Simulated: the refund is saved and its webhook is on its way, but the answer is an error.
+            log(logger, logging.WARNING, "refunded, then answered 500 on purpose", refund_id=body["id"])
+            return JSONResponse(
+                {"error": {"code": "internal_error", "message": "simulated failure after the refund was saved"}},
+                status_code=500,
+            )
         return _respond(body, replayed)
 
     @app.get("/v1/payments")
     def list_payments(limit: int = Query(100, ge=1, le=500), starting_after: str | None = None) -> dict:
         payments, has_more = store.list_payments(limit, starting_after)
         return {"object": "list", "data": payments, "has_more": has_more}
+
+    @app.get("/v1/refunds")
+    def list_refunds(limit: int = Query(100, ge=1, le=500), starting_after: str | None = None) -> dict:
+        refunds, has_more = store.list_refunds(limit, starting_after)
+        return {"object": "list", "data": refunds, "has_more": has_more}
 
     @app.get("/v1/payments/{payment_id}")
     def get_payment(payment_id: str) -> dict:
@@ -203,6 +219,8 @@ def create_app(store: ProviderStore, sender: WebhookSender | None = None) -> Fas
             lose_ack_event_ids=frozenset(behavior.lose_ack_event_ids),
             fail_after_charge_rate=behavior.fail_after_charge_rate,
             fail_after_charge_keys=frozenset(behavior.fail_after_charge_keys),
+            fail_after_refund_rate=behavior.fail_after_refund_rate,
+            fail_after_refund_keys=frozenset(behavior.fail_after_refund_keys),
             outage_delay_seconds=behavior.outage_delay_seconds,
         )
         logger.warning("delivery behavior changed", extra={"fields": sender.behavior.to_dict()})

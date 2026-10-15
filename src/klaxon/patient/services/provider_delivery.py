@@ -18,6 +18,8 @@ which the provider's HTTP API reads too:
   way Stripe replays the first answer for a key, errors included. Our side
   cannot tell whether the customer was charged; only the webhook can say.
 - fail_after_charge_keys: do that for these idempotency keys.
+- fail_after_refund_rate and fail_after_refund_keys: the same for refunds. The
+  refund is saved and its webhook queued; the answer is a 500.
 - outage_delay_seconds: an outage of the provider's charge API (the
   provider-outage fault). Every payment and refund request is held this
   long, then answered 503, and nothing is charged. 0 means no outage. The
@@ -53,10 +55,12 @@ class Behavior:
     lose_ack_event_ids: frozenset[str] = field(default_factory=frozenset)
     fail_after_charge_rate: float = 0.0
     fail_after_charge_keys: frozenset[str] = field(default_factory=frozenset)
+    fail_after_refund_rate: float = 0.0
+    fail_after_refund_keys: frozenset[str] = field(default_factory=frozenset)
     outage_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
-        for name in ("lose_ack_rate", "fail_after_charge_rate"):
+        for name in ("lose_ack_rate", "fail_after_charge_rate", "fail_after_refund_rate"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} must be between 0 and 1")
         if not 0.0 <= self.outage_delay_seconds <= 60.0:
@@ -76,6 +80,13 @@ class Behavior:
             return False
         return random.Random(f"{self.seed}:answer:{idempotency_key}").random() < self.fail_after_charge_rate
 
+    def fails_after_refund(self, idempotency_key: str) -> bool:
+        if idempotency_key in self.fail_after_refund_keys:
+            return True
+        if self.fail_after_refund_rate <= 0.0:
+            return False
+        return random.Random(f"{self.seed}:refund-answer:{idempotency_key}").random() < self.fail_after_refund_rate
+
     def to_dict(self) -> dict:
         return {
             "lose_ack_rate": self.lose_ack_rate,
@@ -83,6 +94,8 @@ class Behavior:
             "lose_ack_event_ids": sorted(self.lose_ack_event_ids),
             "fail_after_charge_rate": self.fail_after_charge_rate,
             "fail_after_charge_keys": sorted(self.fail_after_charge_keys),
+            "fail_after_refund_rate": self.fail_after_refund_rate,
+            "fail_after_refund_keys": sorted(self.fail_after_refund_keys),
             "outage_delay_seconds": self.outage_delay_seconds,
         }
 

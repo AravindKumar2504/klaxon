@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS refunds (
     id           TEXT NOT NULL UNIQUE,
     payment_id   TEXT NOT NULL REFERENCES payments(id),
     amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
-    created      INTEGER NOT NULL
+    created      INTEGER NOT NULL,
+    metadata     TEXT NOT NULL DEFAULT '{}'
 ) STRICT;
 
 -- body holds the exact bytes every delivery of the event sends and signs.
@@ -129,6 +130,9 @@ class ProviderStore:
         if path != ":memory:":
             self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.executescript(SCHEMA)
+        refund_columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(refunds)")}
+        if "metadata" not in refund_columns:  # a volume from before refunds had metadata (week 2)
+            self.conn.execute("ALTER TABLE refunds ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'")
 
     @contextmanager
     def _atomic(self) -> Iterator[None]:
@@ -172,10 +176,15 @@ class ProviderStore:
         return self._idempotent("POST /v1/payments", idempotency_key, request, create)
 
     def create_refund(
-        self, payment_id: str, amount_cents: int, idempotency_key: str | None = None
+        self,
+        payment_id: str,
+        amount_cents: int,
+        idempotency_key: str | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> tuple[dict, bool]:
         """Refund part or all of a payment. Returns (refund, replayed)."""
-        request = {"payment_id": payment_id, "amount_cents": amount_cents}
+        metadata = metadata or {}
+        request = {"payment_id": payment_id, "amount_cents": amount_cents, "metadata": metadata}
 
         def create() -> dict:
             _require_cents(amount_cents)
@@ -190,19 +199,11 @@ class ProviderStore:
             created = int(self.clock())
             refund_id = f"re_{self._next_seq('refunds'):06d}"
             self.conn.execute(
-                "INSERT INTO refunds (id, payment_id, amount_cents, created) VALUES (?, ?, ?, ?)",
-                (refund_id, payment_id, amount_cents, created),
+                "INSERT INTO refunds (id, payment_id, amount_cents, created, metadata) VALUES (?, ?, ?, ?, ?)",
+                (refund_id, payment_id, amount_cents, created, _canonical(metadata)),
             )
-            self._add_event(REFUND_SUCCEEDED, payment_id, amount_cents, created)
-            return {
-                "id": refund_id,
-                "object": "refund",
-                "status": "succeeded",
-                "payment_id": payment_id,
-                "amount_cents": amount_cents,
-                "currency": SUPPORTED_CURRENCY,
-                "created": created,
-            }
+            self._add_event(REFUND_SUCCEEDED, payment_id, amount_cents, created, metadata, refund_id=refund_id)
+            return self._refund(refund_id)
 
         return self._idempotent("POST /v1/refunds", idempotency_key, request, create)
 
@@ -225,6 +226,19 @@ class ProviderStore:
             "amount_cents": row["amount_cents"],
             "amount_refunded_cents": refunded,
             "currency": row["currency"],
+            "metadata": json.loads(row["metadata"]),
+            "created": row["created"],
+        }
+
+    def _refund(self, refund_id: str) -> dict:
+        row = self.conn.execute("SELECT * FROM refunds WHERE id = ?", (refund_id,)).fetchone()
+        return {
+            "id": row["id"],
+            "object": "refund",
+            "status": "succeeded",
+            "payment_id": row["payment_id"],
+            "amount_cents": row["amount_cents"],
+            "currency": SUPPORTED_CURRENCY,
             "metadata": json.loads(row["metadata"]),
             "created": row["created"],
         }
@@ -259,14 +273,23 @@ class ProviderStore:
         return seq
 
     def _add_event(
-        self, event_type: str, payment_id: str, amount_cents: int, created: int, metadata: dict | None = None
+        self,
+        event_type: str,
+        payment_id: str,
+        amount_cents: int,
+        created: int,
+        metadata: dict | None = None,
+        refund_id: str | None = None,
     ) -> str:
         event_id = f"evt_{self._next_seq('events'):06d}"
-        # The first piece's payload shape. A payment's event also carries the metadata it was created with,
-        # as Stripe's do: ours holds our own payment id, so our side can match the event to its payment.
+        # The first piece's payload shape. A payment's or a refund's event also carries the metadata it was created
+        # with, as Stripe's do: ours holds our own ids, so our side can match the event to its own record. A
+        # refund's event also names the refund (Stripe's carry the whole refund object).
         payload = Event(event_id, event_type, payment_id, amount_cents, created).payload()
         if metadata is not None:
             payload["data"]["metadata"] = metadata
+        if refund_id is not None:
+            payload["data"]["refund_id"] = refund_id
         body = _canonical(payload).encode()
         self.conn.execute(
             "INSERT INTO events (id, type, payment_id, amount_cents, created, body) VALUES (?, ?, ?, ?, ?, ?)",
@@ -353,6 +376,23 @@ class ProviderStore:
                 )
             ]
             return [self._payment(payment_id) for payment_id in ids[:limit]], len(ids) > limit
+
+    def list_refunds(self, limit: int = 100, starting_after: str | None = None) -> tuple[list[dict], bool]:
+        """Refunds oldest first, paged like the payments."""
+        with self._lock:
+            after_seq = 0
+            if starting_after is not None:
+                row = self.conn.execute("SELECT seq FROM refunds WHERE id = ?", (starting_after,)).fetchone()
+                if row is None:
+                    raise ProviderError(400, "no_such_refund", f"no refund {starting_after}")
+                after_seq = row["seq"]
+            ids = [
+                row["id"]
+                for row in self.conn.execute(
+                    "SELECT id FROM refunds WHERE seq > ? ORDER BY seq LIMIT ?", (after_seq, limit + 1)
+                )
+            ]
+            return [self._refund(refund_id) for refund_id in ids[:limit]], len(ids) > limit
 
     def balance_cents(self, as_of: int | None = None) -> int:
         """What the provider holds for us: captured minus refunded. as_of: only up to the end of that second.

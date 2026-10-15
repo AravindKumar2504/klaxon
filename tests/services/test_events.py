@@ -132,3 +132,20 @@ def test_missing_or_malformed_metadata_still_books_but_matches_no_payment_of_our
     """The provider moved the money either way: the ledger books it; the confirmer cannot match it and says so."""
     event = parse_event(body(data={"metadata": metadata}))
     assert event.amount_cents == 1999 and event.klaxon_payment_id is None
+
+
+def test_a_refunds_event_names_our_refund_and_the_providers():
+    event = parse_event(
+        body(type="refund.succeeded", data={"metadata": {"klaxon_refund_id": "rfd_000001"}, "refund_id": "re_000001"})
+    )
+    assert (event.klaxon_refund_id, event.refund_id, event.klaxon_payment_id) == ("rfd_000001", "re_000001", None)
+    assert (parse_event(body()).klaxon_refund_id, parse_event(body()).refund_id) == (None, None)  # a payment's has none
+
+
+@pytest.mark.parametrize("value", [7, "rfd 1", "r" * 65, None, ["rfd_000001"]])
+def test_malformed_refund_ids_still_book_but_name_no_refund(value):
+    """Provider output is untrusted: only a short plain id counts. The money moved either way, so it still books."""
+    event = parse_event(
+        body(type="refund.succeeded", data={"metadata": {"klaxon_refund_id": value}, "refund_id": value})
+    )
+    assert event.amount_cents == 1999 and (event.klaxon_refund_id, event.refund_id) == (None, None)

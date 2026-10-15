@@ -66,8 +66,11 @@ class ProviderClient:
         body = {"customer": customer, "amount_cents": amount_cents, "currency": currency, "metadata": metadata}
         return self._post("/v1/payments", body, idempotency_key)
 
-    def create_refund(self, payment_id: str, amount_cents: int, idempotency_key: str) -> dict:
-        return self._post("/v1/refunds", {"payment_id": payment_id, "amount_cents": amount_cents}, idempotency_key)
+    def create_refund(
+        self, payment_id: str, amount_cents: int, idempotency_key: str, metadata: dict[str, str] | None = None
+    ) -> dict:
+        body = {"payment_id": payment_id, "amount_cents": amount_cents, "metadata": metadata or {}}
+        return self._post("/v1/refunds", body, idempotency_key)
 
     def _post(self, path: str, body: dict, idempotency_key: str) -> dict:
         problem = "no attempt made"
