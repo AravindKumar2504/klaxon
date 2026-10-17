@@ -170,6 +170,7 @@ def test_a_recording_starts_with_a_label_and_where_the_calls_came_from(tmp_path)
     (header,) = m.read_records(tmp_path / "calls.jsonl")
     assert header["kind"] == "header" and header["format"] == 1
     assert "received from Claude" in header["label"] and "Not a simulation" in header["label"]
+    assert "rate-limit events (the seat's usage state) are left out" in header["label"]
     assert header["rerun_command"] == "make claude-check"
 
 

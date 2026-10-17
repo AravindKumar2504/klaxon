@@ -720,6 +720,41 @@ def test_the_home_folder_is_written_as_tilde_in_what_is_recorded(fake, recording
     assert HOME not in recording.path.read_text() and slug not in recording.path.read_text()
 
 
+RATE_LIMIT = {
+    "type": "rate_limit_event",
+    "rate_limit_info": {
+        "status": "allowed",
+        "rateLimitType": "five_hour",
+        "unifiedWindows": {"five_hour": {"utilization": 0.01}},
+    },
+}
+
+
+def test_a_rate_limit_event_is_left_out_of_the_reply_and_the_recording(fake, recording):
+    fake.plan([("event", init()), ("event", assistant()), ("event", RATE_LIMIT), ("event", result())])
+    reply = live(fake, recording).ask(SYSTEM, ASK)
+    assert reply.text == "ok"
+    assert [e["type"] for e in reply.raw] == ["system", "assistant", "result"]
+    response = records(recording)[-1]
+    assert [e["type"] for e in response["raw"]] == ["system", "assistant", "result"]
+    assert response["details"]["left_out_of_raw"] == {"rate_limit_event": 1}  # said, not hidden
+    assert "rate_limit_info" not in recording.path.read_text() and "utilization" not in recording.path.read_text()
+
+
+def test_a_failed_call_leaves_its_rate_limit_events_out_too(fake, recording):
+    fake.plan([("event", init()), ("event", RATE_LIMIT), ("stderr", "Not logged in")], exit=1)
+    with pytest.raises(m.ModelError, match="Not logged in"):
+        live(fake, recording).ask(SYSTEM, ASK)
+    failure = records(recording)[-1]
+    assert [e["type"] for e in failure["raw"]] == ["system"]
+    assert failure["details"]["left_out_of_raw"] == {"rate_limit_event": 1}
+
+
+def test_nothing_left_out_says_so(fake, recording):
+    live(fake, recording).ask(SYSTEM, ASK)
+    assert records(recording)[-1]["details"]["left_out_of_raw"] == {}
+
+
 # What a call refuses before it starts
 
 

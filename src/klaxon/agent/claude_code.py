@@ -25,7 +25,8 @@ Klaxon runs every tool itself, through its MCP server, so here Claude Code is se
   JSON line by line, checked field by field, never run.
 
 Every reply is recorded (klaxon.agent.model.Recording) before the loop sees it, and so is every failure. A
-reply that cannot be recorded is not returned.
+reply that cannot be recorded is not returned. The recording leaves out Claude Code's rate-limit events, which
+describe the seat's usage, not the call.
 
 Run: python -m klaxon.agent.claude_code command   print the exact command of a live call; calls nothing
      python -m klaxon.agent.claude_code check     one tiny live call ("Reply with the word ok"), saved as evidence
@@ -337,6 +338,14 @@ def _said(value: object, last: bool = False) -> str:
 
 
 HOME_SLUG = HOME.replace("/", "-")  # how Claude Code names a folder after a path: -Users-name-...
+# Events a recording leaves out (Aravind's choice, 2026-10-17): the seat's usage state is about his account, and
+# no evidence needs it. The details count how many were left out.
+LEFT_OUT = ("rate_limit_event",)
+
+
+def _for_the_record(events: list[dict]) -> list[dict]:
+    """Claude Code's events as a recording keeps them: without the left-out kinds, the home folder written as ~."""
+    return _home_as_tilde([e for e in events if e.get("type") not in LEFT_OUT])
 
 
 def _home_as_tilde(value: object) -> object:
@@ -396,7 +405,7 @@ class ClaudeCode:
             )
             seconds = round(time.monotonic() - started, 3)
             details = self._details(system, stdin, run)
-            self._record(self.recording.failure, system, turns, error, seconds, details, _home_as_tilde(run.events))
+            self._record(self.recording.failure, system, turns, error, seconds, details, _for_the_record(run.events))
             if error is exc:
                 raise
             raise error from exc
@@ -574,7 +583,7 @@ class ClaudeCode:
             prompt_sha256=digest,
             received_at=run.result_at or utc_now(),
             cost_usd=finite(result.get("total_cost_usd")),
-            raw=_home_as_tilde(run.events),
+            raw=_for_the_record(run.events),
         )
 
     def _details(self, system: str, stdin: bytes, run: _Run) -> dict:
@@ -606,6 +615,7 @@ class ClaudeCode:
             "timed_out": run.timed_out,
             "stopped_after_its_reply": run.lingered,
             "unreadable_lines": run.unreadable_lines,
+            "left_out_of_raw": {kind: n for kind in LEFT_OUT if (n := sum(e.get("type") == kind for e in run.events))},
             "stderr": clean_text(run.stderr.decode("utf-8", "replace")[-2000:], 2000),
         }
         return _home_as_tilde(details)
