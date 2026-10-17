@@ -73,7 +73,7 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling a change to `docker/postgres/`, such as week 2's refund grants, `make reset` once: the database's roles and grants are made only on a new volume, and the payment confirmer refuses to start without them) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about five minutes) |
-| `make mutants` | breaks the code on purpose 339 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 340 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make tools` | list Klaxon's read-only tools, the ones its MCP server serves |
 | `make tool NAME=recent_deploys ARGS='{}'` | call one tool against the running stack and print what it returns |
@@ -111,6 +111,8 @@ The money check while synthetic traffic flows (2026-10-13, `make check-under-tra
 A lost refund answer through the live stack (2026-10-14, commit `2c020f8`, on its branch; files in `evidence/week2/`): the fake provider saved a full refund of payment 2 ($29.71) and answered 500 to every retry, so our API had to leave the refund pending. With the known-bad confirmer, it stayed pending, a second refund request got through our API and was stopped only by the provider's own limit, and the webhook dashboard stayed GREEN; only the fifth invariant FAILED. With the payment confirmer, the webhook confirmed the refund, our API refused the second request itself, and all five invariants passed. Under traffic at 5 payments per second, with refund answers lost too, 100 of 100 money checks passed.
 
 The first three faults, each injected once under traffic (2026-10-14, `make demo-fault`; files in `evidence/week2/`): a ledger deploy without its dedupe left every dashboard green while the money check found 8 events counted twice; a poison message stopped the retrying ledger on all three partitions until a rollback dead-lettered it; a provider outage pushed the payments API's latency to 10 s and made it unhealthy, while the money check showed no money wrong. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
+
+Klaxon's live model adapter, one call (2026-10-17, `make claude-check`; files in `evidence/week3/`): through Claude Code in headless mode on Aravind's university seat, with no tools and no MCP servers, Opus 5.5 answered "ok" in 6.2 s. Two earlier attempts, before Claude Code was signed in, stopped at once with "Not logged in" and called no model; their recordings are there too.
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
 - Current status: [docs/STATUS.md](docs/STATUS.md)
