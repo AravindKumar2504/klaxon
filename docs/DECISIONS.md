@@ -265,3 +265,11 @@ Built on the branch `claude/week-3-model-adapters-4aa3c1`, cut from `week-3-mcp-
   9. *Smaller:* the reply's time was stamped after the exit wait; stderr had no cap; a bad `--timeout` crashed; an npm-installed `claude` could not find node.
   10. *Test gaps,* each filled. Also noted: the seven flag mutants are caught by the test that pins the whole command. They show the command is the reviewed one, not that each flag works. Only the init check and the live call show that.
   11. *Docs:* "not edited" (the raw output has the home folder as `~`), "boxed in" in the README, and the folder "must stay empty" (recorded, not enforced). Each now says only what the code does.
+
+
+## 2026-10-17 (Aravind's review of week 3, item 1)
+
+- **His review** (Aravind, in the item 2 session, which passed his words and runs on to this one): he ran the stack, the tools (`make tools`, `recent_deploys`, `money_check`, the lag query) and the poison-message fault by hand, then read the study notes, `make_tools`, `_recent_deploys` and `Server.handle`. His words: "reading done, item 1 reviewed". `STATUS.md` has what each run showed, and what this session checked again on the stack.
+- **httpx's request lines silenced** (Claude, `d166e3d`): planned before his review and made after it, so the branch did not change while he reviewed it. `make tool` printed one "HTTP Request" line per request before its result; they went to stderr, never into the protocol, but they were noise.
+- **Week 3, item 1 merged into `main`** (Aravind, 2026-10-17): he chose "Merge and push". `week-3-mcp-server` was fast-forwarded into `main`. The branch is kept, like the others.
+- **Pushed to GitHub** (Aravind, 2026-10-17): `main` with week 3, item 1 (`main` only; the branches stay on his Mac). A privacy scan of the 4 commits (authors, messages and all 2,990 added lines) found nothing private: the only password-like string is the local development one already public in `compose.yaml`, and the only addresses are 127.0.0.1, reserved example domains and documentation IPs. CLAUDE.md's rule still holds: Claude asks before every push.

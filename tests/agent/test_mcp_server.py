@@ -2,6 +2,7 @@
 
 import io
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -368,6 +369,11 @@ def test_list_prints_every_tool(capsys):
     assert m.main(["--list"]) == 0
     out = capsys.readouterr().out
     assert all(f"{name}:" in out for name in ("list_metrics", "get_trace", "recent_deploys", "money_check"))
+
+
+def test_the_http_client_logs_only_warnings_so_a_tool_call_prints_just_its_result():
+    m.main(["--list"])
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
 
 
 def test_call_reports_a_tool_error_and_an_unknown_tool(capsys):

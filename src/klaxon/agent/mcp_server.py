@@ -216,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("arguments", nargs="?", default="{}", help="the JSON arguments for --call")
     args = parser.parse_args(argv)
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(asctime)s klaxon-mcp %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # one line per request to the stack is noise, not news
     tools = make_tools()
     if args.list:
         for tool in tools.values():
