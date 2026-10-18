@@ -40,6 +40,7 @@ STOP_REASONS = {
     "time_budget": "the run used all its time",
     "invalid_replies": "too many replies in a row could not be used",
     "model_error": "the model gave no usable reply: an error, a timeout, or a reply Klaxon refused",
+    "tools_failed": "the tool server could not start, offered a tool the loop may not use, or broke off",
     "interrupted": "someone stopped the run",
     "crashed": "the run ended on an unexpected error, or without saying why it stopped",
 }

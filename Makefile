@@ -20,7 +20,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
-	claude-command claude-check
+	claude-command claude-check loop-prompt investigate replay-run
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -85,6 +85,16 @@ claude-command: ## print the exact command of each live model call (claude -p, l
 
 claude-check: ## one tiny live call to Claude on Aravind's seat ("Reply with the word ok"), saved to evidence/week3/
 	$(PY) -m klaxon.agent.claude_code check
+
+LOOP_BUDGETS = $(if $(STEPS),--steps $(STEPS)) $(if $(TOOL_CALLS),--tool-calls $(TOOL_CALLS)) $(if $(TIME_LIMIT),--seconds $(TIME_LIMIT))
+loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...'
+	$(PY) -m klaxon.agent.loop prompt --alert '$(ALERT)' --alert-name '$(or $(ALERT_NAME),manual)' $(LOOP_BUDGETS)
+
+investigate: ## one live run of the loop: Claude on Aravind's seat, the running stack (STEPS=, TOOL_CALLS=, TIME_LIMIT=seconds)
+	$(PY) -m klaxon.agent.loop run --alert '$(ALERT)' --alert-name '$(or $(ALERT_NAME),manual)' $(LOOP_BUDGETS)
+
+replay-run: ## replay a recorded run offline and check it reproduces: make replay-run RUN=evidence/week3/<run folder>
+	$(PY) -m klaxon.agent.loop replay '$(RUN)'
 
 traffic: ## synthetic customers until Ctrl-C (RATE=2 payments/s, DURATION=seconds, SEED=7)
 	$(PY) -m klaxon.traffic --rate $(or $(RATE),2) --seed $(or $(SEED),7) $(if $(DURATION),--seconds $(DURATION))
