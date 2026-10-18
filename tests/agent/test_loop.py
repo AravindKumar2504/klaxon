@@ -1076,3 +1076,22 @@ def test_compare_finds_a_replay_that_stopped_early():
 def test_a_retry_turn_cleans_every_problem_it_lists_whatever_cleaned_it_before():
     turn = loop.retry_turn(["x‮y: is not a field here", "the reply is not one JSON object (\x1b[31m)"], 1, 2)
     assert "‮" not in turn and "\x1b" not in turn and "xy: is not a field here" in turn
+
+
+# The first live run, replayed: a regression test from evidence (STATUS, week 3 item 3)
+
+FIRST_LIVE_RUN = loop.REPO / "evidence" / "week3" / "2026-10-18T112951Z_loop_ledgerlaghigh"
+
+
+def test_the_first_live_run_replays_exactly(tmp_path):
+    """Replies received from Claude on 2026-10-18 (claude-opus-5-5) and the tool results of that run, served again:
+    the loop must make the same decisions. Nothing is called. A change to the system prompt means no recorded reply
+    can match it: then this says so and skips, and a new live run (make investigate, with Aravind's OK) replaces it."""
+    recorded = read_trace(FIRST_LIVE_RUN / loop.TRACE)
+    specs = mc.ReplayTools(FIRST_LIVE_RUN / loop.TOOL_RESULTS).open()
+    if m.text_sha256(loop.system_prompt(loop.allowed_tools(specs))) != recorded[0]["system"]["sha256"]:
+        pytest.skip("the system prompt changed since the first live run: record a new run to replay")
+    result, whole, differences = loop.replay(FIRST_LIVE_RUN, tmp_path / "replay.jsonl")
+    assert (whole, differences) == (True, [])
+    assert (result.reason, result.steps, result.tool_calls) == ("diagnosed", 6, 4)
+    assert recorded[0]["source"] == "claude-code" and recorded[0]["model"] == "claude-opus-5-5"

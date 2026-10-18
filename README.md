@@ -1,6 +1,6 @@
 # Klaxon
 
-**Status: early. The payments system Klaxon will protect runs for real in Docker Compose, and the money check (five invariants) runs against it. Klaxon's read-only tools exist, served by its own MCP server, with the model adapters, the trace recorder, and a first agent loop that investigates an alert and ends in a diagnosis (week 3). The loop acts on nothing: it only proposes a fix. Its offline tests pass; it has not been run live yet.**
+**Status: early. The payments system Klaxon will protect runs for real in Docker Compose, and the money check (five invariants) runs against it. Klaxon's read-only tools exist, served by its own MCP server, with the model adapters, the trace recorder, and a first agent loop that investigates an alert and ends in a diagnosis (week 3). The loop acts on nothing: it only proposes a fix. Its offline tests pass, and one small live run worked end to end, though its diagnosis was wrong (below).**
 
 Klaxon will be an AI on-call engineer for a payments system. When an alert fires, it will investigate metrics, logs and traces, propose a fix with evidence, wait for a human to approve it, apply it, and then verify that the system is healthy again and that the money is right: the ledger balances, and no payment was lost or counted twice.
 
@@ -119,6 +119,8 @@ A lost refund answer through the live stack (2026-10-14, commit `2c020f8`, on it
 The first three faults, each injected once under traffic (2026-10-14, `make demo-fault`; files in `evidence/week2/`): a ledger deploy without its dedupe left every dashboard green while the money check found 8 events counted twice; a poison message stopped the retrying ledger on all three partitions until a rollback dead-lettered it; a provider outage pushed the payments API's latency to 10 s and made it unhealthy, while the money check showed no money wrong. Test counts and the commands behind every number are in [docs/STATUS.md](docs/STATUS.md).
 
 Klaxon's live model adapter, one call (2026-10-17, `make claude-check`; files in `evidence/week3/`): through Claude Code in headless mode on Aravind's university seat, with no tools and no MCP servers, Opus 5.5 answered "ok" in 6.2 s. Two earlier attempts, before Claude Code was signed in, stopped at once with "Not logged in" and called no model; their recordings are there too.
+
+Klaxon's first loop, one small live run (2026-10-18, `make investigate`; files in `evidence/week3/`): on a healthy, idle stack, with an alert written by hand that claimed the ledger consumer's lag was above 100 messages (it was 0). Opus 5.5, through Claude Code on Aravind's seat, replied in the loop's JSON contract, called four read-only tools, sent one malformed reply that the loop sent back and it fixed, and gave a diagnosis in 6 steps and 42.8 s. Nothing acted. The diagnosis was wrong: it called the ledger consumer stalled (confidence 0.3), reading an idle stack as a stuck one, and never checked the lag itself. The run replays offline, exactly, and is now a regression test.
 
 - Plan: [docs/PLAN.md](docs/PLAN.md)
 - Current status: [docs/STATUS.md](docs/STATUS.md)
