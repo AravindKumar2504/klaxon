@@ -1,6 +1,6 @@
 # Klaxon
 
-**Status: early. The payments system Klaxon will protect runs for real in Docker Compose, and the money check (five invariants) runs against it. Klaxon's read-only tools exist, served by its own MCP server, and so do the model adapters and the trace recorder its loop will use (week 3); the agent loop itself does not exist yet.**
+**Status: early. The payments system Klaxon will protect runs for real in Docker Compose, and the money check (five invariants) runs against it. Klaxon's read-only tools exist, served by its own MCP server, with the model adapters, the trace recorder, and a first agent loop that investigates an alert and ends in a diagnosis (week 3). The loop acts on nothing: it only proposes a fix. Its offline tests pass; it has not been run live yet.**
 
 Klaxon will be an AI on-call engineer for a payments system. When an alert fires, it will investigate metrics, logs and traces, propose a fix with evidence, wait for a human to approve it, apply it, and then verify that the system is healthy again and that the money is right: the ledger balances, and no payment was lost or counted twice.
 
@@ -33,12 +33,15 @@ client -> payments API -> fake provider (charges; keeps its own books)
 - `src/klaxon/patient/services/telemetry.py`: OpenTelemetry in the payments API, the webhook receiver and both consumers (not the fake provider, which stands for an outside company). A webhook's trip through Kafka is one trace, and every log line carries its trace id. Klaxon will read this telemetry, so it is treated as untrusted input: a caller's trace headers are ignored, the raw path and other caller-chosen text never reach a span, and every attribute is capped at 300 characters.
 - `compose.yaml`, `docker/grafana/`: one `grafana/otel-lgtm` container (collector, Prometheus, Tempo, Loki, Grafana) and a "Klaxon patient" dashboard: webhook results, consumer lag and outcomes, retries and dead letters, the API and the provider, payments pending.
 
-### Klaxon's tools over MCP, its model adapters, its trace recorder (week 3)
+### Klaxon's tools over MCP, its model adapters, its trace recorder, its first loop (week 3)
 
 - `src/klaxon/agent/tools.py`: eight read-only tools, the ones an on-call engineer would reach for: list and query metrics (Prometheus), search logs (Loki), search traces and read one (Tempo), service health and recent deploys (docker), and the money check. They take queries, ids and numbers, never a URL or a command, and every source must be this Mac. Everything they return is treated as untrusted: hidden characters dropped, every string and list capped, and a container's environment never passed on except three behavior settings.
 - `src/klaxon/agent/mcp_server.py`: an MCP server written from scratch (JSON-RPC 2.0 over stdio, revision 2025-11-25), so any MCP client can use the tools. The tests drive it with the official SDK's clients.
 - `src/klaxon/agent/model.py`, `claude_code.py`: how the loop will ask a model for its next step. One interface, three adapters: a scripted mock for offline tests, Claude through Claude Code in headless mode (`claude -p`) on Aravind's university seat, and a replay of recorded replies for regression tests. Claude Code is started with no tools and no MCP servers, without this Mac's settings, CLAUDE.md or memory, in an empty temporary folder, with a deadline. Klaxon reads what Claude Code says it loaded and refuses the reply if it loaded anything. Every live reply is saved as received, with its date and model, before Klaxon uses it.
 - `src/klaxon/agent/trace.py`: the trace recorder. One JSON line per step of a run: what the model saw, what it proposed, whether that was allowed, what ran, what came back, and why the run stopped.
+- `src/klaxon/agent/loop.py`: the first agent loop, in plain Python. Given an alert, it asks the model for one step at a time: call one read-only tool, or give the diagnosis. Budgets on steps, tool calls and time bound every run, and a reply that breaks the contract is sent back with what was wrong, a bounded number of times. It calls only its eight allow-listed read-only tools, through Klaxon's MCP server, and refuses to start if the server offers anything else. Each tool result reaches the model inside a JSON document under a note that it is untrusted data, never instructions.
+- `src/klaxon/agent/contract.py`: the reply contract. Each reply is one JSON object, checked against the JSON Schema the model is shown. The run ends in a diagnosis: a hypothesis, evidence citing the tool calls of this run by id, a confidence from 0 to 1, a proposed fix (never applied), its blast radius, and a rollback plan.
+- `src/klaxon/agent/mcp_client.py`: an MCP client written from scratch, with a deadline on every message. It also records every tool result, so that a live run can be replayed offline, exactly, as a regression test.
 
 ### The first piece: the money check, in process
 
@@ -73,12 +76,15 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling a change to `docker/postgres/`, such as week 2's refund grants, `make reset` once: the database's roles and grants are made only on a new volume, and the payment confirmer refuses to start without them) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about five minutes) |
-| `make mutants` | breaks the code on purpose 340 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 435 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make tools` | list Klaxon's read-only tools, the ones its MCP server serves |
 | `make tool NAME=recent_deploys ARGS='{}'` | call one tool against the running stack and print what it returns |
 | `make claude-command` | print the exact command of each live model call (`claude -p`, locked down); calls nothing |
 | `make claude-check` | one tiny live call to Claude on Aravind's seat ("Reply with the word ok"), saved to `evidence/week3/` |
+| `make loop-prompt ALERT='...'` | print exactly what the loop tells the model for an alert (the system prompt and the first turn); calls no model |
+| `make investigate ALERT='...'` | one live run of the loop: Claude on Aravind's seat, read-only tools on the running stack (`STEPS=`, `TOOL_CALLS=`, `TIME_LIMIT=` seconds); saves the trace, the model's replies and the tool results to a folder in `evidence/week3/` |
+| `make replay-run RUN=...` | replay a recorded run offline, from its folder, and check every step reproduces |
 | `make traffic` | synthetic customers until Ctrl-C (`RATE=2` payments per second, `DURATION=` seconds, `SEED=7`) |
 | `make check-under-traffic` | the money check again and again while traffic flows (`CHECKS=20`, `RATE=5`); writes evidence to `evidence/week2/` |
 | `make faults` | the faults, their causes, their expected symptoms and their remedies |
