@@ -13,10 +13,10 @@ loop applies it.
 The schema shown to the model is the one enforced. It is JSON Schema, checked by a small validator here for
 just the keywords it uses (a test checks that it agrees with the jsonschema library). Beyond the schema, a
 reply must be one JSON object and nothing else (one code fence around it is allowed), with no key twice and
-no NaN; a tool call's arguments must fit that tool's own input schema; and the evidence must cite calls that
-ran in this run. A reply that breaks any of this is invalid: the loop says why and asks again, a bounded
-number of times. The problems it lists repeat little of the reply: field names cleaned and cut short, and call
-ids only once they fit their pattern.
+no NaN; a tool call's arguments must fit that tool's own input schema; the evidence must cite calls that ran
+in this run; and each text of the diagnosis must say something visible. A reply that breaks any of this is
+invalid: the loop says why and asks again, a bounded number of times. The problems it lists repeat little of
+the reply: field names cleaned and cut short, and call ids only once they fit their pattern.
 """
 
 from __future__ import annotations
@@ -294,6 +294,19 @@ def _no_constant(name: str) -> object:
     raise ValueError(f"{name} is not a JSON number")  # json.loads would otherwise read NaN and Infinity
 
 
+def _blank_texts(found: dict) -> list[str]:
+    """The texts of a diagnosis that say nothing: empty once spaces and characters that do not show are dropped.
+    The schema's minLength cannot see them: a zero-width space is one character."""
+    texts = [(f"diagnosis.{name}", found[name]) for name in ("hypothesis", "blast_radius", "rollback_plan")]
+    texts += [(f"diagnosis.proposed_fix.{name}", found["proposed_fix"][name]) for name in ("target", "summary")]
+    texts += [(f"diagnosis.evidence[{i}].shows", item["shows"]) for i, item in enumerate(found["evidence"])]
+    return [
+        f"{where}: says nothing: it is blank, or holds only characters that do not show"
+        for where, text in texts
+        if not clean_text(text, len(text)).strip()
+    ]
+
+
 def parse_object(text: str) -> tuple[dict | None, str | None]:
     """The reply as one JSON object, or the problem that stops it being one."""
     if len(text) > MAX_REPLY:
@@ -332,6 +345,9 @@ def read_reply(text: str, tools: Mapping[str, dict], calls: Mapping[str, tuple[s
             return Reading(value, (f"arguments: {clean_text(str(exc), 300)}",))
         return Reading(value, call=ToolCall(value["tool"], value["arguments"], why))
     cited = value["diagnosis"]["evidence"]
+    blank = _blank_texts(value["diagnosis"])
+    if blank:
+        return Reading(value, tuple(blank[:MAX_PROBLEMS]))
     if not calls:
         return Reading(value, ("diagnosis.evidence: must cite tool calls of this run, and none has run yet",))
     unknown = [

@@ -60,6 +60,7 @@ from klaxon.agent.model import (
     ModelTimeout,
     ModelUnsafe,
     Recording,
+    RecordingFailed,
     Reply,
     Usage,
     check_conversation,
@@ -422,7 +423,7 @@ class ClaudeCode:
         try:
             write(*args)
         except Exception as exc:  # a disk that is full, a folder that is gone, a value JSON cannot hold
-            raise ModelError(
+            raise RecordingFailed(
                 f"the call could not be recorded, so its reply is not used ({type(exc).__name__})"
             ) from exc
 

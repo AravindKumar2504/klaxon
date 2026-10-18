@@ -86,15 +86,18 @@ claude-command: ## print the exact command of each live model call (claude -p, l
 claude-check: ## one tiny live call to Claude on Aravind's seat ("Reply with the word ok"), saved to evidence/week3/
 	$(PY) -m klaxon.agent.claude_code check
 
-LOOP_BUDGETS = $(if $(STEPS),--steps $(STEPS)) $(if $(TOOL_CALLS),--tool-calls $(TOOL_CALLS)) $(if $(TIME_LIMIT),--seconds $(TIME_LIMIT))
+# The loop's values reach its command line through the environment (make passes on what it was given), never
+# pasted into the shell's text: an apostrophe in an alert cannot break the command or run as one.
+LOOP_ARGS = --alert "$$ALERT" --alert-name "$${ALERT_NAME:-manual}" $${STEPS:+--steps "$$STEPS"} \
+	$${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} $${TIME_LIMIT:+--seconds "$$TIME_LIMIT"}
 loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...'
-	$(PY) -m klaxon.agent.loop prompt --alert '$(ALERT)' --alert-name '$(or $(ALERT_NAME),manual)' $(LOOP_BUDGETS)
+	$(PY) -m klaxon.agent.loop prompt $(LOOP_ARGS)
 
 investigate: ## one live run of the loop: Claude on Aravind's seat, the running stack (STEPS=, TOOL_CALLS=, TIME_LIMIT=seconds)
-	$(PY) -m klaxon.agent.loop run --alert '$(ALERT)' --alert-name '$(or $(ALERT_NAME),manual)' $(LOOP_BUDGETS)
+	$(PY) -m klaxon.agent.loop run $(LOOP_ARGS)
 
 replay-run: ## replay a recorded run offline and check it reproduces: make replay-run RUN=evidence/week3/<run folder>
-	$(PY) -m klaxon.agent.loop replay '$(RUN)'
+	$(PY) -m klaxon.agent.loop replay "$$RUN"
 
 traffic: ## synthetic customers until Ctrl-C (RATE=2 payments/s, DURATION=seconds, SEED=7)
 	$(PY) -m klaxon.traffic --rate $(or $(RATE),2) --seed $(or $(SEED),7) $(if $(DURATION),--seconds $(DURATION))

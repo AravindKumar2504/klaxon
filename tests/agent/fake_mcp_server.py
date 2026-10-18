@@ -41,10 +41,12 @@ def initialize(request):
         sys.stderr.flush()
     version = "2024-11-05" if MODE == "wrong-version" else "2025-11-25"
     name = "someone-else" if MODE == "wrong-name" else "klaxon-ops"
-    answer(
-        request,
-        {"protocolVersion": version, "capabilities": {"tools": {}}, "serverInfo": {"name": name, "version": "0"}},
-    )
+    capabilities = {} if MODE == "no-tools-capability" else {"tools": {}}
+    result = {"protocolVersion": version, "capabilities": capabilities, "serverInfo": {"name": name, "version": "0"}}
+    if MODE == "true-id":  # initialize is request 1, and in Python True == 1: only JSON's types tell them apart
+        write({"jsonrpc": "2.0", "id": True, "result": result})
+        return
+    answer(request, result)
 
 
 def tools_list(request):
@@ -76,12 +78,18 @@ def tools_call(request):
     elif MODE == "wrong-id":
         write({"jsonrpc": "2.0", "id": request["id"] + 1, "result": RESULT})
         return
-    elif MODE == "true-id":
-        write({"jsonrpc": "2.0", "id": True, "result": RESULT})
-        return
     elif MODE == "notify-first":
         write({"jsonrpc": "2.0", "method": "notifications/progress", "params": {"progress": 1}})
         sys.stdout.write("\n")
+    elif MODE == "bad-is-error":
+        answer(request, {"content": [{"type": "text", "text": "x"}], "isError": "yes"})
+        return
+    elif MODE == "chatty":
+        for n in range(150):
+            write({"jsonrpc": "2.0", "method": "notifications/progress", "params": {"progress": n}})
+    elif MODE == "exit-with-child":  # a child that keeps the server's stdout open after the server is gone
+        subprocess.Popen(["/bin/sleep", "30"])
+        sys.exit(3)
     elif MODE == "no-text":
         answer(request, {"content": [{"type": "image", "data": "", "mimeType": "image/png"}], "isError": False})
         return

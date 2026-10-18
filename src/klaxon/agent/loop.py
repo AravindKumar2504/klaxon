@@ -9,20 +9,23 @@ The loop's contract:
     stops         a diagnosis that passed validation; a budget used up (steps, tool calls, time); too many invalid
                   replies in a row; a model that gave no usable reply; tools that failed; an interrupt or a crash
 
-Budgets. Steps: one per model call, invalid replies and failed calls included. Tool calls. Time: each model call
-and each tool call gets at most the time left. An invalid reply is answered with what was wrong and asked again,
-at most `retries` times in a row. A model call that failed or timed out is asked again at most `model_retries`
-times in a row, but never one Klaxon refused (ModelUnsafe, ModelMismatch). When one tool call or one step is
-left, the loop says the next reply must be the diagnosis; a tool call after that is refused, and the run stops.
+Budgets. Steps: one per model call, invalid replies and failed calls included. Tool calls. Time: the tool server
+must start, and each model call and each tool call must answer, within the time left (the live adapter then
+gives Claude Code up to 10 s to exit after its reply). An invalid reply is answered with what was wrong and asked
+again, at most `retries` times in a row. A model call that failed or timed out is asked again at most
+`model_retries` times in a row, but never one Klaxon refused or could not record (ModelUnsafe, ModelMismatch,
+RecordingFailed). Each user turn ends with what is left; when one tool call or one step is left, it says the
+next reply must be the diagnosis. A tool call after that is refused, and the run stops.
 
 It acts on nothing. It calls only the read-only tools on its allow-list, through Klaxon's MCP server, a process
 of its own (python -m klaxon.agent.mcp_server), and refuses to start if the server offers any other tool, or
 one not marked read-only. The fix in a diagnosis is proposed, never applied: a human decides (week 4).
 
 Tool output is untrusted: a log line can say anything. The system prompt says so, and each result reaches the
-model inside a JSON document the loop writes itself, under a fixed note that it is data, never instructions,
-so no text in a result can pass for the loop's own words. The result is cleaned again (hidden characters
-dropped, the home folder written as ~) and capped.
+model inside a JSON document the loop writes itself, on one line, under a fixed note that it is data, never
+instructions, so no text in a result can pass for the loop's own lines. Every character that can end a line is
+escaped inside it, the Unicode line and paragraph separators included. The result is cleaned again (hidden
+characters dropped, the home folder written as ~) and capped.
 
 Every step goes to the trace (klaxon.agent.trace): what the model saw, its reply, what the loop read from it,
 allowed or not and why, what ran, what came back, and why the run stopped. A live model records every reply
@@ -53,6 +56,7 @@ from pathlib import Path
 from klaxon.agent.claude_code import DEFAULT_MODEL
 from klaxon.agent.contract import MAX_REPLY, Diagnosis, Reading, read_reply, reply_schema
 from klaxon.agent.mcp_client import (
+    START_TIMEOUT,
     McpClient,
     McpError,
     McpTimeout,
@@ -62,6 +66,7 @@ from klaxon.agent.mcp_client import (
     ToolResult,
     ToolSpec,
 )
+from klaxon.agent.mcp_server import MAX_RESULT
 from klaxon.agent.model import Message, Model, ModelError, ModelTimeout, ReplayModel, text_sha256
 from klaxon.agent.tools import clean, clean_text
 from klaxon.agent.trace import Trace, read_trace
@@ -82,10 +87,14 @@ READ_ONLY_TOOLS = frozenset(
     }
 )
 TOOL_TIMEOUT = 180.0  # seconds for one tool call, at most: the money check alone may wait 120 s to settle
-MAX_OBSERVATION = 30_000  # characters of one tool result the model sees; the server refuses results over 60,000
+MAX_OBSERVATION = MAX_RESULT  # characters of one tool result the model sees: all the server ever sends, and no more
 MAX_ALERT = {"name": 100, "summary": 1000, "fired_at": 40}
-RETRYABLE = (ModelError, ModelTimeout)  # exact types: a reply Klaxon refused is never asked for again
+# Exact types: a reply Klaxon refused, or could not record, is never asked for again; nor one a retry cannot change.
+RETRYABLE = (ModelError, ModelTimeout)
 FULLWIDTH_AT = chr(0xFF20)  # as the live adapter writes at signs in turns: never "@path" on Claude Code's command line
+# What a reader can take for the end of a line, once cleaning has dropped the control characters: a newline, and
+# the Unicode line and paragraph separators, which json.dumps writes as they are when ensure_ascii is off.
+LINE_BREAKS = {"\n": "\\n", "\u2028": "\\u2028", "\u2029": "\\u2029"}
 TRACE, RECORDING, TOOL_RESULTS = "trace.jsonl", "model-recording.jsonl", "tool-results.jsonl"
 
 
@@ -99,11 +108,12 @@ class NotAllowed(RuntimeError):
 
 @dataclass(frozen=True)
 class Alert:
-    """The goal: what fired. Plain text, as Klaxon's own alerting writes it (item 4): no hidden characters."""
+    """The goal: what fired. Plain text on one line each, as Klaxon's own alerting will write it (item 4): no
+    hidden characters and no line breaks, so that nothing in an alert can pass for a line of the loop's own."""
 
     name: str
     summary: str
-    fired_at: str | None = None
+    fired_at: str | None = None  # in UTC, ISO 8601
 
     def __post_init__(self) -> None:
         for label, value in (("name", self.name), ("summary", self.summary), ("fired_at", self.fired_at)):
@@ -115,6 +125,18 @@ class Alert:
                 raise ValueError(f"an alert's {label} is longer than {MAX_ALERT[label]} characters")
             if clean_text(value, len(value)) != value:
                 raise ValueError(f"an alert's {label} holds hidden characters or this Mac's home folder")
+            if any(mark in value for mark in LINE_BREAKS):
+                raise ValueError(f"an alert's {label} is one line")
+        if self.fired_at is not None and _utc(self.fired_at) is None:
+            raise ValueError("an alert's fired_at is a time in UTC, in ISO 8601 (2026-10-18T09:46:18Z)")
+
+
+def _utc(text: str) -> datetime | None:
+    try:
+        when = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return when if when.utcoffset() is not None and not when.utcoffset() else None
 
 
 @dataclass(frozen=True)
@@ -157,6 +179,7 @@ class State:
     """Everything the loop knows, between steps."""
 
     conversation: list[Message] = field(default_factory=list)
+    last_turn: str = ""  # the last user turn, before its note of what is left
     steps: int = 0
     tool_calls: int = 0
     invalid_in_a_row: int = 0
@@ -206,13 +229,24 @@ UNTRUSTED = (
 )
 
 
+def one_line(text: str) -> str:
+    """Text with every line break written as its escape, so that it holds on one line whatever it says: valid
+    inside JSON strings, and visible in plain text. (json.dumps escapes a newline itself, but with ensure_ascii off
+    it writes U+2028 and U+2029 as they are.)"""
+    for mark, escaped in LINE_BREAKS.items():
+        text = text.replace(mark, escaped)
+    return text
+
+
 def system_prompt(specs: Sequence[ToolSpec]) -> str:
     """The system prompt for these tools: the role, the system, the rules, the reply's schema, and the tools."""
-    schema = json.dumps(reply_schema([spec.name for spec in specs]), ensure_ascii=False)
+    schema = one_line(json.dumps(reply_schema([spec.name for spec in specs]), ensure_ascii=False))
     tools = "\n".join(
-        json.dumps(
-            {"name": spec.name, "description": clean_text(spec.description), "arguments": clean(spec.input_schema)},
-            ensure_ascii=False,
+        one_line(
+            json.dumps(
+                {"name": spec.name, "description": clean_text(spec.description), "arguments": clean(spec.input_schema)},
+                ensure_ascii=False,
+            )
         )
         for spec in specs
     )
@@ -269,9 +303,10 @@ def for_the_model(text: str) -> tuple[object, bool]:
     return clean(value), False
 
 
-def observation(call_id: str, tool: str, arguments: Mapping, result: ToolResult, left: str) -> str:
-    """The turn that brings a tool's result to the model. The result sits inside a JSON document the loop writes,
-    so no text in it can end the document or pass for the loop's own lines around it."""
+def observation(call_id: str, tool: str, arguments: Mapping, result: ToolResult) -> str:
+    """The turn that brings a tool's result to the model, before the note of what is left. The result sits inside
+    a JSON document the loop writes on one line, so no text in it can end the document or pass for a line of the
+    loop's own."""
     shown, cut = for_the_model(result.text)
     document = {
         "call_id": call_id,
@@ -281,25 +316,25 @@ def observation(call_id: str, tool: str, arguments: Mapping, result: ToolResult,
         "result": shown,
     }
     outcome = "gave a tool error" if result.is_error else "returned a result"
-    lines = [f"Call {call_id}: {tool} {outcome}.", UNTRUSTED, json.dumps(document, ensure_ascii=False)]
+    lines = [f"Call {call_id}: {tool} {outcome}.", UNTRUSTED, one_line(json.dumps(document, ensure_ascii=False))]
     if cut:
         lines.append(
             f"The result was cut to its first {MAX_OBSERVATION:,} characters, as one string: ask for less to see it"
             " whole (a shorter time range, a lower limit or a narrower query)."
         )
-    return "\n".join([*lines, "", left])
+    return "\n".join(lines)
 
 
-def retry_turn(problems: Sequence[str], in_a_row: int, retries: int, left: str) -> str:
-    listed = "\n".join(f"- {clean_text(problem, 400)}" for problem in problems)
+def retry_turn(problems: Sequence[str], in_a_row: int, retries: int) -> str:
+    """The turn that sends an invalid reply back, before the note of what is left."""
+    # One line each, whatever a field name in the reply held: a problem can quote one.
+    listed = "\n".join(f"- {one_line(clean_text(problem, 400))}" for problem in problems)
     return "\n".join(
         [
             "Your last reply could not be used:",
             listed,
             "Reply again with one JSON object in the form the system prompt gives, and nothing else. That was"
             f" invalid reply {in_a_row} in a row; the run stops at {retries + 1}.",
-            "",
-            left,
         ]
     )
 
@@ -349,17 +384,19 @@ class Investigation:
 
     def run(self) -> RunResult:
         try:
-            specs = allowed_tools(self.tools.open())
+            specs = allowed_tools(self.tools.open(min(START_TIMEOUT, max(self._seconds_left(), 0.001))))
         except (McpError, ToolsRefused) as exc:
             self._start([])
-            return self._stop("tools_failed", f"{type(exc).__name__}: {exc}")
+            out_of_time = isinstance(exc, McpTimeout) and self._seconds_left() <= 0
+            return self._stop("time_budget" if out_of_time else "tools_failed", f"{type(exc).__name__}: {exc}")
         except BaseException:
             self._start([])  # so that the trace still says how the run ended: interrupted, or crashed
             raise
         self.schemas = {spec.name: spec.input_schema for spec in specs}
         self.system = system_prompt(specs)
         self._start(specs)
-        self.state.conversation.append(Message("user", first_turn(self.alert, self.budgets)))
+        self.state.last_turn = first_turn(self.alert, self.budgets)
+        self.state.conversation.append(Message("user", self.state.last_turn))
         while True:
             if self._seconds_left() <= 0:
                 return self._stop("time_budget", f"all {self.budgets.seconds:g} s of the run are used")
@@ -428,7 +465,7 @@ class Investigation:
         self.state.failed_in_a_row += 1
         error = f"{type(exc).__name__}: {exc}"
         if type(exc) not in RETRYABLE:  # a refusal stays a refusal, even at the end of the time
-            stop = "model_error", f"not asked again: Klaxon refused the reply, or it cannot come ({type(exc).__name__})"
+            stop = "model_error", f"not asked again: a retry cannot change this ({type(exc).__name__})"
         elif self._seconds_left() <= 0:
             stop = "time_budget", "not asked again: the run's time is used"
         elif self.state.failed_in_a_row > self.budgets.model_retries:
@@ -436,7 +473,11 @@ class Investigation:
         elif self.state.steps >= self.budgets.steps:
             stop = "step_budget", "not asked again: no step is left"
         else:
-            self.trace.step(system=self.system, messages=seen, error=error, why="asked again, the same conversation")
+            self.trace.step(
+                system=self.system, messages=seen, error=error, why="asked again: its last turn now says what is left"
+            )
+            # The failed call used a step: the turn it never answered is asked again, saying what is left now.
+            self.state.conversation[-1] = Message("user", self._with_note(self.state.last_turn))
             return None
         reason, why = stop
         self.trace.step(system=self.system, messages=seen, error=error, why=why)
@@ -457,8 +498,7 @@ class Investigation:
             return self._stop(
                 "invalid_replies", f"{self.state.invalid_in_a_row} invalid replies in a row; the last: {problems}"
             )
-        again = retry_turn(reading.problems, self.state.invalid_in_a_row, self.budgets.retries, self._left())
-        self._add(reply.text, again)
+        self._add(reply.text, retry_turn(reading.problems, self.state.invalid_in_a_row, self.budgets.retries))
         return None
 
     def _tool(self, seen: list[Message], reply, reading: Reading) -> RunResult | None:
@@ -497,7 +537,8 @@ class Investigation:
                 reply=reply,
                 proposed=reading.value,
                 allowed=True,
-                why=f"a read-only tool on the allow-list, within the budgets; it gave no result: {error}",
+                # The error's type only: its words differ in a replay (they name the recording); the stop has them all.
+                why=f"a read-only tool on the allow-list, within the budgets; it gave no result ({type(exc).__name__})",
                 ran=ran,
                 tool_seconds=took,
             )
@@ -505,7 +546,8 @@ class Investigation:
         self.state.tool_calls += 1
         took = self.clock() - started
         self.state.calls[call_id] = Call(call_id, call.tool, dict(call.arguments), result.is_error, round(took, 3))
-        shown = observation(call_id, call.tool, call.arguments, result, self._left())
+        body = observation(call_id, call.tool, call.arguments, result)
+        shown = self._with_note(body)  # the turn as the model will see it, and as the trace keeps it
         self.trace.step(
             system=self.system,
             messages=seen,
@@ -518,7 +560,7 @@ class Investigation:
             came_back_error=result.is_error,
             tool_seconds=took,
         )
-        self._add(reply.text, shown)
+        self._add(reply.text, body)
         return None
 
     def _call(self, name: str, arguments: Mapping[str, object], timeout: float) -> ToolResult:
@@ -527,8 +569,13 @@ class Investigation:
             raise NotAllowed(f"{clean_text(str(name), 64)} is not a read-only tool this loop may call")
         return self.tools.call(name, arguments, timeout)
 
-    def _add(self, reply_text: str, user_turn: str) -> None:
-        self.state.conversation += [Message("assistant", _as_turn(reply_text)), Message("user", user_turn)]
+    def _add(self, reply_text: str, turn: str) -> None:
+        """The reply, then the next user turn, which ends with the note of what is left."""
+        self.state.last_turn = turn
+        self.state.conversation += [Message("assistant", _as_turn(reply_text)), Message("user", self._with_note(turn))]
+
+    def _with_note(self, turn: str) -> str:
+        return f"{turn}\n\n{self._left()}"
 
     def _left(self) -> str:
         return left_note(self.budgets.steps - self.state.steps, self.budgets.tool_calls - self.state.tool_calls)
@@ -654,6 +701,11 @@ def _print_result(result: RunResult, folder: Path | None = None) -> None:
         print(f"Saved in {clean_text(str(folder))}: {TRACE}, {RECORDING}, {TOOL_RESULTS}")
 
 
+def rerun_command(argv: Sequence[str]) -> str:
+    """The command that ran, for the evidence: with this Mac's home folder written as ~, as in all evidence."""
+    return clean_text(shlex.join(["python", "-m", "klaxon.agent.loop", *argv]), 2000)
+
+
 def _show_prompt(alert: Alert, budgets: Budgets) -> int:
     client = McpClient()
     try:
@@ -684,7 +736,7 @@ def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, arg
     folder = _new_folder(evidence_dir, f"{stamp}_loop_{_slug(alert.name)}")
     header = {
         "what": "One live run of Klaxon's first loop: Claude on Aravind's seat, read-only tools on this Mac's stack.",
-        "rerun_command": shlex.join(["python", "-m", "klaxon.agent.loop", *argv]),
+        "rerun_command": rerun_command(argv),
         "alert": asdict(alert),
         "budgets": asdict(budgets),
         **_provenance(),

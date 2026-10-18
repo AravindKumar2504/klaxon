@@ -312,3 +312,29 @@ def test_the_validator_refuses_a_schema_keyword_it_does_not_know():
 def test_true_is_not_1_and_1_is_not_a_string():
     assert c.check({"const": 1}, True) != [] and c.check({"const": True}, 1) != []
     assert c.check({"enum": ["1"]}, 1) != [] and c.check({"const": 1}, 1.0) == []
+
+
+def test_a_field_name_in_a_problem_is_cleaned_and_cut_short():
+    [problem] = read(call() | {"x‮" + "y" * 100: 1}).problems
+    assert "‮" not in problem and "y" * 60 not in problem and "is not a field here" in problem
+
+
+@pytest.mark.parametrize("blank", [" ", "\t", "\n \n", "​", "⁠​ ", " "])
+@pytest.mark.parametrize(
+    "where",
+    ["hypothesis", "blast_radius", "rollback_plan", "proposed_fix.target", "proposed_fix.summary", "evidence[0].shows"],
+)
+def test_a_diagnosis_text_that_says_nothing_is_invalid(blank, where):
+    value = diagnose()
+    found = value["diagnosis"]
+    if where.startswith("proposed_fix."):
+        found["proposed_fix"][where.split(".")[1]] = blank
+    elif where.startswith("evidence"):
+        found["evidence"][0]["shows"] = blank
+    else:
+        found[where] = blank
+    reading = read(value)
+    assert reading.diagnosis is None
+    assert reading.problems == (
+        f"diagnosis.{where}: says nothing: it is blank, or holds only characters that do not show",
+    )

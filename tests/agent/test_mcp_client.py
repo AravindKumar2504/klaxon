@@ -146,7 +146,6 @@ def test_a_server_that_exits_mid_call_is_an_error_with_its_last_words():
     [
         ("garbage-on-call", "a line that is not JSON"),
         ("wrong-id", "answered another request than tools/call"),
-        ("true-id", "answered another request than tools/call"),
         ("no-text", "result holds no text"),
         ("error-answer", "refused tools/call: Unknown tool: x .code -32602"),
     ],
@@ -165,6 +164,7 @@ def test_a_server_that_breaks_the_protocol_ends_the_session(mode, problem):
         ("wrong-version", "speaks MCP 2024-11-05, not 2025-11-25"),
         ("wrong-name", "is not klaxon-ops"),
         ("paged", "lists its tools in pages"),
+        ("true-id", "answered another request than initialize"),
     ],
 )
 def test_a_server_that_is_not_klaxons_or_speaks_another_version_is_refused_at_the_handshake(mode, problem):
@@ -277,7 +277,8 @@ class Canned:
         self.server_info = {"name": "klaxon-ops", "version": "0", "protocol": "2025-11-25"}
         self.closed = False
 
-    def open(self):
+    def open(self, timeout=mc.START_TIMEOUT):
+        self.opened_with = timeout
         return [mc.ToolSpec("service_health", "Service health", "Made up.", SCHEMA, {"readOnlyHint": True})]
 
     def call(self, name, arguments, timeout):
@@ -295,7 +296,8 @@ def test_every_result_is_recorded_with_the_tools_as_listed(tmp_path):
     recorded = mc.RecordedTools(
         Canned(mc.ToolResult('{"a": 1}', False), mc.ToolResult("bad", True)), path, {"run": "r1"}
     )
-    recorded.open()
+    recorded.open(12.5)
+    assert recorded.inner.opened_with == 12.5  # the time to start is passed on
     recorded.call("service_health", {"say": "x"}, 5)
     recorded.call("service_health", {}, 5)
     recorded.close()
@@ -340,7 +342,7 @@ def test_a_result_that_cannot_be_recorded_is_not_passed_on(tmp_path, monkeypatch
 
 def test_a_failed_open_is_recorded(tmp_path):
     class Broken(Canned):
-        def open(self):
+        def open(self, timeout=mc.START_TIMEOUT):
             raise mc.McpError("the tool server could not be started (FileNotFoundError)")
 
     path = tmp_path / "tools.jsonl"
@@ -424,3 +426,34 @@ def test_a_replay_needs_exactly_one_list_of_tools(tmp_path):
     path.write_text("")
     with pytest.raises(ValueError, match="one list of tools"):
         mc.ReplayTools(path)
+
+
+# After the independent review: checks no test proved before (its finding 5)
+
+
+def test_a_server_without_the_tools_capability_is_refused():
+    with pytest.raises(mc.McpError, match="offers no tools capability"):
+        fake("no-tools-capability").open()
+
+
+def test_a_result_whose_is_error_is_not_true_or_false_ends_the_session():
+    client = fake("bad-is-error")
+    client.open()
+    with pytest.raises(mc.McpError, match="isError that is not true or false"):
+        client.call("service_health", {}, timeout=10)
+
+
+def test_a_server_that_sends_message_after_message_but_no_answer_is_given_up_on():
+    client = fake("chatty")
+    client.open()
+    with pytest.raises(mc.McpError, match="sent 100 messages that were not the answer to tools/call"):
+        client.call("service_health", {}, timeout=10)
+
+
+def test_a_server_that_exits_while_its_child_holds_the_pipe_is_seen_to_be_gone_at_once():
+    client = fake("exit-with-child")
+    client.open()
+    started = time.monotonic()
+    with pytest.raises(mc.McpError, match="the tool server exited"):  # not a timeout, 10 s later
+        client.call("service_health", {}, timeout=10)
+    assert time.monotonic() - started < 3.0

@@ -138,6 +138,11 @@ def good(text="ok", model="claude-opus-5-5"):
     return [("event", init()), ("event", assistant(text, model)), ("event", result(text))]
 
 
+def cc_good_from_another_model():
+    """A good reply, but from another model than the one asked for: one Klaxon refuses."""
+    return good(model="claude-sonnet-5-5")
+
+
 class Fake:
     """A fake claude executable, and what it saw when it ran."""
 
@@ -663,11 +668,21 @@ def test_every_reply_is_recorded_before_it_is_returned(fake, recording):
 def test_a_reply_that_cannot_be_recorded_is_not_returned(fake, recording):
     recording.path.chmod(0o444)
     try:
-        with pytest.raises(m.ModelError, match="could not be recorded"):
+        with pytest.raises(m.RecordingFailed, match="could not be recorded"):
             live(fake, recording).ask(SYSTEM, ASK)
     finally:
         recording.path.chmod(0o644)
     assert fake.ran()  # the call happened; its reply was dropped
+
+
+def test_a_refusal_that_cannot_be_recorded_is_a_recording_failure(fake, recording):
+    fake.plan(cc_good_from_another_model())
+    recording.path.chmod(0o444)
+    try:
+        with pytest.raises(m.RecordingFailed, match="could not be recorded"):
+            live(fake, recording).ask(SYSTEM, ASK)
+    finally:
+        recording.path.chmod(0o644)
 
 
 def test_a_record_json_cannot_hold_is_an_error_and_no_reply(fake, recording, monkeypatch):

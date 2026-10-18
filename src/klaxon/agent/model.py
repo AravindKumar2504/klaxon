@@ -53,6 +53,11 @@ class ModelMismatch(ModelError):
     """The reply came from another model than the one asked for."""
 
 
+class RecordingFailed(ModelError):
+    """A call's reply, refusal or failure could not be saved, so nothing from it is used. Asking again would only
+    make another call whose reply could not be saved either."""
+
+
 class ScriptExhausted(ModelError):
     """A scripted model was asked more often than its script has replies."""
 

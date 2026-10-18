@@ -88,7 +88,7 @@ class ToolResult:
 class ToolClient(Protocol):
     """What the loop needs from its tools."""
 
-    def open(self) -> list[ToolSpec]: ...
+    def open(self, timeout: float = START_TIMEOUT) -> list[ToolSpec]: ...
 
     def call(self, name: str, arguments: Mapping[str, object], timeout: float) -> ToolResult: ...
 
@@ -235,8 +235,9 @@ def _no_constant(name: str) -> object:
 
 
 class McpClient:
-    """A session with Klaxon's MCP server. open() starts the server and lists its tools; call() runs one tool;
-    close() stops the server. A timeout or a broken session closes it: open() again to start a new one."""
+    """A session with Klaxon's MCP server. open() starts the server and lists its tools, within its timeout;
+    call() runs one tool; close() stops the server. A timeout or a broken session closes it: open() again to start
+    a new one."""
 
     def __init__(
         self,
@@ -252,11 +253,12 @@ class McpClient:
         self.start_timeout = start_timeout
         self.server_info: dict = {}
 
-    def open(self) -> list[ToolSpec]:
+    def open(self, timeout: float | None = None) -> list[ToolSpec]:
         if self._transport is not None:
             raise McpError("this session is already open")
+        timeout = self.start_timeout if timeout is None else timeout
         self._transport = self._make()
-        deadline = time.monotonic() + self.start_timeout
+        deadline = time.monotonic() + timeout
         try:
             hello = {
                 "protocolVersion": PROTOCOL_VERSION,
@@ -268,7 +270,7 @@ class McpClient:
             return self._specs(self._request("tools/list", {}, deadline))
         except McpTimeout:
             self.close(graceful=False)
-            raise McpTimeout(f"the tool server did not start within {self.start_timeout:g} s") from None
+            raise McpTimeout(f"the tool server did not start within {timeout:.1f} s") from None
         except McpError:
             self.close(graceful=False)
             raise
@@ -431,10 +433,10 @@ class RecordedTools:
     def server_info(self) -> dict:
         return getattr(self.inner, "server_info", {})
 
-    def open(self) -> list[ToolSpec]:
+    def open(self, timeout: float = START_TIMEOUT) -> list[ToolSpec]:
         opened = {"kind": "header", "format": FORMAT, "label": LABEL, "opened_at": utc_now()} | self._header
         try:
-            specs = self.inner.open()
+            specs = self.inner.open(timeout)
         except McpError as exc:
             _append(self.path, [opened | {"failed": f"{type(exc).__name__}: {exc}"}])
             raise
@@ -497,7 +499,7 @@ class ReplayTools:
     def unused(self) -> int:
         return len(self._calls)
 
-    def open(self) -> list[ToolSpec]:
+    def open(self, timeout: float = START_TIMEOUT) -> list[ToolSpec]:
         return list(self._specs)
 
     def call(self, name: str, arguments: Mapping[str, object], timeout: float) -> ToolResult:
