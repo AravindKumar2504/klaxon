@@ -725,7 +725,7 @@ RATE_LIMIT = {
     "rate_limit_info": {
         "status": "allowed",
         "rateLimitType": "five_hour",
-        "unifiedWindows": {"five_hour": {"utilization": 0.01}},
+        "unifiedWindows": {"five_hour": {"utilization": 0.42}},
     },
 }
 
