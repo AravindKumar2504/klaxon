@@ -1198,7 +1198,7 @@ MUTANTS = [
     ("the stack need be quiet only once", "src/klaxon/fault_runs.py",
      "        for n in range(QUIET_EVALUATIONS):", "        for n in range(1):", False),
     ("a money check that did not pass counts as quiet", "src/klaxon/fault_runs.py",
-     '    if outcome != "passed":', "    if False:", False),
+     '    if outcome not in ("passed", "failed"):', "    if False:", False),
     ("a rule that read no data counts as quiet", "src/klaxon/fault_runs.py",
      "    if missing:", "    if False:", False),
     ("an injection that fails halfway is not cleared", "src/klaxon/fault_runs.py",
@@ -1251,16 +1251,28 @@ MUTANTS = [
     # After the independent review of item 4:
     ("a run's label claims a fault it never injected", "src/klaxon/fault_runs.py",
      '    if "injected_at" not in record.timings:\n        return', "    if False:\n        return", False),
+    ("a run's label hides a clearing that failed", "src/klaxon/fault_runs.py",
+     '    if record.cleared is None:\n        said.append("Clearing it failed', '    if False:\n        said.append("Clearing it failed',
+     False),
+    ("a run's label says a diagnosis was compared when there was none", "src/klaxon/fault_runs.py",
+     ' and record.comparison["verdict"] != "no diagnosis":', ":", False),
+    ("a run's label claims traffic that never began", "src/klaxon/fault_runs.py",
+     "    if record.traffic is None:\n        return (", "    if False:\n        return (", False),
+    ("a run's label calls a failed injection a fault injected", "src/klaxon/fault_runs.py",
+     "    if record.injected is None:\n        said.append(", "    if False:\n        said.append(", False),
     ("a run's label claims a loop that did not finish", "src/klaxon/fault_runs.py",
      "        if record.loop is None:\n            said.append", "        if False:\n            said.append", False),
     ("the alert's time is when its evaluation ended", "src/klaxon/fault_runs.py",
-     'record.timings["alert_at"] = record.evaluations[-1]["began"]', 'record.timings["alert_at"] = since()', False),
+     'record.timings["alert_evaluation_began"] = record.evaluations[-1]["began"]',
+     'record.timings["alert_evaluation_began"] = since()', False),
     ("the counts carry over after clearing", "src/klaxon/fault_runs.py",
      "        stack.alerting.reset()  #", "        pass  #", False),
     ("a quiet run that could not see counts as quiet", "src/klaxon/fault_runs.py",
-     "            unwell = not_quiet(evaluation)", "            unwell = None", False),
+     "            blind = unseen(evaluation)", "            blind = None", False),
+    ("one blip fails a quiet run", "src/klaxon/fault_runs.py",
+     "            blind = unseen(evaluation)", "            blind = not_quiet(evaluation)", False),
     ("the quiet command passes a run that was not quiet", "src/klaxon/fault_runs.py",
-     'found["alerts_fired"] == 0 and found["evaluations_not_quiet"] == 0',
+     'found["alerts_fired"] == 0 and found["evaluations_blind"] == 0',
      'found["alerts_fired"] == 0 and found["evaluations_with_problems"] == 0', False),
     ("a number at a threshold is written as the threshold", "src/klaxon/alerts.py",
      '        if float(text.replace(",", "")) > threshold:\n            return text', "        return text", False),
@@ -1284,7 +1296,8 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
     args = [python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"]
     if integration:
         args += ["-m", "integration"]
-    env = {"PYTHONPATH": str(work / "src"), "PATH": "/usr/bin:/bin", "HOME": str(Path.home())}
+    # No .pyc written: two mutants of one file, of the same size, written within a second, could share a stale one.
+    env = {"PYTHONPATH": str(work / "src"), "PATH": "/usr/bin:/bin", "HOME": str(Path.home()), "PYTHONDONTWRITEBYTECODE": "1"}
     return subprocess.run(args, cwd=work, env=env, capture_output=True, text=True, timeout=600)
 
 

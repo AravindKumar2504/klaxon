@@ -155,7 +155,7 @@ def test_a_run_goes_from_a_quiet_stack_to_the_alert_to_the_loop_and_then_clears_
     assert record.timings == {
         "injected_at": 75.0,
         "injection_took": 0.0,
-        "alert_at": 105.0,
+        "alert_evaluation_began": 105.0,
         "loop_started_at": 105.0,
         "loop_ended_at": 225.0,
         "cleared_at": 225.0,
@@ -393,7 +393,7 @@ def test_bad_budgets_or_traffic_settings_are_refused_before_anything(monkeypatch
 # The command, end to end, offline
 
 
-def patch_command(monkeypatch, world):
+def patch_command(monkeypatch, world, script=None):
     """The command with this made-up stack and traffic, and Klaxon's real loop: scripted replies, and Klaxon's real
     MCP server code serving made-up tool results, in this process."""
     monkeypatch.setattr(fault_runs, "preflight", lambda model: Path("/made-up/claude"))
@@ -402,7 +402,7 @@ def patch_command(monkeypatch, world):
     monkeypatch.setattr(fault_runs.alerts, "Alerting", world.alerting)
     monkeypatch.setattr(fault_runs, "Stack", lambda local, alerting: world.stack())
     monkeypatch.setattr(fault_runs, "_provenance", lambda command: {"rerun_command": command, "git_commit": "made-up"})
-    script = [tool("query_metrics", query="sum(rate(klaxon_provider_attempts_total[1m]))"), DIAGNOSE_OUTAGE]
+    script = script or [tool("query_metrics", query="sum(rate(klaxon_provider_attempts_total[1m]))"), DIAGNOSE_OUTAGE]
     given = []
 
     def investigate_live(alert, budgets, folder, header, model_id, binary):
@@ -453,6 +453,7 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d{6}Z_fault-run_provider-outage", folder.name)
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     assert saved["label"] == fault_runs.label(fault_runs.Record(**{k: saved[k] for k in RECORD_FIELDS}))
+    assert saved["printed_output"][0] == "Klaxon week 3: a run of the first loop on a fault: provider-outage"
     for claim in (
         "provider-outage, was injected on purpose",
         "The alert was raised",
@@ -483,6 +484,7 @@ def test_a_run_that_fails_midway_still_saves_its_record_and_says_so(offline, tmp
     [folder] = tmp_path.iterdir()
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     assert saved["stopped"] == "error: RuntimeError: docker did not answer" and saved["cleared"] is None
+    assert "Clearing it failed, so it may still be in place." in saved["label"]  # the re-check: untested before
     assert "THE FAULT MAY STILL BE IN PLACE: make fault-clear FAULT=provider-outage" in capsys.readouterr().err
 
 
@@ -561,6 +563,63 @@ def test_a_loop_that_did_not_finish_is_said_to_have_started_only(tmp_path, monke
     assert "recorded response" not in label and "by a rule" not in label
 
 
+def test_a_loop_that_stopped_without_a_diagnosis_is_not_said_to_be_compared(tmp_path, monkeypatch):
+    # The re-check of finding 1: this sentence had no test.
+    world = World()
+    patch_command(monkeypatch, world, script=[tool("service_health"), tool("service_health")])
+    argv = ["run", "provider-outage", "--steps", "2", "--tool-calls", "1", "--evidence-dir", str(tmp_path)]
+    assert fault_runs.main(argv) == 1
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["comparison"]["verdict"] == "no diagnosis" and saved["loop"]["reason"] == "tool_call_budget"
+    assert "stopped on tool_call_budget after 2 steps" in saved["label"] and "by a rule" not in saved["label"]
+
+
+def test_a_run_whose_traffic_never_began_claims_nothing(tmp_path, monkeypatch):
+    world = World()
+    world.traffic_fails = True
+    patch_command(monkeypatch, world)
+    assert fault_runs.main(["run", "provider-outage", "--evidence-dir", str(tmp_path)]) == 2
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["traffic"] is None and "stopped before its synthetic traffic began" in saved["label"]
+    assert "with synthetic traffic" not in saved["label"] and world.calls == []
+
+
+def test_a_failed_injection_is_not_called_a_fault_injected(tmp_path, monkeypatch):
+    world = World()
+    world.inject_fails = True
+    patch_command(monkeypatch, world)
+    assert fault_runs.main(["run", "provider-outage", "--evidence-dir", str(tmp_path)]) == 2
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["injected"] is None and saved["cleared"] == {"made_up": "cleared"}
+    assert "began on purpose and failed" in saved["label"] and "was injected on purpose" not in saved["label"]
+    assert "No alert fired" not in saved["label"]
+    assert any(line.startswith("  an injection began at t=") for line in saved["printed_output"])
+
+
+def test_one_blip_does_not_fail_a_quiet_run(tmp_path, monkeypatch, capsys):
+    # The re-check of finding 3: the rules let one blip pass, so a quiet run counts it and does not fail on it.
+    world = World()
+    real = world.prometheus
+    asked = []
+
+    def one_slow_minute(query):
+        if query == alerts.QUERIES["p95_seconds"]:
+            asked.append(query)
+            if len(asked) == 2:
+                return SLOW["p95_seconds"]
+        return real(query)
+
+    world.prometheus = one_slow_minute
+    patch_quiet(monkeypatch, world)
+    assert fault_runs.main(["quiet", "--minutes", "1", "--evidence-dir", str(tmp_path)]) == 0
+    [path] = tmp_path.iterdir()
+    saved = json.loads(path.read_text())
+    assert (saved["alerts_fired"], saved["conditions_held"], saved["evaluations_blind"]) == (0, 1, 0)
+
+
 def test_each_evaluation_says_when_it_began_and_how_long_it_took():
     # Finding 4: times were taken at the end of an evaluation, and the alert's at the end of the one that fired.
     world = World(sick={"lag_by_group": [({"consumer": "ledger"}, 271.0)]})
@@ -568,7 +627,7 @@ def test_each_evaluation_says_when_it_began_and_how_long_it_took():
     record = run(world)
     during = [e for e in record.evaluations if e["phase"] == "during"]
     assert [(e["began"], e["took"]) for e in during] == [(120.0, 15.0), (150.0, 15.0)]
-    assert record.timings["alert_at"] == 150.0 and record.alert["name"] == "ConsumerLagHigh"
+    assert record.timings["alert_evaluation_began"] == 150.0 and record.alert["name"] == "ConsumerLagHigh"
 
 
 def test_after_clearing_the_rules_read_the_stack_afresh():
@@ -592,11 +651,11 @@ def test_a_quiet_run_that_could_not_see_is_not_quiet(before, money_before, tmp_p
     found = fault_runs.quiet(
         world.alerting(), Settings(run_id="r1"), 1.0, lambda s: FakeTraffic(world, s), world.sleep, world.clock
     )
-    assert found["alerts_fired"] == 0 and found["evaluations_not_quiet"] == len(found["evaluations"]) == 5
-    assert all(e["not_quiet"] for e in found["evaluations"])
+    assert found["alerts_fired"] == 0 and found["evaluations_blind"] == len(found["evaluations"]) == 5
+    assert all(e["blind"] for e in found["evaluations"])
     patch_quiet(monkeypatch, World(before=before, money_before=money_before))
     assert fault_runs.main(["quiet", "--minutes", "1", "--evidence-dir", str(tmp_path)]) == 1
-    assert "5 not quiet" in capsys.readouterr().out
+    assert "5 blind" in capsys.readouterr().out
 
 
 def test_the_make_targets_pass_their_values_through_the_environment():

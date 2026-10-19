@@ -113,6 +113,14 @@ def not_quiet(evaluation: alerts.Evaluation) -> str | None:
     held = [f"{check.rule} ({check.subject})" for check in evaluation.checks if check.breached]
     if held:
         return f"a rule's condition already holds: {', '.join(held)}"
+    return unseen(evaluation)
+
+
+def unseen(evaluation: alerts.Evaluation) -> str | None:
+    """What the rules could not see at this evaluation, or None: a source not read, a signal with no data, or a
+    money check that gave no verdict (passed or failed)."""
+    if evaluation.problems:
+        return "; ".join(evaluation.problems)
     read = {(check.rule, check.subject): check.numbers for check in evaluation.checks}
     missing = []
     if (read.get(("PaymentsLatencyHigh", "payments-api")) or {}).get("p95_seconds") is None:
@@ -125,7 +133,7 @@ def not_quiet(evaluation: alerts.Evaluation) -> str | None:
     if missing:
         return f"no data for {', '.join(missing)}: is the traffic reaching the stack?"
     outcome = (read.get(("MoneyCheckFailed", "money check")) or {}).get("outcome")
-    if outcome != "passed":
+    if outcome not in ("passed", "failed"):  # a failed check is a condition held, which the rule itself reports
         return f"the money check did not pass: {outcome}"
     return None
 
@@ -179,7 +187,7 @@ def run(
                 record.stopped = f"no alert fired within {alert_within_seconds:g} s of the injection"
                 return record
             record.alert = asdict(alert)
-            record.timings["alert_at"] = record.evaluations[-1]["began"]  # when the evaluation that fired began
+            record.timings["alert_evaluation_began"] = record.evaluations[-1]["began"]  # as its alert's fired_at
             record.timings["loop_started_at"] = since()
             result = investigate(alert)  # the alert as the rules raised it: the loop's only goal
             record.timings["loop_ended_at"] = since()
@@ -222,7 +230,9 @@ def quiet(
     warmup_seconds: float = WARMUP_SECONDS,
     every_seconds: float = alerts.EVERY_SECONDS,
 ) -> dict:
-    """Traffic and no fault: the rules evaluated every 15 s for minutes. On a healthy stack they must not fire."""
+    """Traffic and no fault: the rules evaluated again and again for minutes, 15 s apart. On a healthy stack no alert
+    may fire, and every evaluation must see (every source read, data for every rule, a money check with a verdict).
+    A condition that holds once is counted, not failed: the rules are built to let one blip pass."""
     generator = new_traffic(settings)
     generator.start()
     started = clock()
@@ -233,8 +243,8 @@ def quiet(
         while True:
             began = round(clock() - started, 1)
             evaluation = alerting.evaluate()
-            unwell = not_quiet(evaluation)
-            evaluations.append({"began": began, "not_quiet": unwell} | evaluation.to_dict())
+            blind = unseen(evaluation)
+            evaluations.append({"began": began, "blind": blind} | evaluation.to_dict())
             if clock() + every_seconds > deadline:
                 break
             sleep(every_seconds)
@@ -248,7 +258,7 @@ def quiet(
         "alerts_fired": sum(1 for e in evaluations if e["alert"] is not None),
         "conditions_held": sum(1 for e in evaluations for check in e["checks"] if check["breached"]),
         "evaluations_with_problems": sum(1 for e in evaluations if e["problems"]),
-        "evaluations_not_quiet": sum(1 for e in evaluations if e["not_quiet"] is not None),
+        "evaluations_blind": sum(1 for e in evaluations if e["blind"] is not None),
         "traffic": generator.stats.to_dict(),
         "provider_behavior": generator.behavior_note,
     }
@@ -282,15 +292,27 @@ def brief(evaluation: Mapping) -> str:
 
 def label(record: Record) -> str:
     """What this run's evidence is, from what the run did: it never claims a step the run did not reach."""
+    if record.traffic is None:
+        return (
+            "Real run on this Mac's Docker Compose stack, which stopped before its synthetic traffic began: no fault"
+            f" was injected and no model was called. The run stopped: {record.stopped}."
+        )
     said = [
         "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a"
         " simulated provider, no real money."
     ]
     if "injected_at" not in record.timings:
         return " ".join([*said, f"No fault was injected. The run stopped: {record.stopped}."])
-    said.append(f"One fault from klaxon.faults, {record.fault['name']}, was injected on purpose.")
+    if record.injected is None:
+        said.append(
+            f"An injection of one fault from klaxon.faults, {record.fault['name']}, began on purpose and failed."
+        )
+    else:
+        said.append(f"One fault from klaxon.faults, {record.fault['name']}, was injected on purpose.")
     if record.cleared is None:
         said.append("Clearing it failed, so it may still be in place.")
+    if record.injected is None:
+        return " ".join([*said, f"The run stopped: {record.stopped}."])
     if record.alert is None:
         return " ".join([*said, f"No alert fired. The run stopped: {record.stopped}."])
     said.append("The alert was raised by klaxon.alerts from what the stack showed.")
@@ -315,7 +337,7 @@ def label(record: Record) -> str:
 def render(record: Record) -> str:
     f = record.fault
     lines = [
-        f"Klaxon week 3: the first loop on a fault injected on purpose: {f['name']}",
+        f"Klaxon week 3: a run of the first loop on a fault: {f['name']}",
         label(record),
         "",
         f"The fault: {f['title']}",
@@ -325,10 +347,12 @@ def render(record: Record) -> str:
         " last minute)",
         *(f"  {e['phase']:<6} t={e['began']:>6.1f} s  {brief(e)}" for e in record.evaluations),
     ]
-    if "injected_at" in record.timings:
+    if record.injected is not None:
         lines.append(
             f"  the fault was injected at t={record.timings['injected_at']:g} s: {json.dumps(record.injected)}"
         )
+    elif "injected_at" in record.timings:
+        lines.append(f"  an injection began at t={record.timings['injected_at']:g} s and failed")
     if record.alert is not None:
         lines += ["", f"Alert {record.alert['name']}, fired at {record.alert['fired_at']}: {record.alert['summary']}"]
     if record.loop is not None:
@@ -428,8 +452,8 @@ def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
         print(f"t={evaluation['began']:>6.1f} s  {brief(evaluation)}")
     print(
         f"{len(found['evaluations'])} evaluations: {found['alerts_fired']} with an alert, {found['conditions_held']}"
-        f" conditions held, {found['evaluations_with_problems']} with a problem, {found['evaluations_not_quiet']} not"
-        " quiet (a condition held, a signal not read, or the money check did not pass)"
+        f" conditions held, {found['evaluations_with_problems']} with a problem, {found['evaluations_blind']} blind (a"
+        " source not read, a rule with no data, or a money check with no verdict)"
     )
     print(*traffic.summary(found["traffic"]["counts"]), sep="\n")
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
@@ -437,7 +461,7 @@ def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
     path = args.evidence_dir / f"{stamp}_alerts-under-traffic_rate{args.rate:g}_seed{args.seed}.json"
     path.write_text(json.dumps(out, indent=2, default=str) + "\n")
     print(f"Saved: {clean_text(str(path))}")
-    return 0 if found["alerts_fired"] == 0 and found["evaluations_not_quiet"] == 0 else 1
+    return 0 if found["alerts_fired"] == 0 and found["evaluations_blind"] == 0 else 1
 
 
 def _grade(folder: Path) -> int:

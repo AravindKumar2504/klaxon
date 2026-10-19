@@ -24,8 +24,9 @@ own log lines match elements. tests/test_grading.py keeps those sentences as kno
 
 Version 1, below, is the rubric committed in 95a64ab, before the first live runs on the faults (2026-10-19 UTC), and
 it graded them. It stays as it was: changing it after seeing results would undo that. Every comparison records the
-rubric's version and fingerprint, and a test pins the fingerprint, so a later rubric (week 5's evaluation) shows as a
-new version, never as the old one.
+rubric's version and the fingerprint of its patterns. A test pins that fingerprint, and the tests of its verdicts pin
+how it counts (the hypothesis only, case ignored, all elements for "names", half for "partly"), each with a mutant. So
+a change to either fails a test: a later rubric (week 5's evaluation) must then come as a new version.
 """
 
 from __future__ import annotations

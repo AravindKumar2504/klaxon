@@ -179,11 +179,9 @@ def test_the_rubric_is_version_1_exactly_as_committed_before_the_live_runs():
 def test_an_alerts_own_words_never_name_enough_of_its_faults_cause():
     # Finding 2: restating the alert is not a diagnosis. The alerts the live runs raised (recorded in their run.json),
     # each read as a hypothesis, miss their fault's cause; so do the rules' sentences for those symptoms.
-    recorded = {
-        json.loads(path.read_text())["fault"]["name"]: json.loads(path.read_text())["alert"]["summary"]
-        for path in sorted(FAULT_RUNS.glob("*_fault-run_*/run.json"))
-    }
-    assert sorted(recorded) == sorted(faults.FAULTS)
+    saved = [json.loads(path.read_text()) for path in sorted(FAULT_RUNS.glob("*_fault-run_*/run.json"))]
+    recorded = [(run["fault"]["name"], run["alert"]["summary"]) for run in saved if run["alert"] is not None]
+    assert {fault for fault, _ in recorded} == set(faults.FAULTS)  # a run that stopped before its alert has none
     made = {
         "duplicate-delivery": alerts.money(
             {"outcome": "failed", "invariants": 5, "failed": {"posted_exactly_once": 7}, "money_off_cents": 1}
@@ -191,9 +189,8 @@ def test_an_alerts_own_words_never_name_enough_of_its_faults_cause():
         "poison-message": alerts.lags([({"consumer": "ledger"}, 271.0)])[0].sentence,
         "provider-outage": f"{alerts.errors(2.2, 2.97).sentence} {alerts.latency(10.0).sentence}",
     }
-    for sentences in (recorded, made):
-        for fault, sentence in sentences.items():
-            assert verdict(fault, sentence) == "misses the cause", (fault, sentence)
+    for fault, sentence in [*recorded, *made.items()]:
+        assert verdict(fault, sentence) == "misses the cause", (fault, sentence)
 
 
 # Finding 2's examples: what a person would say, and version 1 does not. Each is a known limit, kept as a test that
@@ -233,7 +230,11 @@ KNOWN_LIMITS = [
 ]
 
 
-@pytest.mark.xfail(strict=True, reason="a known limit of rubric version 1 (finding 2): it reads words, not meaning")
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="a known limit of rubric version 1 (finding 2): it reads words, not meaning",
+)
 @pytest.mark.parametrize("fault, hypothesis, right", KNOWN_LIMITS)
 def test_a_known_limit_of_version_1(fault, hypothesis, right):
     assert verdict(fault, hypothesis) == right

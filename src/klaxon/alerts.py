@@ -19,8 +19,8 @@ books cannot settle. The error rule needs at least 0.2 requests per second: belo
 the first time it fails. A check that cannot settle does not fire it: a stalled consumer shows as lag.
 
 The thresholds come from week 2's measurements at 3 payments per second (evidence/week2/*_live-fault_*). On a healthy
-stack, under the traffic's noise, the p95 of POST /payments was 0.06 to 0.09 s in three runs and 0.50 s in one, right
-after a reset; the consumers' lag stayed at 0 or 1. Under the faults, the p95 reached 9.4 s 20 s into the outage, and
+stack, under the traffic's noise, the p95 of POST /payments was 0.06 to 0.09 s in three runs and 0.50 s in the
+fourth; the consumers' lag stayed at 0 or 1. Under the faults, the p95 reached 9.4 s 20 s into the outage, and
 the ledger's lag 50 messages 22 s into the poison. (Week 2 sampled 5xx answers over every route, not this rule's
 share; week 3's first run with no fault measured the rules' own queries: evidence/week3/*_alerts-under-traffic_*.)
 A value at a threshold does not breach it, and alert text writes a number with enough digits to show it is above.
