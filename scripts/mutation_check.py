@@ -1174,7 +1174,8 @@ def main() -> int:
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
-    for item in ("src", "tests", "docker", "compose.yaml", "pyproject.toml", "Makefile"):
+    # evidence: a test replays the first live run of the loop from its recording (week 3, item 3).
+    for item in ("src", "tests", "docker", "evidence", "compose.yaml", "pyproject.toml", "Makefile"):
         src = repo / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
 
