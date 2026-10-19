@@ -7,6 +7,8 @@ import pytest
 
 from klaxon import faults
 from klaxon.faults import FAULTS, LocalStack
+from klaxon.patient.deploys import DeployLog
+from tests.fake_docker import NAIVE, FakeDocker
 
 
 class FakeStack:
@@ -77,13 +79,32 @@ def test_changing_the_providers_behavior_keeps_the_rest_of_it():
     assert put == [{"lose_ack_rate": 0.05, "seed": 7, "fail_after_charge_rate": 0.02, "outage_delay_seconds": 5.0}]
 
 
-def test_a_redeploy_is_one_service_on_this_macs_project_only():
-    asked = []
-    checked = []
-    s = LocalStack(compose=lambda *args, env: asked.append((args, env)), ensure_local=lambda: checked.append(True))
-    s.redeploy("ledger-consumer", GOOD)
-    assert checked == [True]  # docker is checked to point at this Mac first
-    assert asked == [(("up", "--detach", "--no-deps", "--wait", "ledger-consumer"), GOOD)]
+def test_a_redeploy_is_one_service_on_this_macs_project_only_and_is_logged():
+    docker = FakeDocker()  # made up, in memory: tests/fake_docker.py
+    s = LocalStack(deployer=docker.deployer())
+    s.redeploy("ledger-consumer", NAIVE)
+    assert docker.local_checks == 1  # docker is checked to point at this Mac first
+    assert docker.ups() == [(("up", "--detach", "--no-deps", "--wait", "ledger-consumer"), NAIVE)]
+    (record,) = DeployLog().records()  # a rollback can go back to what it replaced (klaxon.agent.actions)
+    assert (record.service, record.by, record.settings, record.replaced_settings) == (
+        "ledger-consumer",
+        "klaxon.faults",
+        NAIVE,
+        GOOD,
+    )
+    s.redeploy("ledger-consumer", NAIVE)  # already running them: nothing done, nothing logged
+    assert len(docker.ups()) == 1 and len(DeployLog().records()) == 1
+
+
+def test_a_local_stack_deploys_through_the_docker_it_was_given():
+    def compose(*args, env=None):
+        raise AssertionError("not called")
+
+    def ensure_local():
+        raise AssertionError("not called")
+
+    s = LocalStack(compose=compose, ensure_local=ensure_local)
+    assert s.deployer._compose is compose and s.deployer._ensure_local is ensure_local
 
 
 @pytest.mark.parametrize("url", ["http://10.0.0.5:8081", "https://provider.example.com"])

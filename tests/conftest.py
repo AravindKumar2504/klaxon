@@ -23,6 +23,13 @@ def no_real_claude_code(monkeypatch):
     monkeypatch.setattr(claude_code, "APP_COPIES", NO_APP_COPIES)
 
 
+@pytest.fixture(autouse=True)
+def no_real_deploy_log(monkeypatch, tmp_path_factory):
+    """No test reads or writes the real deploy log (~/.klaxon/deploys.jsonl, klaxon.patient.deploys): a rollback
+    goes back to what it says. Every test gets a log of its own, in a folder of its own, which starts empty."""
+    monkeypatch.setenv("KLAXON_DEPLOY_LOG", str(tmp_path_factory.mktemp("deploy-log") / "deploys.jsonl"))
+
+
 @pytest.fixture
 def provider() -> FakeProvider:
     """Three payments and one partial refund, fixed amounts so the evidence is easy to read."""

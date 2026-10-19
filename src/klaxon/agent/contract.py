@@ -10,6 +10,12 @@ by their ids (c1, c2, ...), each with what it shows; a confidence from 0 to 1; a
 target, and what to do); the fix's blast radius; and a rollback plan. The fix is only proposed: nothing in the
 loop applies it.
 
+A run may also offer write actions (klaxon.agent.catalog, week 4). Then, and only then, the diagnosis may name one,
+in fix_action: its name and its arguments, checked against that action's own schema. Naming it runs nothing: code
+plans it from the live state, and a person approves it or not, after the run (klaxon.agent.gate). A run that
+offers no action gets exactly the schema of week 3, so that its prompts, and the runs recorded with them, stay
+the same.
+
 The schema shown to the model is the one enforced. It is JSON Schema, checked by a small validator here for
 just the keywords it uses (a test checks that it agrees with the jsonschema library). Beyond the schema, a
 reply must be one JSON object and nothing else (one code fence around it is allowed), with no key twice and
@@ -41,8 +47,19 @@ def _text(most: int, description: str) -> dict:
     return {"type": "string", "minLength": 1, "maxLength": most, "description": description}
 
 
-def reply_schema(tools: Sequence[str]) -> dict:
-    """The JSON Schema of a reply, for these tools: the form the model is shown, and the one enforced."""
+@dataclass(frozen=True)
+class ActionSpec:
+    """A write action a diagnosis may name: its name, what it does, and its arguments as JSON Schema (the subset
+    check() reads). Data only: it runs nothing."""
+
+    name: str
+    description: str
+    input_schema: dict
+
+
+def reply_schema(tools: Sequence[str], actions: Sequence[str] = ()) -> dict:
+    """The JSON Schema of a reply, for these tools, and the names of the actions the run offers: the form the model
+    is shown, and the one enforced. With no actions, the schema of week 3, unchanged."""
     why = {"type": "string", "maxLength": 500, "description": "Why this step, in a sentence."}
     call_tool = {
         "type": "object",
@@ -87,6 +104,18 @@ def reply_schema(tools: Sequence[str]) -> dict:
         "required": ["hypothesis", "evidence", "confidence", "proposed_fix", "blast_radius", "rollback_plan"],
         "additionalProperties": False,
     }
+    if actions:
+        diagnosis["properties"]["fix_action"] = {
+            "type": "object",
+            "description": "Optional: one action from the list that carries out the fix. It runs only if a human"
+            " approves it, after this run. Leave it out when no listed action fits.",
+            "properties": {
+                "name": {"enum": list(actions)},
+                "arguments": {"type": "object", "description": "The action's arguments, as its schema gives them."},
+            },
+            "required": ["name", "arguments"],
+            "additionalProperties": False,
+        }
     diagnose = {
         "type": "object",
         "properties": {"action": {"const": "diagnose"}, "why": why, "diagnosis": diagnosis},
@@ -242,6 +271,14 @@ class ProposedFix:
 
 
 @dataclass(frozen=True)
+class FixAction:
+    """A write action the diagnosis names, with its arguments, checked against the action's schema. Only named."""
+
+    name: str
+    arguments: dict
+
+
+@dataclass(frozen=True)
 class Diagnosis:
     """The contract a run ends in. The fix is proposed, never applied: a human decides."""
 
@@ -251,9 +288,10 @@ class Diagnosis:
     proposed_fix: ProposedFix
     blast_radius: str
     rollback_plan: str
+    fix_action: FixAction | None = None
 
     def as_dict(self) -> dict:
-        return {
+        found = {
             "hypothesis": self.hypothesis,
             "evidence": [asdict(item) for item in self.evidence],
             "confidence": self.confidence,
@@ -261,6 +299,9 @@ class Diagnosis:
             "blast_radius": self.blast_radius,
             "rollback_plan": self.rollback_plan,
         }
+        if self.fix_action is not None:  # only then: a diagnosis without one reads as in week 3
+            found["fix_action"] = asdict(self.fix_action) | {"applied": False}
+        return found
 
 
 @dataclass(frozen=True)
@@ -328,13 +369,20 @@ def parse_object(text: str) -> tuple[dict | None, str | None]:
     return value, None
 
 
-def read_reply(text: str, tools: Mapping[str, dict], calls: Mapping[str, tuple[str, dict]]) -> Reading:
+def read_reply(
+    text: str,
+    tools: Mapping[str, dict],
+    calls: Mapping[str, tuple[str, dict]],
+    actions: Mapping[str, dict] | None = None,
+) -> Reading:
     """Read one reply. tools: the input schema of each tool the model may call, by name. calls: the tool calls of
-    this run so far, as (tool, arguments) by call id."""
+    this run so far, as (tool, arguments) by call id. actions: the input schema of each action the run offers, by
+    name (none by default)."""
+    actions = actions or {}
     value, problem = parse_object(text)
     if value is None:
         return Reading(None, (problem,))
-    problems = check(reply_schema(list(tools)), value)
+    problems = check(reply_schema(list(tools), list(actions)), value)
     if problems:
         return Reading(value, tuple(problems[:MAX_PROBLEMS]))
     why = value.get("why", "")
@@ -359,6 +407,11 @@ def read_reply(text: str, tools: Mapping[str, dict], calls: Mapping[str, tuple[s
         return Reading(value, tuple(unknown[:MAX_PROBLEMS]))
     found = value["diagnosis"]
     fix = found["proposed_fix"]
+    named = found.get("fix_action")
+    if named is not None:  # the schema let it in only when the run offers actions, and only one it offers
+        wrong = check(actions[named["name"]], named["arguments"], "diagnosis.fix_action.arguments")
+        if wrong:
+            return Reading(value, tuple(wrong[:MAX_PROBLEMS]))
     diagnosis = Diagnosis(
         hypothesis=found["hypothesis"],
         evidence=tuple(
@@ -369,5 +422,6 @@ def read_reply(text: str, tools: Mapping[str, dict], calls: Mapping[str, tuple[s
         proposed_fix=ProposedFix(fix["kind"], fix["target"], fix["summary"]),
         blast_radius=found["blast_radius"],
         rollback_plan=found["rollback_plan"],
+        fix_action=None if named is None else FixAction(named["name"], dict(named["arguments"])),
     )
     return Reading(value, diagnosis=diagnosis)

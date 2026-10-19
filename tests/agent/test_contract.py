@@ -338,3 +338,81 @@ def test_a_diagnosis_text_that_says_nothing_is_invalid(blank, where):
     assert reading.problems == (
         f"diagnosis.{where}: says nothing: it is blank, or holds only characters that do not show",
     )
+
+
+# Write actions a run offers (week 4): the diagnosis may name one, in fix_action
+
+ROLLBACK = c.ActionSpec(
+    "rollback_deploy",
+    "Roll one service back.",
+    {
+        "type": "object",
+        "properties": {"service": {"enum": ["ledger-consumer", "payment-confirmer"]}},
+        "required": ["service"],
+        "additionalProperties": False,
+    },
+)
+OFFERED = {ROLLBACK.name: ROLLBACK.input_schema}
+
+
+def read_offered(value, actions=OFFERED):
+    return c.read_reply(json.dumps(value), TOOLS, CALLS, actions)
+
+
+def named(name="rollback_deploy", **arguments):
+    return {"name": name, "arguments": arguments or {"service": "ledger-consumer"}}
+
+
+def test_with_no_action_offered_the_schema_is_the_one_of_week_3():
+    assert c.reply_schema(list(TOOLS), ()) == SCHEMA == c.reply_schema(list(TOOLS))
+    assert "fix_action" not in json.dumps(SCHEMA)
+
+
+def test_with_no_action_offered_a_fix_action_is_not_a_field():
+    reading = read(diagnose(fix_action=named()))
+    assert reading.diagnosis is None
+    assert any("diagnosis.fix_action: is not a field here" in problem for problem in reading.problems)
+
+
+def test_a_diagnosis_may_name_an_offered_action_and_it_is_read_as_only_named():
+    reading = read_offered(diagnose(fix_action=named()))
+    assert reading.problems == ()
+    assert reading.diagnosis.fix_action == c.FixAction("rollback_deploy", {"service": "ledger-consumer"})
+    assert reading.diagnosis.as_dict()["fix_action"] == {
+        "name": "rollback_deploy",
+        "arguments": {"service": "ledger-consumer"},
+        "applied": False,
+    }
+
+
+def test_a_diagnosis_that_names_no_action_reads_as_in_week_3_even_when_actions_are_offered():
+    reading = read_offered(diagnose())
+    assert reading.problems == () and reading.diagnosis.fix_action is None
+    assert "fix_action" not in reading.diagnosis.as_dict()
+
+
+@pytest.mark.parametrize(
+    "fix_action, problem",
+    [
+        (named("restart_service"), "diagnosis.fix_action.name: must be one of: rollback_deploy"),
+        (named(service="postgres"), "diagnosis.fix_action.arguments.service: must be one of"),
+        (named(service="ledger-consumer", to="naive"), "diagnosis.fix_action.arguments.to: is not a field here"),
+        ({"name": "rollback_deploy", "arguments": {}}, "diagnosis.fix_action.arguments.service: is required"),
+        ({"name": "rollback_deploy"}, "diagnosis.fix_action.arguments: is required"),
+        ({"name": "rollback_deploy", "arguments": ["ledger-consumer"]}, "must be a JSON object"),
+        (named() | {"run_now": True}, "diagnosis.fix_action.run_now: is not a field here"),
+        ("rollback_deploy ledger-consumer", "diagnosis.fix_action: must be a JSON object"),
+    ],
+)
+def test_an_action_off_the_offer_or_with_bad_arguments_makes_the_reply_invalid(fix_action, problem):
+    reading = read_offered(diagnose(fix_action=fix_action))
+    assert reading.diagnosis is None
+    assert any(problem in found_problem for found_problem in reading.problems), reading.problems
+
+
+def test_the_schema_shown_names_only_the_offered_actions():
+    schema = c.reply_schema(list(TOOLS), ["rollback_deploy"])
+    action = schema["oneOf"][1]["properties"]["diagnosis"]["properties"]["fix_action"]
+    assert action["properties"]["name"] == {"enum": ["rollback_deploy"]}
+    assert "runs only if a human approves it" in action["description"]
+    assert "fix_action" not in schema["oneOf"][1]["properties"]["diagnosis"]["required"]

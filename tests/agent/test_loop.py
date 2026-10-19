@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from klaxon.agent import loop, mcp_server
+from klaxon.agent import catalog, loop, mcp_server
 from klaxon.agent import mcp_client as mc
 from klaxon.agent import model as m
 from klaxon.agent.contract import Reading, ToolCall
@@ -576,7 +576,7 @@ def test_an_empty_or_doubled_tool_list_is_refused(tmp_path, specs, problem):
 
 
 def test_the_point_of_use_check_holds_even_if_the_reader_lets_a_tool_through(tmp_path, monkeypatch):
-    def lets_anything_through(text, tools, calls):
+    def lets_anything_through(text, tools, calls, actions=None):
         value = {"action": "call_tool", "tool": "restart_service", "arguments": {}}
         return Reading(value, call=ToolCall("restart_service", {}, ""))
 
@@ -1053,7 +1053,7 @@ def test_hidden_characters_in_an_echoed_field_name_never_reach_the_model(tmp_pat
 
 
 def test_the_point_of_use_check_also_refuses_a_listed_tool_this_server_does_not_offer(tmp_path, monkeypatch):
-    def lets_money_check_through(text, tools, calls):
+    def lets_money_check_through(text, tools, calls, actions=None):
         return Reading(
             {"action": "call_tool", "tool": "money_check", "arguments": {}}, call=ToolCall("money_check", {}, "")
         )
@@ -1101,3 +1101,102 @@ def test_the_first_live_run_replays_exactly(tmp_path):
     assert (whole, differences) == (True, [])
     assert (result.reason, result.steps, result.tool_calls) == ("diagnosed", 6, 4)
     assert recorded[0]["source"] == "claude-code" and recorded[0]["model"] == "claude-opus-5-5"
+
+
+# Write actions a run may offer (week 4): the diagnosis may name one; the loop runs none
+
+WEEK_3_RUNS = (
+    "2026-10-19T022933Z_fault-run_duplicate-delivery",
+    "2026-10-19T023414Z_fault-run_poison-message",
+    "2026-10-19T024001Z_fault-run_provider-outage",
+)
+SPECS = [mc.ToolSpec(**_spec(t)) for t in REAL.values()]
+
+
+@pytest.mark.parametrize("run", WEEK_3_RUNS)
+def test_with_no_action_offered_the_prompt_is_exactly_the_one_week_3s_fault_runs_answered(run):
+    """A strict check, not a skip: a run that offers no action must replay the evidence of week 3."""
+    folder = loop.REPO / "evidence" / "week3" / run
+    specs = mc.ReplayTools(folder / loop.TOOL_RESULTS).open()
+    recorded = read_trace(folder / loop.TRACE)
+    assert m.text_sha256(loop.system_prompt(loop.allowed_tools(specs))) == recorded[0]["system"]["sha256"]
+    assert loop.system_prompt(specs, ()) == loop.system_prompt(specs)
+
+
+def test_with_an_action_offered_the_prompt_says_it_runs_only_if_a_human_approves_it():
+    without = loop.system_prompt(SPECS)
+    system = loop.system_prompt(SPECS, [catalog.ROLLBACK_DEPLOY])
+    assert loop.NO_ACTIONS_RULE in without and loop.NO_ACTIONS_RULE not in system
+    assert loop.ACTIONS_RULE in system and loop.ACTION_EXAMPLE in system
+    assert system.endswith(
+        loop.ACTIONS_HEADING
+        + "\n"
+        + json.dumps(
+            {
+                "name": "rollback_deploy",
+                "description": catalog.ROLLBACK_DEPLOY.description,
+                "arguments": catalog.ROLLBACK_DEPLOY.input_schema,
+            },
+            ensure_ascii=False,
+        )
+    )
+    assert json.dumps(loop.reply_schema(list(REAL), ["rollback_deploy"]), ensure_ascii=False) in system
+    assert "An alert can be wrong: before you explain it, confirm its symptom with a tool." in system
+    assert "@" not in system
+
+
+def offered_run(folder, script):
+    folder.mkdir(parents=True)
+    model = MadeUpLive(Recording(folder / loop.RECORDING), script)
+    tools = mc.RecordedTools(Served().client, folder / loop.TOOL_RESULTS)
+    return loop.investigate(ALERT, model, tools, folder / loop.TRACE, actions=[catalog.ROLLBACK_DEPLOY])
+
+
+def naming(action):
+    reply = json.loads(diagnose("c1", "c2"))
+    reply["diagnosis"]["fix_action"] = action
+    return json.dumps(reply)
+
+
+def test_a_run_offering_an_action_ends_in_a_diagnosis_that_names_it_and_runs_nothing(tmp_path):
+    action = {"name": "rollback_deploy", "arguments": {"service": "ledger-consumer"}}
+    result = offered_run(tmp_path / "run", [tool("recent_deploys"), tool("service_health"), naming(action)])
+    assert result.reason == "diagnosed" and result.diagnosis.fix_action.name == "rollback_deploy"
+    trace = read_trace(tmp_path / "run" / loop.TRACE)
+    assert trace[0]["extra"]["loop"]["offered_actions"] == ["rollback_deploy"]
+    assert trace[-1]["diagnosis"]["fix_action"] == action | {"applied": False}
+    assert [s["ran"]["tool"] for s in steps(trace) if s.get("ran")] == ["recent_deploys", "service_health"]
+
+
+def test_a_run_offering_an_action_sends_back_a_reply_that_names_another(tmp_path):
+    bad = {"name": "restart_service", "arguments": {"service": "ledger-consumer"}}
+    good = {"name": "rollback_deploy", "arguments": {"service": "ledger-consumer"}}
+    result = offered_run(tmp_path / "run", [tool("recent_deploys"), tool(), naming(bad), naming(good)])
+    assert result.reason == "diagnosed" and result.steps == 4
+    trace = read_trace(tmp_path / "run" / loop.TRACE)
+    assert "diagnosis.fix_action.name: must be one of: rollback_deploy" in steps(trace)[2]["why"]
+
+
+def test_a_run_that_offered_an_action_replays_exactly(tmp_path):
+    action = {"name": "rollback_deploy", "arguments": {"service": "ledger-consumer"}}
+    recorded = offered_run(tmp_path / "run", [tool("recent_deploys"), tool(), naming(action)])
+    result, whole, differences = loop.replay(tmp_path / "run", tmp_path / "replay.jsonl")
+    assert (whole, differences) == (True, []) and result.diagnosis == recorded.diagnosis
+
+
+def test_a_run_that_offered_no_action_records_so_and_replays_with_none(tmp_path):
+    record_a_run(tmp_path / "run", [tool(), diagnose("c1")])
+    assert read_trace(tmp_path / "run" / loop.TRACE)[0]["extra"]["loop"]["offered_actions"] == []
+    _, whole, differences = loop.replay(tmp_path / "run", tmp_path / "replay.jsonl")
+    assert (whole, differences) == (True, [])
+
+
+def test_the_loop_never_imports_the_code_that_acts():
+    """The loop shows the catalog (data only); planning, approving and deploying live elsewhere."""
+    code = (
+        "import sys, klaxon.agent.loop;"
+        " print(sorted(n for n in ('klaxon.agent.actions', 'klaxon.agent.gate', 'klaxon.patient.deploys',"
+        " 'klaxon.faults') if n in sys.modules))"
+    )
+    done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, check=True)
+    assert done.stdout.strip() == "[]"

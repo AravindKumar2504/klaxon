@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 import httpx
 
 from klaxon.checks.live import PROVIDER_URL
-from klaxon.patient import stack
+from klaxon.patient import deploys, stack
 from klaxon.traffic import require_local
 
 LEDGER = "ledger-consumer"
@@ -47,18 +47,19 @@ class LocalStack:
         compose: Callable[..., str] = stack.compose,
         ensure_local: Callable[[], None] = stack.ensure_local,
         http: httpx.Client | None = None,
+        deployer: deploys.Deployer | None = None,
     ) -> None:
         require_local(provider_url)
         # trust_env=False: no proxy from the environment or the system settings, so nothing leaves this Mac.
         self.http = http or httpx.Client(base_url=provider_url, timeout=15.0, trust_env=False)
         require_local(str(self.http.base_url))
-        self._compose = compose
-        self._ensure_local = ensure_local
+        self.deployer = deployer or deploys.Deployer(compose=compose, ensure_local=ensure_local)
 
     def redeploy(self, service: str, env: dict[str, str]) -> None:
-        """Recreate one service's container with these settings, and wait until it is healthy."""
-        self._ensure_local()  # docker must talk to this Mac, never to another host
-        self._compose("up", "--detach", "--no-deps", "--wait", service, env=env)
+        """Recreate one service's container with these settings, wait until it is healthy, and log the deploy
+        (klaxon.patient.deploys), so that a rollback can go back to what it replaced. Docker must talk to this Mac.
+        Nothing is done when the service already runs these settings."""
+        self.deployer.deploy(service, env, by="klaxon.faults")
 
     def behavior(self) -> dict:
         return self.http.get("/admin/behavior").raise_for_status().json()

@@ -19,7 +19,10 @@ next reply must be the diagnosis. A tool call after that is refused, and the run
 
 It acts on nothing. It calls only the read-only tools on its allow-list, through Klaxon's MCP server, a process
 of its own (python -m klaxon.agent.mcp_server), and refuses to start if the server offers any other tool, or
-one not marked read-only. The fix in a diagnosis is proposed, never applied: a human decides (week 4).
+one not marked read-only. The fix in a diagnosis is proposed, never applied: a human decides. A run may offer
+write actions (klaxon.agent.catalog, week 4): then its diagnosis may name one, and the loop still runs none. Only
+the approval gate does, after a person's typed yes (klaxon.agent.gate). A run that offers none has exactly the
+prompts of week 3.
 
 Tool output is untrusted: a log line can say anything. The system prompt says so, and each result reaches the
 model inside a JSON document the loop writes itself, on one line, under a fixed note that it is data, never
@@ -53,8 +56,9 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from klaxon.agent.catalog import CATALOG
 from klaxon.agent.claude_code import DEFAULT_MODEL
-from klaxon.agent.contract import MAX_REPLY, Diagnosis, Reading, read_reply, reply_schema
+from klaxon.agent.contract import MAX_REPLY, ActionSpec, Diagnosis, Reading, read_reply, reply_schema
 from klaxon.agent.mcp_client import (
     START_TIMEOUT,
     McpClient,
@@ -220,6 +224,25 @@ How to work:
 - The run has budgets: steps, tool calls and time. After each step the loop says what is left. When it says your next reply must be your diagnosis, give one.
 - Times are UTC."""
 
+# With write actions offered (week 4), one rule of INTRO reads otherwise, an example and the actions' list are added.
+NO_ACTIONS_RULE = (
+    "- The tools only read. Nothing in this run changes the system, and your proposed fix is not applied: a human"
+    " decides."
+)
+ACTIONS_RULE = (
+    "- The tools only read: nothing in this run changes the system. Your diagnosis may also name one action from"
+    " the list at the end, in fix_action, to carry out your fix. It runs only if a human approves it, after this"
+    " run. Leave fix_action out when no listed action fits."
+)
+ACTION_EXAMPLE = (
+    'To name an action, add this field to the diagnosis: "fix_action": {"name": "<an action from the list>",'
+    ' "arguments": {<its arguments>}}'
+)
+ACTIONS_HEADING = (
+    "The actions a diagnosis may name in fix_action. None runs without a human's approval. Each with its arguments"
+    " as JSON Schema:"
+)
+
 EXAMPLES = """Two example replies. The angle brackets mark what you write:
 {"action": "call_tool", "why": "<why this call>", "tool": "service_health", "arguments": {}}
 {"action": "diagnose", "why": "<why you are done>", "diagnosis": {"hypothesis": "<the cause, and how it produces the alert>", "evidence": [{"call_id": "c1", "shows": "<what that result shows>"}], "confidence": <a number from 0 to 1>, "proposed_fix": {"kind": "<one of the kinds>", "target": "<a service or component>", "summary": "<what to do>"}, "blast_radius": "<what the fix could affect>", "rollback_plan": "<how to undo the fix>"}}"""
@@ -239,9 +262,11 @@ def one_line(text: str) -> str:
     return text
 
 
-def system_prompt(specs: Sequence[ToolSpec]) -> str:
-    """The system prompt for these tools: the role, the system, the rules, the reply's schema, and the tools."""
-    schema = one_line(json.dumps(reply_schema([spec.name for spec in specs]), ensure_ascii=False))
+def system_prompt(specs: Sequence[ToolSpec], actions: Sequence[ActionSpec] = ()) -> str:
+    """The system prompt for these tools: the role, the system, the rules, the reply's schema, and the tools; and the
+    write actions a diagnosis may name, when the run offers any. With none, the prompt of week 3, unchanged."""
+    names = [spec.name for spec in specs]
+    schema = one_line(json.dumps(reply_schema(names, [action.name for action in actions]), ensure_ascii=False))
     tools = "\n".join(
         one_line(
             json.dumps(
@@ -251,14 +276,33 @@ def system_prompt(specs: Sequence[ToolSpec]) -> str:
         )
         for spec in specs
     )
+    intro, examples = INTRO, EXAMPLES
+    if actions:
+        intro, examples = INTRO.replace(NO_ACTIONS_RULE, ACTIONS_RULE), f"{EXAMPLES}\n{ACTION_EXAMPLE}"
     parts = [
-        INTRO,
+        intro,
         "The reply, as JSON Schema:",
         schema,
-        EXAMPLES,
+        examples,
         "The tools, each with its arguments as JSON Schema:",
     ]
-    return ("\n\n".join(parts) + "\n" + tools).replace("@", FULLWIDTH_AT)
+    text = "\n\n".join(parts) + "\n" + tools
+    if actions:
+        listed = "\n".join(
+            one_line(
+                json.dumps(
+                    {
+                        "name": action.name,
+                        "description": clean_text(action.description),
+                        "arguments": clean(action.input_schema),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            for action in actions
+        )
+        text += f"\n\n{ACTIONS_HEADING}\n{listed}"
+    return text.replace("@", FULLWIDTH_AT)
 
 
 def first_turn(alert: Alert, budgets: Budgets) -> str:
@@ -375,9 +419,11 @@ class Investigation:
         budgets: Budgets,
         clock: Callable[[], float],
         extra: Mapping[str, object],
+        actions: Sequence[ActionSpec] = (),
     ) -> None:
         self.alert, self.model, self.tools, self.trace = alert, model, tools, trace
         self.budgets, self.clock, self.extra = budgets, clock, dict(extra)
+        self.actions = tuple(actions)  # the write actions a diagnosis may name; this loop runs none of them
         self.started = clock()
         self.state = State()
         self.system = ""
@@ -394,7 +440,7 @@ class Investigation:
             self._start([])  # so that the trace still says how the run ended: interrupted, or crashed
             raise
         self.schemas = {spec.name: spec.input_schema for spec in specs}
-        self.system = system_prompt(specs)
+        self.system = system_prompt(specs, self.actions)
         self._start(specs)
         self.state.last_turn = first_turn(self.alert, self.budgets)
         self.state.conversation.append(Message("user", self.state.last_turn))
@@ -421,6 +467,7 @@ class Investigation:
                 "tool_timeout_seconds": TOOL_TIMEOUT,
                 "max_observation_characters": MAX_OBSERVATION,
                 "system_sha256": text_sha256(self.system),
+                "offered_actions": [action.name for action in self.actions],
             },
             tool_server=getattr(self.tools, "server_info", {}),
             **self.extra,
@@ -435,7 +482,8 @@ class Investigation:
         self.state.steps += 1
         self.state.failed_in_a_row = 0
         calls = {call_id: (call.tool, call.arguments) for call_id, call in self.state.calls.items()}
-        reading = read_reply(reply.text, self.schemas, calls)
+        offered = {action.name: action.input_schema for action in self.actions}
+        reading = read_reply(reply.text, self.schemas, calls, actions=offered)
         if reading.problems:
             return self._invalid(seen, reply, reading)
         self.state.invalid_in_a_row = 0
@@ -598,11 +646,13 @@ def investigate(
     budgets: Budgets | None = None,
     clock: Callable[[], float] = time.monotonic,
     extra: Mapping[str, object] | None = None,
+    actions: Sequence[ActionSpec] = (),
 ) -> RunResult:
-    """Investigate one alert, until a diagnosis or a stop rule. The tools are opened here, and always closed."""
+    """Investigate one alert, until a diagnosis or a stop rule. The tools are opened here, and always closed.
+    actions: the write actions its diagnosis may name (none by default); the loop runs none of them."""
     with Trace(trace_path, clock=clock) as trace:
         try:
-            return Investigation(alert, model, tools, trace, budgets or Budgets(), clock, extra or {}).run()
+            return Investigation(alert, model, tools, trace, budgets or Budgets(), clock, extra or {}, actions).run()
         finally:
             tools.close()
 
@@ -664,8 +714,10 @@ def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[s
     start = recorded[0]
     alert = Alert(**start["extra"]["alert"])
     budgets = Budgets(**start["budgets"])
+    # The actions the run offered, from today's catalog: one that changed since makes the system prompt differ.
+    offered = [CATALOG[name] for name in start["extra"].get("loop", {}).get("offered_actions", [])]
     model, tools = ReplayModel(folder / RECORDING), ReplayTools(folder / TOOL_RESULTS)
-    result = investigate(alert, model, tools, out, budgets)
+    result = investigate(alert, model, tools, out, budgets, actions=offered)
     whole = recorded[-1].get("reason") not in NOT_REPLAYABLE
     return result, whole, compare(recorded, read_trace(out), whole)
 
@@ -733,16 +785,23 @@ def find_live_model(model_id: str) -> Path:
 
 
 def investigate_live(
-    alert: Alert, budgets: Budgets, folder: Path, header: Mapping, model_id: str, binary: Path
+    alert: Alert,
+    budgets: Budgets,
+    folder: Path,
+    header: Mapping,
+    model_id: str,
+    binary: Path,
+    actions: Sequence[ActionSpec] = (),
 ) -> RunResult:
     """One live run into folder: Claude on Aravind's seat, Klaxon's tools through its MCP server. Every reply and
-    every tool result is recorded before the loop uses it, with header at the top of each file."""
+    every tool result is recorded before the loop uses it, with header at the top of each file. actions: the write
+    actions its diagnosis may name (none by default)."""
     from klaxon.agent.claude_code import ClaudeCode
     from klaxon.agent.model import Recording
 
     model = ClaudeCode(Recording(folder / RECORDING, dict(header)), model=model_id, binary=binary)
     tools = RecordedTools(McpClient(), folder / TOOL_RESULTS, header)
-    return investigate(alert, model, tools, folder / TRACE, budgets, extra={"run": dict(header)})
+    return investigate(alert, model, tools, folder / TRACE, budgets, extra={"run": dict(header)}, actions=actions)
 
 
 def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, argv: Sequence[str]) -> int:
