@@ -174,3 +174,11 @@ def test_the_stack_comes_up_with_dead_lettering_whatever_this_shells_variables_s
         "export LEDGER_BAD_EVENTS := dead_letter" in makefile
         and "export CONFIRMER_BAD_EVENTS := dead_letter" in makefile
     )
+
+
+def test_clearing_a_fault_starts_a_stopped_ledger_with_its_good_settings():
+    """The harness clears every fault in a finally: that must work even when the bad deploy left nothing running."""
+    docker = FakeDocker()
+    del docker.containers["ledger-consumer"]
+    FAULTS["duplicate-delivery"].clear(LocalStack(deployer=docker.deployer()))
+    assert docker.settings("ledger-consumer") == GOOD

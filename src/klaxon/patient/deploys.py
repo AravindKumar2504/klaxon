@@ -197,11 +197,16 @@ class Deployer:
 
     def deploy(self, service: str, settings: Mapping[str, str], by: str) -> Deploy | None:
         """Recreate the service's container with these settings, wait until it is healthy, and log the deploy.
-        Nothing is done, and nothing logged, when it already runs them: None."""
+        Nothing is done, and nothing logged, when it already runs them: None. A service that is not running (or
+        cannot be read) is deployed all the same, as `compose up` would: a fault's clearing must not depend on it;
+        the log then says that what it replaced is not known, and no rollback will go back to it."""
         wanted = check_settings(service, settings)
         self._ensure_local()  # docker must talk to this Mac, never to another host
-        before = self.running(service)
-        if before.settings == wanted:
+        try:
+            before: Running | None = self.running(service)
+        except DeployError:
+            before = None
+        if before is not None and before.settings == wanted:
             return None
         self._compose("up", "--detach", "--no-deps", "--wait", service, env=wanted)
         after = self.running(service)
@@ -211,8 +216,8 @@ class Deployer:
             by=" ".join(by.split())[:MAX_BY] or "unknown",
             container=after.container,
             settings=after.settings,
-            replaced_container=before.container,
-            replaced_settings=before.settings,
+            replaced_container=None if before is None else before.container,
+            replaced_settings=None if before is None else before.settings,
         )
         if after.settings != wanted:  # logged as it happened, then said
             raise DeployError(f"{service} was redeployed, but its new container does not run the settings asked for")

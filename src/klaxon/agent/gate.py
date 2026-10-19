@@ -226,14 +226,17 @@ def wait(
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.time,
 ) -> Decision:
-    """Wait for the decision on this request, at most timeout seconds; then write "expired" (denied) and log it."""
+    """Wait for the decision on this request, at most timeout seconds, and never past the request's own expiry by
+    the wall clock; then write "expired" (denied) and log it. Both, because a Mac's monotonic clock stands still
+    while it sleeps: a request open until 10:13 was once still waited on at 18:46 (found by the gate demo)."""
     folder = Path(folder)
     deadline = clock() + timeout
+    expires = _seconds(request["expires_at"])
     while True:
         taken = _take(folder, request, now)
         if taken is not None:
             return taken
-        left = deadline - clock()
+        left = min(deadline - clock(), expires - now())
         if left <= 0:
             break
         sleep(min(POLL_SECONDS, left))
@@ -266,6 +269,10 @@ def _take(folder: Path, request: Mapping, now: Callable[[], float]) -> Decision 
     return decision
 
 
+def _say(text: str) -> None:
+    print(text, flush=True)  # at once, even into a pipe: the run waits, and whoever watches must see the request now
+
+
 def how_to_answer(folder: Path, request: Mapping) -> str:
     plan = request["plan"]
     return "\n".join(
@@ -287,7 +294,7 @@ def act(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.time,
-    say: Callable[[str], None] = print,
+    say: Callable[[str], None] = _say,
 ) -> Outcome:
     """The gate, for one diagnosis: plan its action, ask, wait, and run it only if a person approved it."""
     folder = Path(folder)

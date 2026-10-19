@@ -88,13 +88,13 @@ def made_up_diagnosis() -> Diagnosis:
 
 
 def main(timeout: float = gate.WAIT_SECONDS, sleep: Callable[[float], None] = time.sleep) -> int:
-    print(BANNER)
+    print(BANNER, flush=True)  # at once, even into a pipe: the demo then waits
     folder = Path(tempfile.mkdtemp(prefix="klaxon-gate-demo-"))
     docker = MadeUpDocker()
     deployer = Deployer(DeployLog(folder / "deploys.jsonl"), docker.compose, docker.inspect, ensure_local=lambda: None)
     deployer.deploy(LEDGER, NAIVE, by="the gate demo: a made-up bad deploy")
-    print(f"Folder: {folder}")
-    print("The made-up ledger consumer runs LEDGER_HANDLER=naive, from a made-up bad deploy.\n")
+    print(f"Folder: {folder}", flush=True)
+    print("The made-up ledger consumer runs LEDGER_HANDLER=naive, from a made-up bad deploy.\n", flush=True)
     outcome = gate.act(folder, made_up_diagnosis(), deployer, ALERT, timeout=timeout, sleep=sleep)
     _, environment = docker.containers[LEDGER]
     print(f"\nOutcome: {outcome.result}: {outcome.detail}")

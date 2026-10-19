@@ -541,3 +541,41 @@ def test_the_gate_demo_is_a_simulation_that_touches_no_real_stack_or_log(
     assert f"The made-up ledger consumer now runs LEDGER_HANDLER={handler}." in out
     assert not DeployLog().path.exists()  # the real log (here, this test's own) is never written: the demo has one
     assert len(DeployLog(tmp_path / "deploys.jsonl").records()) == (2 if result == "done" else 1)
+
+
+def test_a_waiting_run_says_how_to_answer_at_once_even_into_a_pipe(tmp_path):
+    """Whoever watches a run (a terminal, or Claude reading its output) must see the request while it waits. Read
+    with a deadline: output held in a buffer would show only when the run ends, ten minutes later."""
+    child = subprocess.Popen(
+        [sys.executable, "-m", "klaxon.demo.gate_demo"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        env=os.environ | {"TMPDIR": str(tmp_path)},  # its folder lands here
+    )
+    try:
+        shown, deadline = b"", time.monotonic() + 30
+        while time.monotonic() < deadline and b"make approve RUN=" not in shown:
+            ready, _, _ = select.select([child.stdout], [], [], 0.2)
+            if ready:
+                shown += os.read(child.stdout.fileno(), 4096)
+        text = shown.decode()
+        assert "Klaxon asks to act: request r-" in text and f"make approve RUN={tmp_path}" in text, text
+        assert child.poll() is None  # still waiting for a decision
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_a_mac_that_sleeps_through_a_request_finds_it_expired_when_it_wakes(tmp_path):
+    """A Mac's monotonic clock stands still while it sleeps; the wall clock does not. The gate demo, left waiting,
+    once waited on a request open until 10:13 until 18:46."""
+    request = saved_request(tmp_path)
+    clocks = Clocks()
+
+    def the_mac_sleeps(seconds):
+        clocks.slept.append(seconds)
+        clocks.wall += 8 * 3600  # eight hours pass on the wall; the monotonic clock does not move
+
+    found = gate.wait(tmp_path, request, gate.WAIT_SECONDS, clocks.monotonic, the_mac_sleeps, clocks.time)
+    assert found.decision == "expired" and len(clocks.slept) == 1
+    assert decision(tmp_path)["decision"] == "expired"

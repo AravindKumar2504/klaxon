@@ -210,3 +210,12 @@ def test_running_a_plan_checks_that_docker_points_at_this_mac():
     checks = docker.local_checks
     actions.run(plan, deployer, by="Klaxon, approved request r-0a1b")
     assert docker.local_checks == checks + 1
+
+
+def test_a_deploy_of_a_stopped_service_is_never_rolled_back_to_a_guess():
+    docker = FakeDocker()
+    del docker.containers[LEDGER]
+    deployer = docker.deployer()
+    deployer.deploy(LEDGER, NAIVE, by="klaxon.faults")
+    with pytest.raises(ActionRefused, match="does not know the settings ledger-consumer ran before"):
+        actions.plan("rollback_deploy", {"service": LEDGER}, deployer)

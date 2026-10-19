@@ -226,3 +226,12 @@ def test_the_settings_known_are_those_compose_yaml_lets_a_deploy_set():
     for service, variables in SERVICES.items():
         for name, (inside, values) in variables.items():
             assert f"{inside}: ${{{name}:-{values[0]}}}" in compose, (service, name)
+
+
+def test_a_stopped_service_is_deployed_all_the_same_and_what_it_replaced_is_not_known():
+    """A fault's clearing must not depend on the service running: before item 1, `compose up` started it too."""
+    docker = FakeDocker()
+    del docker.containers["ledger-consumer"]  # stopped, or gone
+    record = docker.deployer().deploy("ledger-consumer", GOOD["ledger-consumer"], by="klaxon.faults")
+    assert docker.settings("ledger-consumer") == GOOD["ledger-consumer"] and len(docker.ups()) == 1
+    assert (record.replaced_container, record.replaced_settings) == (None, None)
