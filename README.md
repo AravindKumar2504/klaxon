@@ -82,7 +82,7 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling a change to `docker/postgres/`, such as week 2's refund grants, `make reset` once: the database's roles and grants are made only on a new volume, and the payment confirmer refuses to start without them) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about five minutes) |
-| `make mutants` | breaks the code on purpose 549 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 553 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make tools` | list Klaxon's read-only tools, the ones its MCP server serves |
 | `make tool NAME=recent_deploys ARGS='{}'` | call one tool against the running stack and print what it returns |
