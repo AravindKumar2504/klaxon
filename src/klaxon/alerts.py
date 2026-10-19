@@ -12,13 +12,18 @@ records each fault's cause; klaxon.grading compares the diagnosis with it).
     ConsumerLagHigh      a consumer group is more than 50 messages behind on the topic provider-events
 
 The metric rules read Prometheus on this Mac (GET only, no redirects followed, no proxies) and fire once their
-condition has held at 2 evaluations in a row, 15 s apart, so that one blip does not page (Prometheus calls this
-`for`). The error rule needs at least 0.2 requests per second: below that, one 503 would be a share of 100%. The
-money rule runs the money check through its read-only role, waiting up to 15 s for it to settle, and fires the first
-time it fails. A check that cannot settle does not fire it: a stalled consumer shows as lag.
+condition has held at 2 evaluations in a row, so that one blip does not page (Prometheus calls this `for`). The
+harness waits 15 s between evaluations, and an evaluation takes as long as its money check: up to 15 s more when the
+books cannot settle. The error rule needs at least 0.2 requests per second: below that, one 503 would be a share of
+100%. The money rule runs the money check through its read-only role, waiting up to 15 s for it to settle, and fires
+the first time it fails. A check that cannot settle does not fire it: a stalled consumer shows as lag.
 
-The thresholds come from week 2's measurements at 3 payments per second (evidence/week2/*_live-fault_*): on a healthy
-stack, under the traffic's noise, the p95 stayed under 0.1 s, 5xx answers under 0.15 per second, and lag at 0 or 1.
+The thresholds come from week 2's measurements at 3 payments per second (evidence/week2/*_live-fault_*). On a healthy
+stack, under the traffic's noise, the p95 of POST /payments was 0.06 to 0.09 s in three runs and 0.50 s in one, right
+after a reset; the consumers' lag stayed at 0 or 1. Under the faults, the p95 reached 9.4 s 20 s into the outage, and
+the ledger's lag 50 messages 22 s into the poison. (Week 2 sampled 5xx answers over every route, not this rule's
+share; week 3's first run with no fault measured the rules' own queries: evidence/week3/*_alerts-under-traffic_*.)
+A value at a threshold does not breach it, and alert text writes a number with enough digits to show it is above.
 
 Alert text is built from numbers and from names this module knows, never from text a source sends: a label's value
 is only looked up among the names below (a group it does not know is left out), an invariant's name likewise, and a
@@ -26,7 +31,7 @@ number is used only once it is finite. Each alert is a klaxon.agent.loop.Alert: 
 These rules know nothing of the faults: they read only what the stack shows.
 
 Run: python -m klaxon.alerts               evaluate the rules once against the running stack, and print what they read
-     python -m klaxon.alerts --watch 120   every 15 s for 120 s
+     python -m klaxon.alerts --watch 120   again and again for 120 s, 15 s apart
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ from klaxon.checks import live
 from klaxon.checks.money import format_cents
 from klaxon.traffic import require_local
 
-EVERY_SECONDS = 15.0  # between evaluations
+EVERY_SECONDS = 15.0  # from the end of one evaluation to the start of the next
 IN_A_ROW = 2  # evaluations a metric rule's condition must hold before it fires: one blip does not page
 LATENCY_SECONDS = 2.0
 ERROR_SHARE = 0.20
@@ -125,8 +130,13 @@ def _round(value: float | None) -> float | None:
     return None if value is None else round(value, 3)
 
 
-def _seconds(value: float) -> str:
-    return f"{value:.1f} s" if value >= 1 else f"{value:.2f} s"
+def above(value: float, threshold: float, places: int) -> str:
+    """value, written with enough decimal places to show it is above threshold: never "2.0 s, above 2 s"."""
+    for more in range(places, 7):
+        text = f"{value:,.{more}f}"
+        if float(text.replace(",", "")) > threshold:
+            return text
+    return repr(value)  # the shortest text that reads back as exactly this number
 
 
 def _count(n: int, thing: str) -> str:
@@ -140,7 +150,7 @@ def latency(p95: float | None) -> Check:
     breached = p95 is not None and p95 > LATENCY_SECONDS
     sentence = (
         f"Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was"
-        f" {_seconds(p95)}, above the threshold of {LATENCY_SECONDS:g} s."
+        f" {above(p95, LATENCY_SECONDS, 1)} s, above the threshold of {LATENCY_SECONDS:g} s."
         if breached
         else ""
     )
@@ -153,8 +163,8 @@ def errors(per_second: float | None, requests: float | None) -> Check:
         share = min(per_second / requests, 1.0)
     breached = share is not None and share > ERROR_SHARE
     sentence = (
-        f"Payments are failing: over the last minute, {share:.0%} of the answers to POST /payments on payments-api"
-        f" were 5xx ({per_second:.2f} per second), above the threshold of {ERROR_SHARE:.0%}."
+        f"Payments are failing: over the last minute, {above(share * 100, ERROR_SHARE * 100, 0)}% of the answers to"
+        f" POST /payments on payments-api were 5xx ({per_second:.2f} per second), above the threshold of {ERROR_SHARE:.0%}."
         if breached
         else ""
     )
@@ -172,7 +182,7 @@ def lags(series: Series) -> list[Check]:
             continue
         breached = value is not None and value > LAG_MESSAGES
         sentence = (
-            f"The {name} consumer group is {value:,.0f} messages behind on the topic provider-events, all partitions"
+            f"The {name} consumer group is {above(value, LAG_MESSAGES, 0)} messages behind on the topic provider-events, all partitions"
             f" together; the threshold is {LAG_MESSAGES}."
             if breached
             else ""
@@ -290,6 +300,10 @@ class Alerting:
         self.money_check = money_check
         self.clock = clock
         self._held: dict[tuple[str, str], int] = {}
+
+    def reset(self) -> None:
+        """Forget how long each condition has held: at the next evaluation, every count starts from 0."""
+        self._held = {}
 
     def evaluate(self) -> Evaluation:
         at_utc = utc(self.clock())

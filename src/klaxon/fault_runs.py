@@ -10,21 +10,25 @@ A test harness, like klaxon.faults and klaxon.traffic: it drives this Mac's stac
    and the money check must pass. A stack that is already unwell would make the run mean nothing: then no fault is
    injected.
 4. The fault is injected (klaxon.faults).
-5. The rules are evaluated every 15 s until one fires, for at most 3 minutes. They know nothing of the fault: the
-   alert the loop gets is the one they raised from what the stack showed, unchanged.
+5. The rules are evaluated until one fires, for at most 3 minutes: 15 s apart, plus the time each evaluation takes
+   (its money check may wait up to 15 s). They know nothing of the fault: the alert the loop gets is the one they
+   raised from what the stack showed, unchanged.
 6. The loop investigates that alert, live: Claude on Aravind's seat, Klaxon's read-only tools, within its budgets.
    The traffic keeps flowing and the fault stays in place, as in a real incident.
 7. Always, whatever happened: the fault is cleared (its cause removed: a rollback, or the outage ending). Then the
-   rules are evaluated once more, after 90 s, and the traffic stops.
+   rules start their counts again and are evaluated once more, after 90 s, and the traffic stops.
 8. The diagnosis is compared with the cause the fault records, by a rule (klaxon.grading), not by a person or a
    model; the evidence says so.
 
 Everything goes into one folder in evidence/week3/: the loop's trace, model recording and tool results (make
-replay-run replays it offline), and run.json: the fault and its recorded cause, every evaluation of the rules, the
-alert, the timings, the traffic, the loop's result, and the comparison.
+replay-run replays it offline), and run.json: the fault and its recorded cause, every evaluation of the rules (when
+it began and how long it took, since the traffic started), the alert, the timings, the traffic, the loop's result,
+and the comparison. Its label is built from what the run did: a run that stopped before the fault, the alert or the
+loop says so, and claims nothing it did not do.
 
-Also here: `quiet` runs the traffic with no fault and evaluates the rules, which must not fire; `grade` compares a
-saved run's diagnosis with its fault's cause again, offline.
+Also here: `quiet` runs the traffic with no fault and evaluates the rules: each evaluation must be quiet (every
+signal read, no condition holding, the money check passed), or the run fails; `grade` compares a saved run's
+diagnosis with its fault's cause again, offline.
 
 Run: python -m klaxon.fault_runs run FAULT [--steps N --tool-calls N --seconds S]   live, with Aravind's OK each time
      python -m klaxon.fault_runs quiet [--minutes M]                                  traffic only: injects nothing
@@ -55,17 +59,11 @@ from klaxon.agent.tools import clean_text
 from klaxon.agent.trace import read_trace
 from klaxon.patient.stack import REPO, StackError
 
-LABEL = (
-    "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic, one fault from klaxon.faults"
-    " injected on purpose, an alert raised by klaxon.alerts from what the stack showed, and one live run of Klaxon's"
-    " loop (Claude on Aravind's seat: recorded responses, not a simulation). Synthetic data, a simulated provider, no"
-    " real money. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a"
-    " person or a model."
-)
 QUIET_LABEL = (
     "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic and no fault, with the alert"
     " rules of klaxon.alerts evaluated again and again. No model was called. Synthetic data, a simulated provider."
 )
+# At the top of the loop's own files (its model recording and tool results), which exist only once the loop has run.
 WHAT = (
     "One run of Klaxon's first loop on a fault injected on purpose: the alert the rules raised, Claude on Aravind's"
     " seat, read-only tools on this Mac's stack."
@@ -86,7 +84,7 @@ class Record:
     budgets: dict
     stopped: str = "did not finish"
     timings: dict = field(default_factory=dict)  # seconds since the traffic started
-    evaluations: list[dict] = field(default_factory=list)  # every evaluation of the rules, with its phase
+    evaluations: list[dict] = field(default_factory=list)  # every evaluation of the rules: its phase, began, took
     injected: dict | None = None
     cleared: dict | None = None
     alert: dict | None = None
@@ -153,8 +151,11 @@ def run(
         return round(stack.clock() - started, 1)
 
     def evaluate(phase: str) -> alerts.Evaluation:
+        began = since()
         evaluation = stack.alerting.evaluate()
-        record.evaluations.append({"phase": phase, "seconds": since()} | evaluation.to_dict())
+        record.evaluations.append(
+            {"phase": phase, "began": began, "took": round(since() - began, 1)} | evaluation.to_dict()
+        )
         return evaluation
 
     try:
@@ -178,7 +179,8 @@ def run(
                 record.stopped = f"no alert fired within {alert_within_seconds:g} s of the injection"
                 return record
             record.alert = asdict(alert)
-            record.timings["alert_at"] = since()
+            record.timings["alert_at"] = record.evaluations[-1]["began"]  # when the evaluation that fired began
+            record.timings["loop_started_at"] = since()
             result = investigate(alert)  # the alert as the rules raised it: the loop's only goal
             record.timings["loop_ended_at"] = since()
             record.loop = summary(result)
@@ -187,6 +189,7 @@ def run(
         finally:
             record.cleared = fault.clear(stack.local)  # whatever happened: never leave the fault's cause in place
             record.timings["cleared_at"] = since()
+        stack.alerting.reset()  # read the stack afresh: no count carried over from the fault
         stack.sleep(after_seconds)
         evaluate("after")
     finally:
@@ -228,8 +231,10 @@ def quiet(
         sleep(warmup_seconds)
         deadline = clock() + minutes * 60
         while True:
+            began = round(clock() - started, 1)
             evaluation = alerting.evaluate()
-            evaluations.append({"seconds": round(clock() - started, 1)} | evaluation.to_dict())
+            unwell = not_quiet(evaluation)
+            evaluations.append({"began": began, "not_quiet": unwell} | evaluation.to_dict())
             if clock() + every_seconds > deadline:
                 break
             sleep(every_seconds)
@@ -243,6 +248,7 @@ def quiet(
         "alerts_fired": sum(1 for e in evaluations if e["alert"] is not None),
         "conditions_held": sum(1 for e in evaluations for check in e["checks"] if check["breached"]),
         "evaluations_with_problems": sum(1 for e in evaluations if e["problems"]),
+        "evaluations_not_quiet": sum(1 for e in evaluations if e["not_quiet"] is not None),
         "traffic": generator.stats.to_dict(),
         "provider_behavior": generator.behavior_note,
     }
@@ -274,18 +280,50 @@ def brief(evaluation: Mapping) -> str:
     return line
 
 
+def label(record: Record) -> str:
+    """What this run's evidence is, from what the run did: it never claims a step the run did not reach."""
+    said = [
+        "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a"
+        " simulated provider, no real money."
+    ]
+    if "injected_at" not in record.timings:
+        return " ".join([*said, f"No fault was injected. The run stopped: {record.stopped}."])
+    said.append(f"One fault from klaxon.faults, {record.fault['name']}, was injected on purpose.")
+    if record.cleared is None:
+        said.append("Clearing it failed, so it may still be in place.")
+    if record.alert is None:
+        return " ".join([*said, f"No alert fired. The run stopped: {record.stopped}."])
+    said.append("The alert was raised by klaxon.alerts from what the stack showed.")
+    if "loop_started_at" in record.timings:
+        if record.loop is None:
+            said.append(
+                f"Klaxon's loop started live on it, through Claude Code on Aravind's seat, and did not finish: {record.stopped}."
+            )
+        else:
+            said.append(
+                f"Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on {record.loop['reason']}"
+                f" after {record.loop['steps']} steps; any reply it got is a recorded response, not a simulation."
+            )
+    if record.comparison is not None and record.comparison["verdict"] != "no diagnosis":
+        said.append(
+            "The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or"
+            " a model."
+        )
+    return " ".join(said)
+
+
 def render(record: Record) -> str:
     f = record.fault
     lines = [
         f"Klaxon week 3: the first loop on a fault injected on purpose: {f['name']}",
-        "REAL RUN on this Mac's Docker Compose stack, with synthetic traffic. The loop's replies are recorded responses"
-        " from Claude on Aravind's seat. Synthetic data, a simulated provider, no real money.",
+        label(record),
         "",
         f"The fault: {f['title']}",
         f"  recorded cause: {f['cause']}",
         "",
-        "The alert rules (t counts from the start of the traffic; rates and p95 are over the last minute)",
-        *(f"  {e['phase']:<6} t={e['seconds']:>6.1f} s  {brief(e)}" for e in record.evaluations),
+        "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the"
+        " last minute)",
+        *(f"  {e['phase']:<6} t={e['began']:>6.1f} s  {brief(e)}" for e in record.evaluations),
     ]
     if "injected_at" in record.timings:
         lines.append(
@@ -317,7 +355,7 @@ def render(record: Record) -> str:
 
 
 def evidence(record: Record, header: Mapping) -> dict:
-    return {"label": LABEL, **header, **asdict(record), "printed_output": render(record).splitlines()}
+    return {"label": label(record), **header, **asdict(record), "printed_output": render(record).splitlines()}
 
 
 # The command line.
@@ -347,9 +385,7 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
         binary = preflight(args.model)
         parts = Stack(faults.LocalStack(), alerts.Alerting())
-        header = {"what": WHAT, "fault_name": fault.name} | _provenance(
-            shlex.join(["python", "-m", "klaxon.fault_runs", *argv])
-        )
+        header = {"fault_name": fault.name} | _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
     except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
@@ -358,7 +394,7 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     record = Record(fault.describe(), asdict(settings), asdict(budgets))
 
     def investigate(alert: Alert) -> RunResult:
-        run_header = header | {"alert": asdict(alert), "budgets": asdict(budgets)}
+        run_header = header | {"what": WHAT, "alert": asdict(alert), "budgets": asdict(budgets)}
         return loop.investigate_live(alert, budgets, folder, run_header, args.model, binary)
 
     code = 0
@@ -389,10 +425,11 @@ def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
         return 2
     out = {"label": QUIET_LABEL, **header, **found}
     for evaluation in found["evaluations"]:
-        print(f"t={evaluation['seconds']:>6.1f} s  {brief(evaluation)}")
+        print(f"t={evaluation['began']:>6.1f} s  {brief(evaluation)}")
     print(
         f"{len(found['evaluations'])} evaluations: {found['alerts_fired']} with an alert, {found['conditions_held']}"
-        f" conditions held, {found['evaluations_with_problems']} with a problem"
+        f" conditions held, {found['evaluations_with_problems']} with a problem, {found['evaluations_not_quiet']} not"
+        " quiet (a condition held, a signal not read, or the money check did not pass)"
     )
     print(*traffic.summary(found["traffic"]["counts"]), sep="\n")
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
@@ -400,7 +437,7 @@ def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
     path = args.evidence_dir / f"{stamp}_alerts-under-traffic_rate{args.rate:g}_seed{args.seed}.json"
     path.write_text(json.dumps(out, indent=2, default=str) + "\n")
     print(f"Saved: {clean_text(str(path))}")
-    return 0 if found["alerts_fired"] == 0 and found["evaluations_with_problems"] == 0 else 1
+    return 0 if found["alerts_fired"] == 0 and found["evaluations_not_quiet"] == 0 else 1
 
 
 def _grade(folder: Path) -> int:

@@ -2,10 +2,11 @@
 
 klaxon.faults records each fault's cause in plain words. Here each cause is cut into three elements a correct
 diagnosis names: where it is (the ledger consumer, say), what is wrong there (its dedupe is gone), and how that
-produces the symptom (the provider sends some webhooks again). Words that only restate the alert (lag, a stall,
-events posted twice) are not elements: the alert already says them. Each element is a few regular expressions,
-matched without regard to case. The rule reads the diagnosis's hypothesis, the field the diagnosis contract keeps for
-"the cause, and how it produces the alert", and counts the required elements it names:
+produces the symptom (the provider sends some webhooks again). The alert's own words can name one element at most
+(the lag alert names the ledger group; the latency alert says "slow"), never enough for "partly": a test checks it
+for every alert the faults raise. Each element is a few regular expressions, matched without regard to case. The rule
+reads the diagnosis's hypothesis, the field the diagnosis contract keeps for "the cause, and how it produces the
+alert", and counts the required elements it names:
 
     names the cause    all of them
     partly             at least half of them
@@ -16,21 +17,32 @@ also says whether the proposed fix is of a kind, and on a target, that fit the f
 
 A rule reads words, not meaning: "a deploy is unlikely" names a deploy, and the right cause put in other words can be
 missed. So the evidence shows its verdict next to the hypothesis and the recorded cause, for a person to check, and
-it is always labeled as a rule's. Week 5's evaluation grades many runs and can compare graders.
+it is always labeled as a rule's. The independent review found plausible wrong causes it scores as right (a database
+outage that makes the ledger retry; Redis losing its keys; a slow database) and right ones it scores as partly (an
+amount "not positive integer cents"; a dedupe "check turned off"): words from the system prompt and the services'
+own log lines match elements. tests/test_grading.py keeps those sentences as known limits.
+
+Version 1, below, is the rubric committed in 95a64ab, before the first live runs on the faults (2026-10-19 UTC), and
+it graded them. It stays as it was: changing it after seeing results would undo that. Every comparison records the
+rubric's version and fingerprint, and a test pins the fingerprint, so a later rubric (week 5's evaluation) shows as a
+new version, never as the old one.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from klaxon import faults
 from klaxon.agent.tools import clean_text
 
+RUBRIC_VERSION = 1
 BY = (
-    "a rule (klaxon.grading): keyword patterns per element of the fault's recorded cause, written and committed"
-    " before the live runs. Not a person and not a model: it reads words, not meaning."
+    "a rule (klaxon.grading, rubric version 1, committed in 95a64ab before the first live runs on the faults): keyword"
+    " patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning."
 )
 
 
@@ -145,6 +157,12 @@ RUBRICS = {
 }
 
 
+def fingerprint() -> str:
+    """The SHA-256 of the rubric itself: every element, pattern, and fitting fix, for every fault."""
+    rubric = {name: asdict(rubric) for name, rubric in sorted(RUBRICS.items())}
+    return hashlib.sha256(json.dumps(rubric, sort_keys=True).encode()).hexdigest()
+
+
 def names(element: Element, text: str) -> bool:
     return any(re.search(pattern, text, re.IGNORECASE) for pattern in element.patterns)
 
@@ -152,7 +170,13 @@ def names(element: Element, text: str) -> bool:
 def compare(fault_name: str, diagnosis: Mapping | None) -> dict:
     """The rule's comparison of a diagnosis (as the trace's stop record keeps it) with the fault's recorded cause."""
     fault, rubric = faults.get(fault_name), RUBRICS[fault_name]
-    out: dict = {"by": BY, "fault": fault_name, "recorded_cause": fault.cause, "remedy": fault.remedy}
+    out: dict = {
+        "by": BY,
+        "rubric": {"version": RUBRIC_VERSION, "sha256": fingerprint()},
+        "fault": fault_name,
+        "recorded_cause": fault.cause,
+        "remedy": fault.remedy,
+    }
     if diagnosis is None:
         return out | {"verdict": "no diagnosis"}
     hypothesis = str(diagnosis["hypothesis"])

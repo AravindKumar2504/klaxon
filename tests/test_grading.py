@@ -2,11 +2,12 @@
 except one: the first live run's, a recorded response from Claude (claude-opus-5-5, 2026-10-18), read from its
 evidence as data."""
 
+import json
 import re
 
 import pytest
 
-from klaxon import faults, grading
+from klaxon import alerts, faults, grading
 from klaxon.agent.tools import HOME
 from klaxon.agent.trace import read_trace
 from klaxon.patient.stack import REPO
@@ -156,3 +157,83 @@ def test_the_printed_comparison_cleans_the_models_words():
     assert "​" not in printed and "‮" not in printed and HOME not in printed
     assert "  hypothesis: The ledger retries ~/x forever" in printed
     assert printed.endswith("  verdict: PARTLY")
+
+
+# After the independent review (DECISIONS.md lists its findings by number)
+
+FAULT_RUNS = REPO / "evidence" / "week3"
+
+
+def test_the_rubric_is_version_1_exactly_as_committed_before_the_live_runs():
+    # Finding 2. Any change to an element, a pattern or a fitting fix changes this fingerprint. Then: a new version,
+    # its reason in DECISIONS.md, and the verdicts already recorded kept as they were.
+    assert grading.RUBRIC_VERSION == 1
+    assert grading.fingerprint() == "81fd17fd69a6c0cf5086e59455babf2d736b9cedb7c9191c9ce68894f3323dfb"
+    assert grading.compare("poison-message", diagnosis("x"))["rubric"] == {
+        "version": 1,
+        "sha256": grading.fingerprint(),
+    }
+    assert "rubric version 1, committed in 95a64ab before the first live runs on the faults" in grading.BY
+
+
+def test_an_alerts_own_words_never_name_enough_of_its_faults_cause():
+    # Finding 2: restating the alert is not a diagnosis. The alerts the live runs raised (recorded in their run.json),
+    # each read as a hypothesis, miss their fault's cause; so do the rules' sentences for those symptoms.
+    recorded = {
+        json.loads(path.read_text())["fault"]["name"]: json.loads(path.read_text())["alert"]["summary"]
+        for path in sorted(FAULT_RUNS.glob("*_fault-run_*/run.json"))
+    }
+    assert sorted(recorded) == sorted(faults.FAULTS)
+    made = {
+        "duplicate-delivery": alerts.money(
+            {"outcome": "failed", "invariants": 5, "failed": {"posted_exactly_once": 7}, "money_off_cents": 1}
+        ).sentence,
+        "poison-message": alerts.lags([({"consumer": "ledger"}, 271.0)])[0].sentence,
+        "provider-outage": f"{alerts.errors(2.2, 2.97).sentence} {alerts.latency(10.0).sentence}",
+    }
+    for sentences in (recorded, made):
+        for fault, sentence in sentences.items():
+            assert verdict(fault, sentence) == "misses the cause", (fault, sentence)
+
+
+# Finding 2's examples: what a person would say, and version 1 does not. Each is a known limit, kept as a test that
+# fails today (strict: one that starts to pass fails too), for the week 5 grader to do better on.
+KNOWN_LIMITS = [
+    (
+        "poison-message",
+        "The ledger consumer could not process events while PostgreSQL was down; it is retrying.",
+        "misses the cause",
+    ),
+    (
+        "duplicate-delivery",
+        "Redis lost its idempotency keys, so the ledger books webhooks the provider re-sends a second time.",
+        "misses the cause",
+    ),
+    (
+        "provider-outage",
+        "PostgreSQL is slow and payments-api requests wait on it; fake-provider looks healthy.",
+        "misses the cause",
+    ),
+    (
+        "provider-outage",
+        "payments-api is slow because a traffic spike exhausted its worker threads.",
+        "misses the cause",
+    ),
+    (
+        "poison-message",
+        "The ledger consumer retries forever one payment.updated event whose amount is not positive integer cents.",
+        "names the cause",
+    ),
+    ("poison-message", "The ledger consumer retries forever one event whose amount is a string.", "names the cause"),
+    (
+        "duplicate-delivery",
+        "A deploy turned off the ledger consumer's duplicate check, so webhooks the provider sends again are booked twice.",
+        "names the cause",
+    ),
+]
+
+
+@pytest.mark.xfail(strict=True, reason="a known limit of rubric version 1 (finding 2): it reads words, not meaning")
+@pytest.mark.parametrize("fault, hypothesis, right", KNOWN_LIMITS)
+def test_a_known_limit_of_version_1(fault, hypothesis, right):
+    assert verdict(fault, hypothesis) == right

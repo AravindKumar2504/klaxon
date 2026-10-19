@@ -8,6 +8,7 @@ runs Klaxon's real loop with scripted replies, and Klaxon's real MCP server code
 import json
 import os
 import re
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,7 +16,7 @@ import httpx
 import pytest
 
 from klaxon import alerts, fault_runs, faults, grading
-from klaxon.agent import loop
+from klaxon.agent import claude_code, loop
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.claude_code import find_claude
 from klaxon.agent.contract import Diagnosis, Evidence, ProposedFix
@@ -24,7 +25,7 @@ from klaxon.agent.tools import make_tools
 from klaxon.agent.trace import read_trace
 from klaxon.traffic import Settings
 from tests.agent.test_loop import Served, tool
-from tests.conftest import NO_CLAUDE
+from tests.conftest import NO_APP_COPIES, NO_CLAUDE
 from tests.test_alerts import FAILED, HEALTHY, PASSED
 
 NOW = 1_792_360_000.0
@@ -63,6 +64,8 @@ class World:
         self.before, self.money_before = before or {}, money_before
         self.traffic_fails = False
         self.inject_fails = self.clear_fails = False
+        self.money_takes = 0.0  # seconds each money check takes (a stalled consumer: up to 15)
+        self.lingers = False  # the symptoms outlast the clearing
 
     def prometheus(self, query):
         series = HEALTHY | self.before | (self.sick if self.fault_on else {})
@@ -72,6 +75,7 @@ class World:
         return answer
 
     def money(self):
+        self.now += self.money_takes
         return dict(self.money_sick if self.fault_on else self.money_before)
 
     def sleep(self, seconds):
@@ -91,7 +95,7 @@ class World:
         self.calls.append("clear")
         if self.clear_fails:
             raise RuntimeError("docker did not answer")
-        self.fault_on = False
+        self.fault_on = self.lingers
         return {"made_up": "cleared"}
 
     def alerting(self):
@@ -152,10 +156,11 @@ def test_a_run_goes_from_a_quiet_stack_to_the_alert_to_the_loop_and_then_clears_
         "injected_at": 75.0,
         "injection_took": 0.0,
         "alert_at": 105.0,
+        "loop_started_at": 105.0,
         "loop_ended_at": 225.0,
         "cleared_at": 225.0,
     }
-    assert record.evaluations[-1]["seconds"] == 225.0 + fault_runs.AFTER_SECONDS
+    assert record.evaluations[-1]["began"] == 225.0 + fault_runs.AFTER_SECONDS
     assert record.traffic == {"counts": {"payments.succeeded": 3}, "unexpected": []}
 
 
@@ -238,7 +243,7 @@ def test_the_stack_must_be_quiet_at_two_evaluations_in_a_row():
 def test_the_rules_read_the_stack_only_once_the_traffic_has_warmed_up():
     world = World()
     record = run(world)
-    assert record.evaluations[0]["seconds"] == fault_runs.WARMUP_SECONDS
+    assert record.evaluations[0]["began"] == fault_runs.WARMUP_SECONDS
 
 
 # The fault is always cleared, and the traffic always stopped
@@ -251,7 +256,7 @@ def test_no_alert_in_time_means_no_loop_and_the_fault_is_still_cleared():
     assert record.stopped == "no alert fired within 180 s of the injection"
     assert record.alert is None and record.loop is None and record.comparison is None
     during = [e for e in record.evaluations if e["phase"] == "during"]
-    assert len(during) == 12 and during[-1]["seconds"] - record.timings["injected_at"] == 180.0
+    assert len(during) == 12 and during[-1]["began"] - record.timings["injected_at"] == 180.0
 
 
 @pytest.mark.parametrize("error", [RuntimeError("the loop crashed"), KeyboardInterrupt()])
@@ -300,7 +305,7 @@ def test_with_no_fault_the_rules_are_read_again_and_again_and_counted():
         world.alerting(), Settings(run_id="r1"), 1.0, lambda s: FakeTraffic(world, s), world.sleep, world.clock
     )
     assert calls(world) == ["traffic on", "traffic closed", "traffic joined"]
-    assert [e["seconds"] for e in found["evaluations"]] == [
+    assert [e["began"] for e in found["evaluations"]] == [
         60.0,
         75.0,
         90.0,
@@ -360,6 +365,10 @@ def test_no_test_can_find_the_real_claude_code():
     assert os.environ["KLAXON_CLAUDE_BIN"] == NO_CLAUDE
     with pytest.raises(ModelError, match="not an executable file"):
         find_claude()
+    # Finding 8: even code that skipped KLAXON_CLAUDE_BIN finds no desktop-app copy, with the mutation runner's PATH.
+    assert claude_code.APP_COPIES == NO_APP_COPIES
+    with pytest.raises(ModelError, match="Claude Code was not found"):
+        find_claude({"PATH": "/usr/bin:/bin"})
 
 
 def test_a_run_that_cannot_start_touches_nothing_and_leaves_no_folder(monkeypatch, tmp_path, capsys):
@@ -384,11 +393,9 @@ def test_bad_budgets_or_traffic_settings_are_refused_before_anything(monkeypatch
 # The command, end to end, offline
 
 
-@pytest.fixture
-def offline(monkeypatch):
-    """The command with a made-up stack and traffic, and Klaxon's real loop: scripted replies, and Klaxon's real MCP
-    server code serving made-up tool results, in this process."""
-    world = World()
+def patch_command(monkeypatch, world):
+    """The command with this made-up stack and traffic, and Klaxon's real loop: scripted replies, and Klaxon's real
+    MCP server code serving made-up tool results, in this process."""
     monkeypatch.setattr(fault_runs, "preflight", lambda model: Path("/made-up/claude"))
     monkeypatch.setattr(fault_runs.faults, "get", lambda name: world.fault(name))
     monkeypatch.setattr(fault_runs.faults, "LocalStack", lambda: None)
@@ -403,7 +410,24 @@ def offline(monkeypatch):
         return loop.investigate(alert, ScriptedModel(script), Served().client, folder / loop.TRACE, budgets)
 
     monkeypatch.setattr(fault_runs.loop, "investigate_live", investigate_live)
-    return world, given
+    return given
+
+
+def patch_quiet(monkeypatch, world):
+    monkeypatch.setattr(fault_runs.alerts, "Alerting", world.alerting)
+    monkeypatch.setattr(fault_runs, "_provenance", lambda command: {"rerun_command": command})
+    real = fault_runs.quiet
+
+    def quiet(alerting, settings, minutes):
+        return real(alerting, settings, minutes, lambda s: FakeTraffic(world, s), world.sleep, world.clock)
+
+    monkeypatch.setattr(fault_runs, "quiet", quiet)
+
+
+@pytest.fixture
+def offline(monkeypatch):
+    world = World()
+    return world, patch_command(monkeypatch, world)
 
 
 DIAGNOSE_OUTAGE = json.dumps(
@@ -428,7 +452,16 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     [folder] = tmp_path.iterdir()
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d{6}Z_fault-run_provider-outage", folder.name)
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
-    assert saved["label"] == fault_runs.LABEL and "not a simulation" in saved["label"]
+    assert saved["label"] == fault_runs.label(fault_runs.Record(**{k: saved[k] for k in RECORD_FIELDS}))
+    for claim in (
+        "provider-outage, was injected on purpose",
+        "The alert was raised",
+        "ran live on it",
+        "not a simulation",
+        "by a rule",
+    ):
+        assert claim in saved["label"], claim
+    assert "what" not in saved  # the loop's own files say what a loop run is; run.json says what this run did
     assert saved["fault"]["cause"] == faults.FAULTS["provider-outage"].cause
     assert saved["alert"]["name"] == "PaymentsLatencyHigh" and saved["stopped"] == "the loop stopped: diagnosed"
     assert saved["comparison"]["by"] == grading.BY and saved["comparison"]["verdict"] == "names the cause"
@@ -438,7 +471,7 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     assert header["fault_name"] == "provider-outage" and header["budgets"]["steps"] == 12
     assert read_trace(folder / loop.TRACE)[-1]["reason"] == "diagnosed"
     out = capsys.readouterr().out
-    assert "Compared by a rule (klaxon.grading)" in out and "verdict: NAMES THE CAUSE" in out
+    assert "Compared by a rule (klaxon.grading, rubric version 1" in out and "verdict: NAMES THE CAUSE" in out
     assert fault_runs.main(["grade", str(folder)]) == 0
     assert "verdict: NAMES THE CAUSE" in capsys.readouterr().out
 
@@ -470,15 +503,7 @@ def test_a_run_whose_alert_never_fired_exits_1(offline, tmp_path):
 
 
 def test_the_quiet_command_saves_its_evidence(monkeypatch, tmp_path, capsys):
-    world = World()
-    monkeypatch.setattr(fault_runs.alerts, "Alerting", world.alerting)
-    monkeypatch.setattr(fault_runs, "_provenance", lambda command: {"rerun_command": command})
-    real = fault_runs.quiet
-
-    def quiet(alerting, settings, minutes):
-        return real(alerting, settings, minutes, lambda s: FakeTraffic(world, s), world.sleep, world.clock)
-
-    monkeypatch.setattr(fault_runs, "quiet", quiet)
+    patch_quiet(monkeypatch, World())
     assert fault_runs.main(["quiet", "--minutes", "1", "--evidence-dir", str(tmp_path)]) == 0
     [path] = tmp_path.iterdir()
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d{6}Z_alerts-under-traffic_rate3_seed7\.json", path.name)
@@ -490,6 +515,100 @@ def test_the_quiet_command_saves_its_evidence(monkeypatch, tmp_path, capsys):
 def test_grading_a_folder_without_a_run_is_refused(tmp_path, capsys):
     assert fault_runs.main(["grade", str(tmp_path)]) == 2
     assert "Cannot grade" in capsys.readouterr().err
+
+
+# After the independent review (DECISIONS.md lists its findings by number)
+
+RECORD_FIELDS = list(fault_runs.Record.__dataclass_fields__)
+NEVER_CLAIMED = (
+    "injected on purpose",
+    "alert was raised",
+    "ran live",
+    "started live",
+    "recorded response",
+    "by a rule",
+)
+
+
+@pytest.mark.parametrize(
+    "world, stopped, said",
+    [
+        (World(before=SLOW), "not quiet before the fault", ()),
+        (World(sick={}), "no alert fired within 180 s", ("injected on purpose",)),
+    ],
+    ids=["not quiet", "no alert"],
+)
+def test_a_run_that_stopped_early_claims_nothing_it_did_not_do(world, stopped, said, tmp_path, monkeypatch):
+    # Finding 1: the label was fixed text, and claimed a fault, an alert, a live loop and a comparison every time.
+    patch_command(monkeypatch, world)
+    assert fault_runs.main(["run", "provider-outage", "--evidence-dir", str(tmp_path)]) == 1
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["stopped"].startswith(stopped) and stopped in saved["label"]
+    assert [claim for claim in NEVER_CLAIMED if claim in saved["label"]] == list(said)
+    assert saved["printed_output"][1] == saved["label"]
+    assert ("No alert fired" if said else "No fault was injected") in saved["label"]
+
+
+def test_a_loop_that_did_not_finish_is_said_to_have_started_only(tmp_path, monkeypatch):
+    world = World()
+    patch_command(monkeypatch, world)
+    monkeypatch.setattr(fault_runs.loop, "investigate_live", lambda *args: (_ for _ in ()).throw(KeyboardInterrupt()))
+    assert fault_runs.main(["run", "provider-outage", "--evidence-dir", str(tmp_path)]) == 130
+    [folder] = tmp_path.iterdir()
+    label = json.loads((folder / fault_runs.RUN_FILE).read_text())["label"]
+    assert "Klaxon's loop started live on it, through Claude Code on Aravind's seat, and did not finish" in label
+    assert "recorded response" not in label and "by a rule" not in label
+
+
+def test_each_evaluation_says_when_it_began_and_how_long_it_took():
+    # Finding 4: times were taken at the end of an evaluation, and the alert's at the end of the one that fired.
+    world = World(sick={"lag_by_group": [({"consumer": "ledger"}, 271.0)]})
+    world.money_takes = 15.0
+    record = run(world)
+    during = [e for e in record.evaluations if e["phase"] == "during"]
+    assert [(e["began"], e["took"]) for e in during] == [(120.0, 15.0), (150.0, 15.0)]
+    assert record.timings["alert_at"] == 150.0 and record.alert["name"] == "ConsumerLagHigh"
+
+
+def test_after_clearing_the_rules_read_the_stack_afresh():
+    # Finding 7: the counts carried over from the fault, so one breach after clearing showed as firing.
+    world = World()
+    world.lingers = True
+    record = run(world)
+    [after] = [e for e in record.evaluations if e["phase"] == "after"]
+    [latency] = [c for c in after["checks"] if c["rule"] == "PaymentsLatencyHigh"]
+    assert (latency["breached"], latency["in_a_row"], latency["firing"]) == (True, 1, False)
+
+
+@pytest.mark.parametrize(
+    "before, money_before",
+    [({"p95_seconds": [], "requests_per_second": []}, PASSED), ({}, {"outcome": "could not settle"})],
+    ids=["no data", "the money check never settles"],
+)
+def test_a_quiet_run_that_could_not_see_is_not_quiet(before, money_before, tmp_path, monkeypatch, capsys):
+    # Finding 3: alerts and problems were counted, but a rule with no data, or a check that never settled, was neither.
+    world = World(before=before, money_before=money_before)
+    found = fault_runs.quiet(
+        world.alerting(), Settings(run_id="r1"), 1.0, lambda s: FakeTraffic(world, s), world.sleep, world.clock
+    )
+    assert found["alerts_fired"] == 0 and found["evaluations_not_quiet"] == len(found["evaluations"]) == 5
+    assert all(e["not_quiet"] for e in found["evaluations"])
+    patch_quiet(monkeypatch, World(before=before, money_before=money_before))
+    assert fault_runs.main(["quiet", "--minutes", "1", "--evidence-dir", str(tmp_path)]) == 1
+    assert "5 not quiet" in capsys.readouterr().out
+
+
+def test_the_make_targets_pass_their_values_through_the_environment():
+    # Finding 9: the four new targets were not in item 3's quoting test.
+    for target, value, name in [
+        ("investigate-fault", "FAULT=x' ; echo pwned", '"$FAULT"'),
+        ("grade-run", "RUN=x' ; echo pwned", '"$RUN"'),
+        ("alerts", "WATCH=1' ; echo pwned", '"$WATCH"'),
+        ("alerts-under-traffic", "MINUTES=1' ; echo pwned", '"$MINUTES"'),
+    ]:
+        shown = subprocess.run(["make", "-n", target, value], cwd=loop.REPO, capture_output=True, text=True, check=True)
+        assert "pwned" not in shown.stdout and name in shown.stdout, target
 
 
 # Nothing the model is given names the fault
@@ -564,6 +683,9 @@ def test_each_live_fault_run_replays_exactly_and_grades_the_same(fault, tmp_path
     # The loop got exactly the alert the rules raised, at the first evaluation that fired after the injection.
     fired = [e for e in saved["evaluations"] if e["phase"] == "during" and e["alert"] is not None]
     assert recorded[0]["extra"]["alert"] == saved["alert"] == fired[0]["alert"]
-    # The rule, run again on the diagnosis the trace kept, says what the run recorded.
-    assert grading.compare(fault, recorded[-1]["diagnosis"]) == saved["comparison"]
+    # The rule, run again on the diagnosis the trace kept, says what the run recorded: the same rubric, version 1.
+    again = grading.compare(fault, recorded[-1]["diagnosis"])
+    kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy", "hypothesis", "recorded_cause")
+    assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
+    assert again["rubric"]["version"] == 1 and "before the live runs" in saved["comparison"]["by"]
     assert saved["fault"]["name"] == fault and saved["cleared"] is not None

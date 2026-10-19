@@ -111,6 +111,42 @@ def test_a_latency_at_the_threshold_does_not_fire():
     assert not alerts.latency(alerts.LATENCY_SECONDS).breached and alerts.latency(2.001).breached
 
 
+# After the independent review (DECISIONS.md lists its findings by number)
+
+
+@pytest.mark.parametrize(
+    "check",
+    [alerts.errors(0.4, 2.0), alerts.lags([({"consumer": "ledger"}, 50.0)])[0]],
+    ids=["a share of exactly 20%", "a lag of exactly 50"],
+)
+def test_a_value_at_the_threshold_does_not_breach_it(check):
+    # Finding 9: the boundaries had no test.
+    assert not check.breached
+
+
+def test_a_number_just_above_a_threshold_is_written_so_that_it_shows():
+    # Finding 6: "20% ... above the threshold of 20%" would invite the model to doubt a true alert.
+    assert "was 2.04 s, above the threshold of 2 s" in alerts.latency(2.04).sentence
+    assert "20.5% of the answers" in alerts.errors(0.41, 2.0).sentence
+    assert "group is 50.4 messages behind" in alerts.lags([({"consumer": "ledger"}, 50.4)])[0].sentence
+    assert [alerts.above(v, 2.0, 1) for v in (9.37, 2.0000001, 2 + 1e-15)] == ["9.4", "2.0000001", "2.000000000000001"]
+
+
+def test_a_share_of_errors_is_never_more_than_all_of_them():
+    # Finding 9: two rates read a moment apart can put the 5xx answers above all answers.
+    check = alerts.errors(3.0, 2.0)
+    assert check.numbers["share"] == 1.0 and "100% of the answers" in check.sentence
+
+
+def test_after_a_reset_every_count_starts_again_from_zero():
+    # Finding 7: the harness resets the counts after clearing a fault, so its last evaluation reads the stack afresh.
+    alerting = rules(Readings(p95_seconds=[({}, 9.37)]))
+    alerting.evaluate()
+    alerting.reset()
+    again = alerting.evaluate()
+    assert again.checks[0].in_a_row == 1 and again.alert is None
+
+
 def test_failing_payments_fire_on_their_share_of_5xx_answers():
     _, second = evaluate(Readings(errors_per_second=[({}, 1.05)], requests_per_second=[({}, 2.0)]), times=2)
     assert second.alert.name == "PaymentsErrorsHigh"
