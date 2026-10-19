@@ -1246,6 +1246,8 @@ MUTANTS = [
      "Not a person and not a model: it reads words, not meaning.", "Checked.", False),
     ("the printed comparison repeats the model's words uncleaned", "src/klaxon/grading.py",
      "{clean_text(comparison['hypothesis'])}", "{comparison['hypothesis']}", False),
+    ("the system prompt no longer asks to confirm the alert's symptom", A + "loop.py",
+     "- An alert can be wrong: before you explain it, confirm its symptom with a tool.\n", "", False),
     ("a live run records no tool results", A + "loop.py",
      "    tools = RecordedTools(McpClient(), folder / TOOL_RESULTS, header)", "    tools = McpClient()", False),
 ]

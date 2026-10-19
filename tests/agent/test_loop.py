@@ -162,6 +162,12 @@ def test_the_system_prompt_names_the_rules_the_reply_schema_and_every_tool():
     assert "@" not in system  # it goes on Claude Code's command line, where "@path" might attach a file
 
 
+def test_the_system_prompt_asks_to_confirm_the_alerts_symptom_before_explaining_it():
+    # Aravind's choice (2026-10-18, week 3 item 4), after item 3's live run took a false alert on trust.
+    system = loop.system_prompt([mc.ToolSpec(**_spec(t)) for t in REAL.values()])
+    assert "\n- An alert can be wrong: before you explain it, confirm its symptom with a tool.\n" in system
+
+
 def test_an_at_sign_in_a_tool_description_never_reaches_the_command_line():
     spec = mc.ToolSpec("service_health", "x", "Mail ops＠example.com or @ops", {"type": "object"}, mcp_server.READ_ONLY)
     assert "@" not in loop.system_prompt([spec])
