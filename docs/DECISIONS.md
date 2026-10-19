@@ -374,3 +374,16 @@ Built on the branch `claude/week-3-fault-runs-70c1cf`, cut from `main` at `87a22
 - **Claude's final check before the merge** (2026-10-19): at `2ff2358`, `make test` and `make lint` again, and a privacy scan of the 6 commits and these notes. Nothing private found; STATUS has the numbers. Not run, as before: `make e2e`, the full `make mutants` and `make test-integration` (the stack is shared, and this item changes nothing the stack runs).
 - **Week 3, item 4 merged into `main`** (Aravind, 2026-10-19): `main` was fast-forwarded to the branch. The branch is kept, like the others.
 - **Pushed to GitHub** (Aravind, 2026-10-19): `main` with week 3, item 4 (`main` only; the branches stay on his Mac). CLAUDE.md's rule still holds: Claude asks before every push.
+
+
+## 2026-10-19 (week 3 session: item 5, the week's docs and review list)
+
+Built on the branch `claude/pensive-payne-d31a00`, cut from `main` at `b47d55b` (items 1 to 4), in a session and worktree of its own. Docs only. Aravind reviews the week before it is merged; nothing is pushed.
+
+- **Its own session, worktree and branch** (the top session, 2026-10-19), as CLAUDE.md asks: one session per milestone.
+- **The one-page summary follows week 2's** (Claude): the items in order and why each needed the one before, the ideas to explain, and what comes next. Added for week 3: one run told in one breath (fault 1, the one only the money check sees), the CSYE 7374 and INFO 7375 outcomes the week covers, a table of what ran with each command and commit (copied from STATUS, then checked against the files), and what it does not show. It repeats no item's detail.
+- **Doc fixes only where a doc was wrong at `b47d55b`** (Claude): the README's status line, its mutant count (435; 493 since item 4), two README lines in the future tense for what exists now, and known gap 4's last sentence. STATUS (item 5) gives each with its reason. Nothing else was reworded.
+- **Left as written** (Claude). Each item's study notes keep the tense they were written in ("the loop (item 3) will call them"): each section is dated, and was true that day. PLAN's week rows keep the planned dates; STATUS has the real ones, as for week 2. PLAN asks for evidence "with citations to metric/log/trace IDs": each piece of evidence cites a tool call, which names the query, the log search or the trace it read, so the plan holds. The fault runs' windows in STATUS start up to a second before the runs' own stamps: they count from the traffic's start, estimated from whole-second stamps.
+- **Fault 1's run for Aravind's replay** (Claude): he replayed fault 2's in item 4's review, and fault 1 is the fault only the money check sees, the project's point.
+- **This worktree's `.venv` copies item 4's package versions** (Claude): installed from item 4's `pip freeze`, where the 1,302 was measured, then Klaxon itself in editable mode. `make venv` takes the newest versions `pyproject.toml` allows, which can move. The review outputs in STATUS came from this `.venv`.
+- **Nothing live** (Claude): no model call and no stack command; this item needed neither.

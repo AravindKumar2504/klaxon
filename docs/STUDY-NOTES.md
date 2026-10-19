@@ -469,3 +469,50 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 - *Why is the loop allowed to see `LEDGER_HANDLER=naive`?* A real deploy log shows settings too. Seeing the setting is not the same as connecting it to the money; the evaluation can hide it later.
 - *How do you know the rule was not tuned to the results?* It was committed in `95a64ab`, before any fault run, and a test pins its fingerprint: the same as computed from that commit's file. Its two changes came from its own tests, before the runs.
 - *Your fault 3 fix "did not fit". Was the model wrong?* No: it proposed the remedy (a circuit breaker) under the kind "other". The rule's list of kinds is too strict; I left the verdict as the rule gave it, and said so.
+
+## Week 3 in one page (2026-10-19)
+
+**What week 3 added, in order, and why each needed the one before.**
+1. *Read-only tools, over an MCP server written from scratch* (item 1). An agent needs eyes before it can investigate. Eight tools read metrics, logs and traces (week 2's signals), container health, recent deploys and the money check. None can write. MCP lets any MCP client use them, and the tests drive the server with the official SDK's clients.
+2. *Model adapters, recording and replay, and the trace recorder* (item 2). A loop needs a way to ask a model for its next step, and a record of every step. One interface, three adapters: a scripted mock for tests, Claude through `claude -p` on your seat (boxed in, and checked as it runs), and a replay of recorded replies. Every live reply is saved, with its date and model, before it is used.
+3. *The first loop, in plain Python* (item 3). It joins the two. From an alert, it asks the model for one step at a time (call one read-only tool, or diagnose), runs each tool through its own MCP client, and stops in a diagnosis that must pass a fixed, validated contract. It records every tool result too, so a live run replays offline. It acts on nothing. Without item 1 it could not look; without item 2 it could not ask, or be replayed.
+4. *Alerts on symptoms, the live-run harness, and the grading rule* (item 4). Until then, every alert was written by hand. The rules raise an alert from what the stack shows. The harness runs a whole incident: traffic, a fault, the alert, the loop, the fault cleared. The rule compares the diagnosis with the cause the fault records. It needed item 3's loop, and week 2's faults with causes known in advance.
+
+**One run, in one breath (fault 1).** Traffic flowed, and a ledger deploy without its dedupe went in. The money check failed, and `MoneyCheckFailed` fired: 7 events posted more than once, the books $461.00 ahead. The loop got that alert, and no word about the fault. Opus 5.5 ran the money check itself, then `recent_deploys` (the ledger consumer redeployed with `LEDGER_HANDLER=naive`), then three log searches (one event booked three times, from three Kafka messages). Its first diagnosis was too long and went back; the second passed the contract. It named the deploy without dedupe and the webhooks the provider sent again, and proposed a rollback, then reversals of the extra postings. Nothing was applied. The rule found all three elements of the recorded cause, and `make replay-run` reproduced every step offline.
+
+**The ideas to be able to explain** (each has its own section above):
+- MCP is JSON-RPC 2.0: a handshake, then `tools/list` and `tools/call`. A protocol error means the client is wrong; a tool error (`isError`) is a result the model can read and correct (item 1).
+- Read-only by construction: no tool takes a URL, a host or a command. And several independent guards, each with its own test and mutant, not one promise (items 1 and 3).
+- Everything from the system is untrusted: tool output, error messages, the labels an alert is built from. Clean it, cap it, and give it to the model inside JSON under a fixed note (items 1, 3 and 4).
+- A model-call adapter, and a guard checked as it runs, not only set: Claude Code's first event says what it loaded (item 2).
+- Record before use, and replay by the prompt's hash: a live run becomes a free, exact regression test (items 2 and 3).
+- The loop's five parts (goal, state, actions, observations, stopping rules), its budgets, and bounded retries (item 3).
+- A validated contract: the schema the model is shown is the one enforced, evidence must cite calls that ran, and confidence is a number to calibrate (item 3).
+- Alert on symptoms, never causes. A metric rule fires only after two evaluations in a row (Prometheus's `for`). The money check is a reconciliation alert (item 4).
+- Grade by a rule written and committed before the runs, and keep its known limits as tests (item 4).
+- A diagnosis is not a fix: fault 1's damage doubled while the loop investigated (item 4).
+
+**For the courses.** CSYE 7374 asks for a plain-Python loop with a goal, state, actions, observations and stopping rules; a loop contract; model-call adapters, tool wrappers, validation, retry limits and budget checks; and a structured trace recorder. Week 3 built each one. For INFO 7375: an MCP server written by hand (lesson 8), Claude as the only model, and every live response recorded with its date and model.
+
+**What ran.** Recorded responses from `claude-opus-5-5` through Claude Code on your seat, labeled as such; synthetic traffic and data. STATUS has each full command.
+
+| What ran | Command | Commit, date | Result |
+|---|---|---|---|
+| The live check | `make claude-check` | `210e552`, 2026-10-17 | "ok" in 6.2 s |
+| The tools on the stack (your item 1 review) | `make tools`, `make tool NAME=...` | `0c6f510`, 2026-10-17 | 8 tools; the deploys with no password; the money check passed |
+| The loop on a false alert, written by hand, on an idle stack | `make investigate ... STEPS=6 TOOL_CALLS=4` | `0e75357`, 2026-10-18 | 6 steps, 4 tool calls, 42.8 s; wrong ("stalled", confidence 0.3); it never checked the lag |
+| Traffic and no fault | `make alerts-under-traffic MINUTES=5` | `853feda`, 2026-10-19 UTC | no alert at any of 19 evaluations |
+| Fault 1, a deploy without dedupe | `make investigate-fault FAULT=duplicate-delivery STEPS=10 TOOL_CALLS=8` | `853feda`, 2026-10-19 UTC | `MoneyCheckFailed`; 7 steps, 5 tool calls, 55.8 s; names the cause; the fix fits |
+| Fault 2, a poison message | the same, `FAULT=poison-message` | `853feda`, 2026-10-19 UTC | `ConsumerLagHigh` (271 behind); 8 steps, 7 tool calls, 45.6 s; names the cause; the fix fits |
+| Fault 3, a provider outage | the same, `FAULT=provider-outage` | `853feda`, 2026-10-19 UTC | errors and latency (74% 5xx, p95 10 s); 9 steps, 7 tool calls, 62.5 s; names the cause; the fix (kind `other`) does not fit the rule's list |
+
+"Names the cause" and "fits" are the grading rule's verdicts (rubric version 1, committed in `95a64ab` before these runs), not a person's. The three fault runs used 24 calls: $1.43 at API prices, by Claude Code's own estimate (the seat is not billed per call). Each one replays offline, exactly, as a test in `make test`. Offline tests went from 485 passed at the end of week 2 (`58c7a5e`) to 1,302 passed, 1 skipped and 7 xfailed (`cdde1b6`; the same at `b47d55b`, run again for this review). On each item's final code, every mutant of the files it changed was caught.
+
+**What it does not show.**
+- That Klaxon is right in general. One run per fault, one seed, one model, and one false alarm written by hand. Week 5's evaluation will run many, with false alarms.
+- That the verdicts are right. The rule reads words, not meaning, and its known limits are tests. Claude's reading and the independent review's agreed that each diagnosis named its cause.
+- That Klaxon can fix anything. Each fix stayed a proposal; the rollbacks in the runs were the harness clearing the fault, not Klaxon. And a right diagnosis can carry a wrong side claim: the poison run's blast radius said the money check would report the poison as unposted, but a `payment.updated` event moves no money, so the check never expects it in the ledger.
+- That it resists an instruction planted in a log. The framing is built and tested offline, with scripted replies; no live run met one (week 9).
+- That the deploy faults are hard. `recent_deploys` shows the bad setting by name.
+
+**What comes next: week 4.** Klaxon will start to act, behind your approval: an approval gate (no write action without your explicit yes), a rollback for every action, and verification after a fix (the stack healthy again, and the money right). Faults 4 to 6: a bad deploy with a 100x money-unit bug, an HMAC secret rotation mismatch, and a database connection pool that runs out. A drafted postmortem. And, next to the circuit breaker (fault 3's fix), the two stuck-refund fixes you chose on 2026-10-14: our API will count a refund whose outcome is unknown, and the money check will check, per payment, that the provider never refunded more than it charged. Week 3 also leaves week 4 a question: fault 1's damage doubled while the loop investigated, so how soon should Klaxon act?
