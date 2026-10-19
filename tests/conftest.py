@@ -4,6 +4,15 @@ from klaxon.patient.ledger import Ledger, WebhookEndpoint
 from klaxon.patient.provider import FakeProvider
 
 SECRET = b"test-secret-not-real"
+NO_CLAUDE = "/nonexistent/klaxon-offline-tests-never-call-claude"
+
+
+@pytest.fixture(autouse=True)
+def no_real_claude_code(monkeypatch):
+    """No test can find the real Claude Code, whatever a mutant breaks: a live call needs Aravind's OK each time.
+    KLAXON_CLAUDE_BIN wins over the PATH and the desktop app's copies, and a path that is not a file is refused,
+    never passed over. A test that needs a `claude` points it at its own fake."""
+    monkeypatch.setenv("KLAXON_CLAUDE_BIN", NO_CLAUDE)
 
 
 @pytest.fixture

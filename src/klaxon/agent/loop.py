@@ -721,14 +721,34 @@ def _show_prompt(alert: Alert, budgets: Budgets) -> int:
     return 0
 
 
-def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, argv: Sequence[str]) -> int:
-    from klaxon.agent.claude_code import REQUESTED, ClaudeCode, _provenance, find_claude
+def find_live_model(model_id: str) -> Path:
+    """Claude Code's executable, once the model id is a full one: checked before a live run touches anything.
+    Raises ValueError or ModelError."""
+    from klaxon.agent.claude_code import REQUESTED, find_claude
+
+    if not REQUESTED.fullmatch(model_id):
+        raise ValueError(f"--model must be a full model id such as {DEFAULT_MODEL}")
+    return find_claude()
+
+
+def investigate_live(
+    alert: Alert, budgets: Budgets, folder: Path, header: Mapping, model_id: str, binary: Path
+) -> RunResult:
+    """One live run into folder: Claude on Aravind's seat, Klaxon's tools through its MCP server. Every reply and
+    every tool result is recorded before the loop uses it, with header at the top of each file."""
+    from klaxon.agent.claude_code import ClaudeCode
     from klaxon.agent.model import Recording
 
+    model = ClaudeCode(Recording(folder / RECORDING, dict(header)), model=model_id, binary=binary)
+    tools = RecordedTools(McpClient(), folder / TOOL_RESULTS, header)
+    return investigate(alert, model, tools, folder / TRACE, budgets, extra={"run": dict(header)})
+
+
+def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, argv: Sequence[str]) -> int:
+    from klaxon.agent.claude_code import _provenance
+
     try:  # before any folder is made: a run that cannot start leaves nothing behind
-        if not REQUESTED.fullmatch(model_id):
-            raise ValueError(f"--model must be a full model id such as {DEFAULT_MODEL}")
-        binary = find_claude()
+        binary = find_live_model(model_id)
     except (ModelError, ValueError) as exc:
         print(exc, file=sys.stderr)
         return 2
@@ -741,10 +761,8 @@ def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, arg
         "budgets": asdict(budgets),
         **_provenance(),
     }
-    model = ClaudeCode(Recording(folder / RECORDING, header), model=model_id, binary=binary)
-    tools = RecordedTools(McpClient(), folder / TOOL_RESULTS, header)
     try:
-        result = investigate(alert, model, tools, folder / TRACE, budgets, extra={"run": header})
+        result = investigate_live(alert, budgets, folder, header, model_id, binary)
     except KeyboardInterrupt:
         print(f"Interrupted; the trace says so: {clean_text(str(folder / TRACE))}", file=sys.stderr)
         return 130
