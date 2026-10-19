@@ -1440,7 +1440,10 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
         args += ["-m", "integration"]
     # No .pyc written: two mutants of one file, of the same size, written within a second, could share a stale one.
     env = {"PYTHONPATH": str(work / "src"), "PATH": "/usr/bin:/bin", "HOME": str(Path.home()), "PYTHONDONTWRITEBYTECODE": "1"}
-    return subprocess.run(args, cwd=work, env=env, capture_output=True, text=True, timeout=600)
+    try:
+        return subprocess.run(args, cwd=work, env=env, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:  # a suite that hangs under a mutant did not pass: the mutant is caught
+        return subprocess.CompletedProcess(args, 1, "FAILED (the tests did not end within 600 s)", "")
 
 
 def main() -> int:

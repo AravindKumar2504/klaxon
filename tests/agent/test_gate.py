@@ -467,14 +467,27 @@ def test_make_approve_in_a_terminal_approves_by_the_typed_id(tmp_path):
     shown = _read_until(fd, f"Type {request['id']}".encode())
     os.write(fd, f"{request['id']}\n".encode())
     shown += _read_until(fd, b"")
-    _, status = os.waitpid(pid, 0)
-    assert os.waitstatus_to_exitcode(status) == 0, shown
+    assert _exit_code(pid) == 0, shown
     assert decision(tmp_path)["decision"] == "approved" and decision(tmp_path)["how"] == gate.TYPED
     assert "Approved." in shown
 
 
+def _exit_code(pid, seconds=30.0):
+    """The child's exit code; None when it had not ended in time, and was killed: a test never hangs on it."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        done, status = os.waitpid(pid, os.WNOHANG)
+        if done:
+            return os.waitstatus_to_exitcode(status)
+        time.sleep(0.05)
+    os.kill(pid, 9)
+    os.waitpid(pid, 0)
+    return None
+
+
 def _read_until(fd, marker, seconds=30.0):
-    """What the pseudo-terminal shows, until marker (or its end, for b"")."""
+    """What the pseudo-terminal shows, until marker, or any of several (or its end, for b"")."""
+    markers = marker if isinstance(marker, tuple) else (marker,)
     out, deadline = b"", time.monotonic() + seconds
     while time.monotonic() < deadline:
         ready, _, _ = select.select([fd], [], [], 0.2)
@@ -487,7 +500,7 @@ def _read_until(fd, marker, seconds=30.0):
         if not chunk:
             break
         out += chunk
-        if marker and marker in out:
+        if any(m and m in out for m in markers):
             break
     return out.decode(errors="replace")
 
@@ -511,9 +524,8 @@ def test_a_terminal_is_not_enough_the_commands_own_input_must_be_one_too(tmp_pat
         devnull = os.open(os.devnull, os.O_RDONLY)
         os.dup2(devnull, 0)
         os.execv(sys.executable, [sys.executable, "-m", "klaxon.agent.gate", "approve", str(tmp_path)])
-    shown = _read_until(fd, b"")
-    _, status = os.waitpid(pid, 0)
-    assert os.waitstatus_to_exitcode(status) == 2 and "Refused" in shown
+    shown = _read_until(fd, (b"Refused", b"Type r-"))  # either it refuses, or it asks: then it is ended at once
+    assert _exit_code(pid, 10 if "Refused" in shown else 0.1) == 2 and "Refused" in shown
     assert not (tmp_path / gate.DECISION).exists()
 
 
