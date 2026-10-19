@@ -528,3 +528,42 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 - *Why six runs, on Opus.* One gated run per fault keeps each fault's evidence complete, and the same model keeps it comparable with week 3. Week 5 compares models.
 
 **One idea to own before item 2: the cause removed is not the money right.** In week 2's run of fault 1, the rollback stopped new double postings, but the old ones stayed (8 events, $400.23): they stay until someone reverses them. Verification will say both: the cause is gone (no new damage), and what damage remains.
+
+## Week 4, item 1 (built 2026-10-19): the approval gate, and the first write action
+
+**What it is.** Until now Klaxon only proposed fixes. Item 1 builds the way a fix can be applied, and the gate that stands in it: a catalog of write actions with one entry (`rollback_deploy`), a log of deploys that tells a rollback where to go back to, and an approval request that only a person at a terminal can answer. It is all offline: no stack command and no model call ran in this item. Item 2 wires it into the fault runs.
+
+**The path of one action, in one breath.** The diagnosis names an action (`fix_action`: roll back `ledger-consumer`). Code plans it from the stack as it is: it reads the deploy log and the running container, and works out the exact change. The run saves the request and waits. You run `make approve RUN=<folder>` and type the request's id. The run checks again that nothing changed, rolls back, and logs the deploy under your request's id. The model never runs anything: it only named the action.
+
+**Why a deploy log, and why it names containers.** A rollback goes back to the settings before the latest deploy, as `kubectl rollout undo` goes back one revision. Docker keeps no such history, so every deploy (the faults' too) writes one line: the container it made and the one it replaced, with their settings. A rollback refuses unless the running container is the one the latest line made. So an old log, after `make reset`, can never steer it. Only behavior settings are kept: a container's environment holds passwords.
+
+**Plan, then check again.** A request can wait ten minutes. Meanwhile someone may redeploy the service, or clear the fault. So the action checks everything again right before it acts. This is the classic "time of check to time of use" gap. If anything changed, nothing runs.
+
+**Why your typed id, and why a terminal.** A "y" can be typed by habit; the id shows you read which request you approve. `make approve` refuses unless its own input is a terminal, and it reads your answer from `/dev/tty`, the process's terminal. So `echo r-1234 | make approve` is refused, and so is a process with no terminal at all. Claude's shell is one: checked from this session, its input is not a terminal and `/dev/tty` cannot be opened. A run of `make approve` from it was refused, and the gate logged the attempt.
+
+**The seal, and the decision written once.** A request carries the SHA-256 of its own content, and the decision must name it. If anyone edits the request after it was saved, even sealing it again, the run's own copy no longer matches, and the approval does not count. The decision file can be written once: of two writers (you, and the run's ten-minute expiry), exactly one wins, and nobody can read half a file.
+
+**The limit, said plainly.** A process can make itself a terminal (the tests do, with a pseudo-terminal) or write the decision file directly. The code cannot tell that from you. That Claude never approves is a rule; the gate's log shows every decision.
+
+**One rollback Klaxon will not make.** After a fault is cleared, the latest deploy is the clearing, and what it replaced is the fault's bad setting: "undo the latest deploy" would put the fault back. So a rollback never deploys a known-bad value (the faults' and the demos' bad baselines). In this system that also means undoing any of Klaxon's rollbacks is your call, by hand; the plan's undo line says so.
+
+**One deploy at a time.** A lock spans a deploy's last look at the stack, the deploy itself, and its line in the log. A rollback's expectations (the same container, the same settings, the same latest deploy) are checked under that lock, right before `compose up`. Two of Klaxon's deploys can never interleave, as long as they share a deploy log; all real use shares one. A change made by hand, outside this code, in that same moment is not stopped.
+
+**Week 3 still replays.** With no action offered, the reply schema and the system prompt are byte for byte those of week 3. A test pins them to the three fault runs' recorded prompts, and fails, not skips, if they ever differ.
+
+**What trying it found.** Three things the tests had not:
+- *A clock can stop.* The demo, left waiting while the Mac slept, waited on a ten-minute request from 10:03 to 18:46 UTC: on macOS the monotonic clock does not count sleep. No late approval could have counted (one dated after the expiry is a denial), but the run sat blocked. The waiter now also stops at the request's own time, by the wall clock.
+- *Output can wait in a buffer.* Printed into a pipe, the request's id stayed unseen until the demo ended. Whoever watches a run (you, or Claude reading its output) must see the id while it waits, so the notice now flushes at once.
+- *A terminal cannot seek.* Opening `/dev/tty` for reading and writing as text fails. The scripted tests could not see it; the test in a pseudo-terminal did, before you ever ran `make approve`. Lesson: test the real path at least once, not only its stand-in.
+
+**What the review taught.** It found no way to act without an approval on file, beyond the limits the gate states, and twelve smaller problems. Three lessons:
+- *Log what you act on, not only what you are told.* `make approve` logged its decisions, but the run never logged the one it took. So a decision file written by some other process left no trace. Now the run logs the decision it takes, with the file's own hash.
+- *"Undo the latest deploy" is not always safe.* After a fault's clearing, it would put the fault back. A rule about values (never deploy a known-bad one) holds where a rule about order cannot.
+- *A test that hangs is not a test.* Under one mutant, `make approve` waited for an answer and the test waited for it, until the mutation run crashed. Every wait in a test needs a deadline.
+
+**Likely questions.**
+- *Why not give the model the rollback as a tool?* Then the model's reply would be the action. Here the model only names it; code plans it from the stack, you approve the plan, and code runs exactly that plan.
+- *Can Claude approve its own action?* Not through the paths a person uses: its shell has no terminal, and `make approve` refused it. But any process running as you can do what you can: write the decision file, make a terminal, type into yours. The rule that Claude never approves is the guard, and the log would show a decision with no line from `make approve`.
+- *What if Klaxon names the wrong service?* The request shows the exact change before you answer. The plan can only undo that service's latest logged deploy, from the container that deploy made, and never to a known-bad setting.
+- *Why ten minutes?* Long enough to read the request and check the evidence, short enough that a run never waits on a stack that has moved on. And the plan is checked again before it runs.
+- *Why not Kubernetes' own rollback?* The stack runs in Docker Compose until week 6, where `kubectl rollout undo` can replace this deploy log.

@@ -6,7 +6,7 @@ plan() only reads. For rollback_deploy, it reads the service's latest deploy fro
     the deploy log has a deploy of the service, and knows the settings that deploy replaced;
     the running container is the one that deploy made (not one recreated outside the log since);
     it still runs the settings that deploy gave it;
-    going back changes something, and deploys no known-bad setting (deploys.KNOWN_BAD).
+    going back changes something, and sets no known-bad value (deploys.KNOWN_BAD) it does not already run.
 
 The last one matters after a fault was cleared: the latest deploy then replaced the fault's bad setting, and
 "going back" would deploy it again. Klaxon never does; a person can, by hand.
@@ -87,7 +87,8 @@ def _plan_rollback(arguments: dict, deployer: Deployer) -> Plan:
     target = latest.replaced_settings
     if target == now.settings:
         raise ActionRefused(f"{service}'s latest deploy changed none of its settings: there is nothing to roll back")
-    bad = known_bad(target)
+    changes = {name: value for name, value in target.items() if now.settings[name] != value}
+    bad = known_bad(changes)  # a value it would set; one already running and left as it is is not new damage
     if bad:
         raise ActionRefused(
             f"rolling {service} back would deploy a known-bad setting ({', '.join(bad)}): Klaxon never deploys one;"
@@ -97,10 +98,10 @@ def _plan_rollback(arguments: dict, deployer: Deployer) -> Plan:
         f"{name} {now.settings[name]} -> {value}" if now.settings[name] != value else f"{name} {value} (unchanged)"
         for name, value in target.items()
     )
-    back = ", ".join(f"{name}={now.settings[name]}" for name, value in target.items() if now.settings[name] != value)
-    undo = f"rollback_deploy {service} again: it would go back to {back}"
-    if known_bad(now.settings):  # undoing it would deploy what it removes: a person's call, never Klaxon's
-        undo = f"going back to {back} would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+    back = {name: now.settings[name] for name in changes}
+    undo = f"rollback_deploy {service} again: it would go back to {_listed(back)}"
+    if known_bad(back):  # undoing it would set again a bad value it removes: a person's call, never Klaxon's
+        undo = f"going back to {_listed(back)} would deploy a known-bad setting: Klaxon will not; a person can, by hand"
     return Plan(
         action="rollback_deploy",
         arguments={"service": service},
@@ -114,12 +115,21 @@ def _plan_rollback(arguments: dict, deployer: Deployer) -> Plan:
     )
 
 
+def _listed(settings: dict[str, str]) -> str:
+    return ", ".join(f"{name}={value}" for name, value in settings.items())
+
+
 PLANNERS = {"rollback_deploy": _plan_rollback}  # one per catalog action (a test checks)
 
 
 def run(approved: Plan, deployer: Deployer, by: str) -> Deploy:
     """Run a plan a person approved, only if what it was made on still holds, as the deploy checks under its lock.
     by: who approved it, for the log."""
+    try:  # what can fail before anything changes, said as such: "not run", never "failed"
+        deployer.check_local()
+        deployer.log.latest(approved.service)
+    except (DeployError, StackError) as exc:
+        raise ActionRefused(f"nothing was done: {clean_text(str(exc), 300)}") from None
     expect = Expect(approved.container, dict(approved.from_settings), approved.undoes["seq"])
     try:
         record = deployer.deploy(approved.service, approved.to_settings, by=by, expect=expect)

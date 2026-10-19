@@ -9,6 +9,7 @@ notice at once.
 """
 
 import getpass
+import hashlib
 import json
 import os
 import select
@@ -313,7 +314,7 @@ def test_no_decision_within_ten_minutes_means_denied_and_the_gate_writes_so(tmp_
 def test_a_decision_that_lands_as_the_wait_ends_is_the_one_that_counts(tmp_path, monkeypatch):
     request = saved_request(tmp_path)
     clocks = Clocks()
-    real = gate.read_decision
+    real = gate._decision_bytes
     calls = []
 
     def lands_just_now(folder):
@@ -324,7 +325,7 @@ def test_a_decision_that_lands_as_the_wait_ends_is_the_one_that_counts(tmp_path,
             return None
         return real(folder)
 
-    monkeypatch.setattr(gate, "read_decision", lands_just_now)
+    monkeypatch.setattr(gate, "_decision_bytes", lands_just_now)
     found = gate.wait(tmp_path, request, gate.WAIT_SECONDS, clocks.monotonic, clocks.sleep, clocks.time)
     assert found.decision == "approved" and decision(tmp_path)["decision"] == "approved"
 
@@ -588,6 +589,8 @@ def test_a_mac_that_sleeps_through_a_request_finds_it_expired_when_it_wakes(tmp_
     clocks = Clocks()
 
     def the_mac_sleeps(seconds):
+        if clocks.slept:  # a second sleep: the waiter did not see the wall clock pass the expiry (never hang)
+            raise AssertionError("the waiter slept again after the request expired by the wall clock")
         clocks.slept.append(seconds)
         clocks.wall += 8 * 3600  # eight hours pass on the wall; the monotonic clock does not move
 
@@ -620,6 +623,7 @@ def test_the_run_logs_the_decision_it_takes_so_one_not_written_by_make_approve_s
     taken = lines[1]
     assert taken["decision"] == "approved" and len(taken["decision_sha256"]) == 64
     assert "approved" not in [line["event"] for line in lines]  # no line from make approve: not written by it
+    assert taken["decision_sha256"] == hashlib.sha256((tmp_path / gate.DECISION).read_bytes()).hexdigest()
 
 
 def test_a_refused_make_approve_writes_no_log_outside_a_run_folder(tmp_path):
@@ -652,3 +656,23 @@ def test_anything_that_breaks_while_the_action_runs_is_logged_then_raised(tmp_pa
 def test_the_request_shown_says_it_was_planned_when_the_run_asked(tmp_path):
     request = saved_request(tmp_path)
     assert "The action, planned by code from the stack as it was when the run asked:" in gate.render(request, NOW)
+
+
+def test_make_approve_logs_the_hash_of_the_bytes_it_wrote_and_the_run_logs_the_same_when_it_takes_them(tmp_path):
+    docker, deployer = after_a_bad_deploy()
+    act(tmp_path, docker, deployer)
+    lines = [json.loads(line) for line in (tmp_path / gate.LOG).read_text().splitlines()]
+    approved, taken = (
+        next(line for line in lines if line["event"] == event) for event in ("approved", "decision taken")
+    )
+    on_file = hashlib.sha256((tmp_path / gate.DECISION).read_bytes()).hexdigest()
+    assert approved["decision_sha256"] == taken["decision_sha256"] == on_file
+
+
+def test_a_request_sealed_again_without_its_confidence_is_refused_cleanly(tmp_path, capsys):
+    request = saved_request(tmp_path)
+    del request["diagnosis"]["confidence"]
+    request["sha256"] = gate.request_sha256(request)
+    (tmp_path / gate.REQUEST).write_text(json.dumps(request))
+    assert gate.approve(tmp_path, lambda: ScriptedTerminal(request["id"]), Clocks().time) == 2
+    assert "not in the shape a run writes" in capsys.readouterr().err

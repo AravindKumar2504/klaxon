@@ -16,13 +16,15 @@ For a run whose diagnosis names an action (fix_action, klaxon.agent.contract):
 
 The decision file can be written once. Every step goes to the folder's log (gate.jsonl): the request; each
 decision `make approve` writes; the decision the run takes, with the decision file's own SHA-256; what ran and
-what came of it. With times, and never the Mac's user name. A decision the run took with no line from
-`make approve` before it was not written by `make approve`.
+what came of it. With times, and never the Mac's user name. `make approve` logs the SHA-256 of the decision it
+wrote, and the run the SHA-256 of the one it took: a decision the run took that no line of `make approve` names
+was not written by `make approve`, unless the log too was written by hand, or `make approve` was stopped between
+writing the decision and its line.
 
 Its limit, said plainly: any process running as Aravind can approve. It can write the decision file, run
 `make approve` in a pseudo-terminal it makes (the tests do), type into his terminal (tools that drive a terminal
-can, Claude's among them), or change this code. That Claude never approves is a rule; the log shows every decision
-the run took, and which ones `make approve` wrote.
+can, Claude's among them), change this code, or write the log. That Claude never approves is a rule; the log is a
+record for after the fact, not a lock.
 
 Run: python -m klaxon.agent.gate approve FOLDER     (make approve RUN=FOLDER)
 """
@@ -108,16 +110,17 @@ def request_sha256(request: Mapping) -> str:
 # Files: a request and a decision are each written once, whole; the log only grows.
 
 
-def _create_once(path: Path, value: Mapping) -> bool:
-    """Write path whole, only if it does not exist yet. True when this call made it. A reader never sees half a
-    file, and of two writers exactly one wins (a hard link fails if the name is taken)."""
+def _create_once(path: Path, value: Mapping) -> bytes | None:
+    """Write path whole, only if it does not exist yet: the bytes written when this call made it, else None. A
+    reader never sees half a file, and of two writers exactly one wins (a hard link fails if the name is taken)."""
+    data = (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode()
     temp = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
-    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temp.write_bytes(data)
     try:
         os.link(temp, path)
-        return True
+        return data
     except FileExistsError:
-        return False
+        return None
     finally:
         temp.unlink(missing_ok=True)
 
@@ -157,6 +160,8 @@ def _shaped(request: Mapping) -> bool:
     plan, found, action = request.get("plan"), request.get("diagnosis"), request.get("action")
     if not (isinstance(plan, dict) and isinstance(found, dict) and isinstance(action, dict)):
         return False
+    if "confidence" not in found:
+        return False
     texts = (plan.get("change"), plan.get("undo"), action.get("name"), found.get("hypothesis"))
     texts += (found.get("blast_radius"), found.get("rollback_plan"))
     if not all(isinstance(text, str) for text in texts) or not isinstance(action.get("arguments"), dict):
@@ -175,11 +180,23 @@ def _shaped(request: Mapping) -> bool:
 
 def read_decision(folder: Path) -> dict | None:
     """The folder's decision as written, or None when there is none yet. GateError when it cannot be read."""
+    raw = _decision_bytes(folder)
+    return None if raw is None else _parse_decision(raw)
+
+
+def _decision_bytes(folder: Path) -> bytes | None:
     try:
-        value = json.loads((Path(folder) / DECISION).read_text(encoding="utf-8"))
+        return (Path(folder) / DECISION).read_bytes()
     except FileNotFoundError:
         return None
-    except (OSError, ValueError):
+    except OSError:
+        raise GateError("the decision file cannot be read") from None
+
+
+def _parse_decision(raw: bytes) -> dict:
+    try:
+        value = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
         raise GateError("the decision file cannot be read") from None
     if not isinstance(value, dict) or set(value) != DECISION_KEYS:
         raise GateError("the decision file is not a decision")
@@ -276,7 +293,7 @@ def wait(
         "at": utc(now()),
         "how": f"no decision within {timeout:g} s",
     }
-    if not _create_once(folder / DECISION, expired):  # a decision landed at the last moment: that one counts
+    if _create_once(folder / DECISION, expired) is None:  # a decision landed at the last moment: that one counts
         return _take(folder, request, now) or judge(None, request)
     log(folder, "expired", now, request=request["id"], how=expired["how"])
     return Decision("expired", expired["how"], expired["at"])
@@ -286,17 +303,18 @@ def _take(folder: Path, request: Mapping, now: Callable[[], float]) -> Decision 
     """The decision on file, as the run takes it; None while there is none. Logged either way, with the file's own
     SHA-256. One the run cannot take as written (it cannot be read, names another request, or came late) counts as
     a denial."""
+    try:  # read once: what is judged and what is hashed are the same bytes
+        raw = _decision_bytes(folder)
+    except GateError:
+        raw = b""
+    if raw is None:
+        return None
+    sha = hashlib.sha256(raw).hexdigest() if raw else None
     try:
-        found = read_decision(folder)
+        found = _parse_decision(raw)
     except GateError:
         found = {}
-    if found is None:
-        return None
     decision = judge(found or None, request)
-    try:
-        sha = hashlib.sha256((Path(folder) / DECISION).read_bytes()).hexdigest()
-    except OSError:
-        sha = None
     if decision.decision != found.get("decision"):
         log(folder, "decision not taken", now, request=request["id"], how=decision.how, decision_sha256=sha)
     else:
@@ -352,7 +370,7 @@ def act(
         log(folder, "refused", now, action=named.name, arguments=named.arguments, why=str(exc))
         return Outcome("refused", str(exc))
     request = make_request(planned, diagnosis, folder, alert, now, timeout)
-    if not _create_once(folder / REQUEST, request):
+    if _create_once(folder / REQUEST, request) is None:
         raise GateError("this folder already holds an approval request: one request per run")
     log(
         folder,
@@ -509,10 +527,12 @@ def approve(
         "at": utc(now()),
         "how": TYPED if approved else f"not the request's id, {TYPED}",
     }
-    if not _create_once(folder / DECISION, decision):
+    written = _create_once(folder / DECISION, decision)
+    if written is None:
         terminal.write("It was decided meanwhile (it may have expired): nothing was written.\n")
         return 1
-    log(folder, decision["decision"], now, request=request["id"], how=decision["how"])
+    sha = hashlib.sha256(written).hexdigest()  # the bytes written: the run logs the same hash when it takes them
+    log(folder, decision["decision"], now, request=request["id"], how=decision["how"], decision_sha256=sha)
     if approved:
         terminal.write("Approved. The run acts now, if the stack still is as it was planned on.\n")
     else:

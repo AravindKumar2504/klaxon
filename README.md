@@ -1,6 +1,6 @@
 # Klaxon
 
-**Status: early. The payments system Klaxon will protect runs for real in Docker Compose, and the money check (five invariants) runs against it. Klaxon's read-only tools exist, served by its own MCP server, with the model adapters, the trace recorder, a first agent loop that investigates an alert and ends in a diagnosis, and alert rules on symptoms (week 3). The loop acts on nothing: it only proposes a fix. Its offline tests pass. It has run live four times: once on a false alert written by hand, where its diagnosis was wrong, then once on each of the first three faults, where each diagnosis named the fault's recorded cause, by a keyword rule (below). One run per fault is not an evaluation.**
+**Status: early. The payments system Klaxon will protect runs for real in Docker Compose, and the money check (five invariants) runs against it. Klaxon's read-only tools exist, served by its own MCP server, with the model adapters, the trace recorder, a first agent loop that investigates an alert and ends in a diagnosis, and alert rules on symptoms (week 3). The loop acts on nothing: it only proposes a fix. Its offline tests pass. It has run live four times: once on a false alert written by hand, where its diagnosis was wrong, then once on each of the first three faults, where each diagnosis named the fault's recorded cause, by a keyword rule (below). One run per fault is not an evaluation. Week 4 has begun: an approval gate and a first write action (rolling back a deploy, only after a person types the request's id in a terminal) exist and pass their offline tests; no live run has used them yet.**
 
 Klaxon will be an AI on-call engineer for a payments system. When an alert fires, it will investigate metrics, logs and traces, propose a fix with evidence, wait for a human to approve it, apply it, and then verify that the system is healthy again and that the money is right: the ledger balances, and no payment was lost or counted twice.
 
@@ -33,7 +33,7 @@ client -> payments API -> fake provider (charges; keeps its own books)
 - `src/klaxon/patient/services/telemetry.py`: OpenTelemetry in the payments API, the webhook receiver and both consumers (not the fake provider, which stands for an outside company). A webhook's trip through Kafka is one trace, and every log line carries its trace id. Klaxon's tools read this telemetry (week 3), so it is treated as untrusted input: a caller's trace headers are ignored, the raw path and other caller-chosen text never reach a span, and every attribute is capped at 300 characters.
 - `compose.yaml`, `docker/grafana/`: one `grafana/otel-lgtm` container (collector, Prometheus, Tempo, Loki, Grafana) and a "Klaxon patient" dashboard: webhook results, consumer lag and outcomes, retries and dead letters, the API and the provider, payments pending.
 
-### Klaxon's tools over MCP, its model adapters, its trace recorder, its first loop, its alerts (week 3)
+### Klaxon's tools over MCP, its model adapters, its trace recorder, its first loop, its alerts (week 3), its approval gate (week 4)
 
 - `src/klaxon/agent/tools.py`: eight read-only tools, the ones an on-call engineer would reach for: list and query metrics (Prometheus), search logs (Loki), search traces and read one (Tempo), service health and recent deploys (docker), and the money check. They take queries, ids and numbers, never a URL or a command, and every source must be this Mac. Everything they return is treated as untrusted: hidden characters dropped, every string and list capped, and a container's environment never passed on except three behavior settings.
 - `src/klaxon/agent/mcp_server.py`: an MCP server written from scratch (JSON-RPC 2.0 over stdio, revision 2025-11-25), so any MCP client can use the tools. The tests drive it with the official SDK's clients.
@@ -44,6 +44,9 @@ client -> payments API -> fake provider (charges; keeps its own books)
 - `src/klaxon/agent/mcp_client.py`: an MCP client written from scratch, with a deadline on every message. It also records every tool result, so that a live run can be replayed offline, exactly, as a regression test.
 - `src/klaxon/alerts.py`: alert rules on symptoms only, never causes: the money check failed; payments failing (over 20% of answers 5xx); payments slow (p95 over 2 s); a consumer group more than 50 messages behind. A metric rule fires once its condition has held at two evaluations in a row. Alert text is built from numbers and known names only, never from text a source sends.
 - `src/klaxon/fault_runs.py`: the harness for a whole incident, live: traffic, a quiet stack required, a fault injected on purpose, the rules until one fires, the loop on exactly that alert, then the fault always cleared and the traffic always stopped, everything saved in one folder.
+- `src/klaxon/patient/deploys.py` (week 4): a log of every deploy of the stack, the faults' included: the container each one made and the one it replaced, with their behavior settings (never a container's whole environment). A rollback goes back to what the latest deploy replaced, and refuses unless the running container is the one that deploy made. The log is local state, in `~/.klaxon/deploys.jsonl`.
+- `src/klaxon/agent/catalog.py`, `actions.py` (week 4): the write actions a diagnosis may name, and how each is planned and run. One so far: `rollback_deploy`. Planning only reads; running checks again first that nothing changed since the plan. Money repairs stay proposals for a person.
+- `src/klaxon/agent/gate.py` (week 4): the approval gate. A run saves a sealed approval request and waits; `make approve` shows it in a terminal, and only the request's id, typed there, approves it. A process with no terminal, or piped input, is refused; anything else typed denies; no decision in 10 minutes means denied. Every step is logged. Its limit, stated in the code: it cannot tell a person from a process that makes itself a terminal or writes the decision file itself.
 - `src/klaxon/grading.py`: the rule that compares a diagnosis with the cause the fault records (keyword patterns for three required elements per fault), committed before the first live runs and labeled as a rule wherever its verdict appears. It reads words, not meaning; its known limits are tests.
 
 ### The first piece: the money check, in process
@@ -79,7 +82,7 @@ make check
 | `make up` / `make down` / `make reset` | start the stack and wait until healthy / stop it / stop it and delete its data (after pulling a change to `docker/postgres/`, such as week 2's refund grants, `make reset` once: the database's roles and grants are made only on a new volume, and the payment confirmer refuses to start without them) |
 | `make test-integration` | tests against the running stack's PostgreSQL and Kafka |
 | `make e2e` | resets the stack and drives it end to end (about five minutes) |
-| `make mutants` | breaks the code on purpose 493 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
+| `make mutants` | breaks the code on purpose 549 ways (the list in `scripts/mutation_check.py`), on a copy, and checks a test notices each one |
 | `make check` | the money check against the running stack (exit 0 pass, 1 fail, 2 could not run) |
 | `make tools` | list Klaxon's read-only tools, the ones its MCP server serves |
 | `make tool NAME=recent_deploys ARGS='{}'` | call one tool against the running stack and print what it returns |
@@ -92,6 +95,8 @@ make check
 | `make alerts-under-traffic` | traffic with no fault, the rules evaluated again and again: they must stay quiet (`MINUTES=5`, `RATE=3`); writes evidence to `evidence/week3/` |
 | `make investigate-fault FAULT=...` | one live run on a fault: traffic, the fault, the alert, the loop on Aravind's seat, the fault cleared (`STEPS=`, `TOOL_CALLS=`, `TIME_LIMIT=`); needs his OK each time, and a fresh stack (`make reset`, `make up`) |
 | `make grade-run RUN=...` | compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline |
+| `make approve RUN=...` | in your own terminal: show the action a run asks to take, and approve it by typing its request id (anything else denies it; refused without a terminal) |
+| `make gate-demo` | the approval gate, offline: a made-up stack and a diagnosis written by hand ask to roll back; answer with `make approve` in a second terminal |
 | `make traffic` | synthetic customers until Ctrl-C (`RATE=2` payments per second, `DURATION=` seconds, `SEED=7`) |
 | `make check-under-traffic` | the money check again and again while traffic flows (`CHECKS=20`, `RATE=5`); writes evidence to `evidence/week2/` |
 | `make faults` | the faults, their causes, their expected symptoms and their remedies |

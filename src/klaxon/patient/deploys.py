@@ -12,10 +12,11 @@ Only behavior settings are kept: the few variables named in SERVICES, each with 
 container's whole environment: it holds passwords. Some values are known to be bad (KNOWN_BAD: the faults' and the
 demos' baselines); Klaxon's rollback never deploys one.
 
-One deploy at a time: every deploy through a Deployer holds an exclusive lock (the log's .lock file) from its last
-look at the running container to its line in the log, so a rollback that expects a container finds it, or does
-nothing. A deploy made outside this code (docker compose by hand) takes no lock: the look right before acting is
-then the only check.
+One deploy at a time, per deploy log: every deploy through a Deployer holds an exclusive lock (the log's .lock
+file) from its last look at the running container to its line in the log, so a rollback that expects a container
+finds it, or does nothing. All real use shares one log (the default), so one lock. A Deployer given another log
+(the tests, `make e2e`) does not exclude the others; nor does a deploy made outside this code (docker compose by
+hand), for which the look right before acting is the only check.
 
 The log is local state, not evidence: ~/.klaxon/deploys.jsonl, or the file KLAXON_DEPLOY_LOG names. It is shared
 by every checkout of the repo, as the stack is. Each record names the container its deploy made, and a rollback

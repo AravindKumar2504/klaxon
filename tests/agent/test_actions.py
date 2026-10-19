@@ -207,12 +207,26 @@ def test_a_rollback_that_fails_in_docker_says_so_and_logs_no_deploy():
     assert len(DeployLog().records()) == 1
 
 
-def test_running_a_plan_checks_that_docker_points_at_this_mac():
+@pytest.mark.parametrize("breaks", ["docker", "log"])
+def test_what_fails_before_anything_changes_is_said_as_nothing_done(breaks):
+    """Docker no longer this Mac's, or the deploy log gone bad, while the request waited: nothing is deployed, and
+    the action says so ("not run" at the gate), never "failed"."""
     docker, deployer = after_a_bad_deploy()
     plan = actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
-    checks = docker.local_checks
-    actions.run(plan, deployer, by="Klaxon, approved request r-0a1b")
-    assert docker.local_checks == checks + 1
+    if breaks == "docker":
+
+        def elsewhere():
+            raise StackError("refusing: docker points at 'tcp://10.0.0.5:2376', not this machine")
+
+        docker.ensure_local = elsewhere
+        deployer = docker.deployer()
+    else:
+        with open(DeployLog().path, "a") as handle:
+            handle.write("{edited by hand\n")
+    ups = len(docker.ups())
+    with pytest.raises(ActionRefused, match="nothing was done"):
+        actions.run(plan, deployer, by="Klaxon, approved request r-0a1b")
+    assert len(docker.ups()) == ups
 
 
 def test_a_deploy_of_a_stopped_service_is_never_rolled_back_to_a_guess():
@@ -257,3 +271,17 @@ def test_planning_checks_that_docker_points_at_this_mac_before_reading_it():
     checks = docker.local_checks
     actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
     assert docker.local_checks == checks + 1
+
+
+def test_a_rollback_that_removes_one_bad_value_and_leaves_another_as_it_runs_is_allowed():
+    """The re-check's case: running naive and retry, the latest deploy changed only to retry. Rolling it back sets
+    no bad value: naive stays as it runs. Undoing it would set retry again: a person's call."""
+    docker = FakeDocker()
+    deployer = docker.deployer()
+    deployer.deploy(LEDGER, NAIVE, by="klaxon.faults")
+    deployer.deploy(LEDGER, NAIVE | {"LEDGER_BAD_EVENTS": "retry"}, by="klaxon.faults")
+    plan = actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
+    assert plan.change == (
+        "redeploy ledger-consumer: LEDGER_HANDLER naive (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter"
+    )
+    assert plan.undo.startswith("going back to LEDGER_BAD_EVENTS=retry would deploy a known-bad setting")
