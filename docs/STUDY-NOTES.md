@@ -516,3 +516,15 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 - That the deploy faults are hard. `recent_deploys` shows the bad setting by name.
 
 **What comes next: week 4.** Klaxon will start to act, behind your approval: an approval gate (no write action without your explicit yes), a rollback for every action, and verification after a fix (the stack healthy again, and the money right). Faults 4 to 6: a bad deploy with a 100x money-unit bug, an HMAC secret rotation mismatch, and a database connection pool that runs out. A drafted postmortem. And, next to the circuit breaker (fault 3's fix), the two stuck-refund fixes you chose on 2026-10-14: our API will count a refund whose outcome is unknown, and the money check will check, per payment, that the provider never refunded more than it charged. Week 3 also leaves week 4 a question: fault 1's damage doubled while the loop investigated, so how soon should Klaxon act?
+
+## Week 4, the plan (decided 2026-10-19)
+
+**What week 4 will add.** Klaxon will start to act, safely: a human approval gate, one write action (a rollback of a deploy), verification of health and money after it, faults 4 to 6, and a drafted postmortem. Beside them: the circuit breaker and the two stuck-refund fixes. Nothing is built yet; STATUS has the six items.
+
+**The ideas behind your four choices.**
+- *Why the gate comes first.* Every later item acts through it. If the gate is wrong, everything built on it is unsafe.
+- *Why you type the request's id, in your own terminal.* A "y" can be typed by habit; the id means you read which request you approve. Requiring a terminal will keep processes without one, such as Claude's shell, from approving. It will be a rule plus a log, not a lock: a process on this Mac could still write the decision file, and the docs will say so.
+- *Why only a rollback at first.* A rollback returns to settings that already ran. Repairs that move money (reversals, refunds) are new writes with no earlier state to return to, so they will stay proposals for a person.
+- *Why six runs, on Opus.* One gated run per fault keeps each fault's evidence complete, and the same model keeps it comparable with week 3. Week 5 compares models.
+
+**One idea to own before item 2: the cause removed is not the money right.** In week 2's run of fault 1, the rollback stopped new double postings, but the old ones stayed (8 events, $400.23): they stay until someone reverses them. Verification will say both: the cause is gone (no new damage), and what damage remains.
