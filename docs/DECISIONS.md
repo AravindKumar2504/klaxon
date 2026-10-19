@@ -387,3 +387,12 @@ Built on the branch `claude/pensive-payne-d31a00`, cut from `main` at `b47d55b` 
 - **Fault 1's run for Aravind's replay** (Claude): he replayed fault 2's in item 4's review, and fault 1 is the fault only the money check sees, the project's point.
 - **This worktree's `.venv` copies item 4's package versions** (Claude): installed from item 4's `pip freeze`, where the 1,302 was measured, then Klaxon itself in editable mode. `make venv` takes the newest versions `pyproject.toml` allows, which can move. The review outputs in STATUS came from this `.venv`.
 - **Nothing live** (Claude): no model call and no stack command; this item needed neither.
+
+
+## 2026-10-19 (Aravind's review of week 3)
+
+- **His review** (Aravind, in item 5's session): "I reviewed week 3 and accept it. Mark it done, then merge this branch into main and push." He did not say which of the review list's commands he ran; STATUS has Claude's run of each, with what it printed.
+- **Week 3 is done** (Aravind, 2026-10-19), ahead of the plan (Oct 27 to Nov 2). STATUS marks it so.
+- **Claude's final check before the merge** (2026-10-19): `make test` again on the branch's code, and a privacy scan of the 2 commits. Nothing private found; STATUS has the numbers. Not run, as before: `make e2e`, the full `make mutants` and `make test-integration` (the stack is shared, and this item changed no code).
+- **Week 3, item 5 merged into `main`** (Aravind, 2026-10-19): `main` was fast-forwarded to the branch. The branch is kept, like the others.
+- **Pushed to GitHub** (Aravind, 2026-10-19): `main` with week 3, item 5 (`main` only; the branches stay on his Mac). CLAUDE.md's rule still holds: Claude asks before every push.
