@@ -48,12 +48,13 @@ class LocalStack:
         ensure_local: Callable[[], None] = stack.ensure_local,
         http: httpx.Client | None = None,
         deployer: deploys.Deployer | None = None,
+        inspect: Callable[..., list[dict]] = stack.inspect,
     ) -> None:
         require_local(provider_url)
         # trust_env=False: no proxy from the environment or the system settings, so nothing leaves this Mac.
         self.http = http or httpx.Client(base_url=provider_url, timeout=15.0, trust_env=False)
         require_local(str(self.http.base_url))
-        self.deployer = deployer or deploys.Deployer(compose=compose, ensure_local=ensure_local)
+        self.deployer = deployer or deploys.Deployer(compose=compose, inspect=inspect, ensure_local=ensure_local)
 
     def redeploy(self, service: str, env: dict[str, str]) -> None:
         """Recreate one service's container with these settings, wait until it is healthy, and log the deploy

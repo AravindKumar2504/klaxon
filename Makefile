@@ -116,6 +116,7 @@ grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, b
 	$(PY) -m klaxon.fault_runs grade "$$RUN"
 
 approve: ## approve or deny the action a run asks for, in your own terminal, by typing its request id: make approve RUN=<folder>
+	@test -n "$$RUN" || { echo "make approve RUN=<the run's folder>: RUN is missing" >&2; exit 2; }
 	$(PY) -m klaxon.agent.gate approve "$$RUN"
 
 gate-demo: ## the approval gate, offline: a made-up stack and diagnosis; answer it with make approve in a second terminal

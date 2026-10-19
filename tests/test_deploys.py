@@ -235,3 +235,72 @@ def test_a_stopped_service_is_deployed_all_the_same_and_what_it_replaced_is_not_
     record = docker.deployer().deploy("ledger-consumer", GOOD["ledger-consumer"], by="klaxon.faults")
     assert docker.settings("ledger-consumer") == GOOD["ledger-consumer"] and len(docker.ups()) == 1
     assert (record.replaced_container, record.replaced_settings) == (None, None)
+
+
+def test_the_known_bad_values_are_the_faults_and_the_demos_and_each_is_a_value_a_deploy_may_set():
+    from klaxon import faults
+
+    for name, values in deploys.KNOWN_BAD.items():
+        allowed = next(choices for variables in SERVICES.values() for n, (_, choices) in variables.items() if n == name)
+        assert set(values) <= set(allowed) and allowed[0] not in values  # the default (compose.yaml's) is good
+    assert deploys.known_bad(NAIVE) == ["LEDGER_HANDLER=naive"] and deploys.known_bad(GOOD["ledger-consumer"]) == []
+    bad_deploys = faults.GOOD_LEDGER | {"LEDGER_HANDLER": "naive"}, faults.GOOD_LEDGER | {"LEDGER_BAD_EVENTS": "retry"}
+    assert all(deploys.known_bad(settings) for settings in bad_deploys)
+
+
+def test_a_deploy_that_expects_what_runs_is_not_made_when_something_else_runs():
+    docker = FakeDocker()
+    deployer = docker.deployer()
+    first = deployer.deploy("ledger-consumer", NAIVE, by="klaxon.faults")
+    expect = deploys.Expect(first.container, NAIVE, first.seq)
+    for change in ("container", "settings", "log"):
+        docker2 = FakeDocker()
+        deployer2 = docker2.deployer(DeployLog(DeployLog().path.with_name(f"{change}.jsonl")))
+        made = deployer2.deploy("ledger-consumer", NAIVE, by="klaxon.faults")
+        wrong = {
+            "container": deploys.Expect("f" * 64, NAIVE, made.seq),
+            "settings": deploys.Expect(made.container, GOOD["ledger-consumer"], made.seq),
+            "log": deploys.Expect(made.container, NAIVE, made.seq + 1),
+        }[change]
+        ups = len(docker2.ups())
+        with pytest.raises(deploys.DeployChanged, match="changed since it was looked at: nothing was deployed"):
+            deployer2.deploy("ledger-consumer", GOOD["ledger-consumer"], by="Klaxon", expect=wrong)
+        assert len(docker2.ups()) == ups and len(deployer2.log.records()) == 1
+    assert deployer.deploy("ledger-consumer", GOOD["ledger-consumer"], by="Klaxon", expect=expect).seq == 2
+
+
+def test_one_deploy_at_a_time_from_its_last_look_to_its_line_in_the_log():
+    import time
+
+    docker = FakeDocker()
+    order = []
+    real = docker.compose
+
+    def slow(*args, env=None):
+        if args[0] == "up":
+            order.append(f"up {args[4]}")
+            time.sleep(0.3)
+            order.append(f"done {args[4]}")
+        return real(*args, env=env)
+
+    docker.compose = slow
+    first = threading.Thread(target=lambda: docker.deployer().deploy("ledger-consumer", NAIVE, by="one"))
+    second = threading.Thread(
+        target=lambda: docker.deployer().deploy(
+            "payment-confirmer", GOOD["payment-confirmer"] | {"CONFIRMER_HANDLER": "by_provider_id"}, by="two"
+        )
+    )
+    first.start()
+    time.sleep(0.1)
+    second.start()
+    first.join()
+    second.join()
+    assert order == ["up ledger-consumer", "done ledger-consumer", "up payment-confirmer", "done payment-confirmer"]
+
+
+def test_a_log_made_before_its_file_was_named_writes_where_it_is_named_when_used(monkeypatch, tmp_path):
+    """make e2e builds its stack before a test names the log: the deploys must still land in the test's log."""
+    early = DeployLog()
+    monkeypatch.setenv("KLAXON_DEPLOY_LOG", str(tmp_path / "named-later.jsonl"))
+    FakeDocker().deployer(early).deploy("ledger-consumer", NAIVE, by="klaxon.faults")
+    assert len(DeployLog(tmp_path / "named-later.jsonl").records()) == 1

@@ -4,16 +4,21 @@ plan() only reads. For rollback_deploy, it reads the service's latest deploy fro
 (klaxon.patient.deploys) and the container that is running, and refuses unless all of these hold:
 
     the deploy log has a deploy of the service, and knows the settings that deploy replaced;
-    the running container is the one that deploy made (not one restarted or redeployed outside the log since);
+    the running container is the one that deploy made (not one recreated outside the log since);
     it still runs the settings that deploy gave it;
-    going back changes something.
+    going back changes something, and deploys no known-bad setting (deploys.KNOWN_BAD).
 
-The plan says the exact change, which deploy it undoes, and how to undo it in turn: roll back again.
+The last one matters after a fault was cleared: the latest deploy then replaced the fault's bad setting, and
+"going back" would deploy it again. Klaxon never does; a person can, by hand.
+
+The plan says the exact change, which deploy it undoes, and how to undo it in turn: roll back again, unless that
+would deploy a known-bad setting, which only a person may do.
 
 run() acts, and only on a plan a person approved: the gate is its one caller. A request can wait ten minutes, so
-run() first checks again that what the plan was made on still holds: the same latest deploy, the same container,
-the same settings. If anything changed, it refuses and changes nothing. The rollback is itself a deploy, logged
-with the request that approved it, so the next rollback would undo it.
+the deploy itself checks, under the deploy lock and right before it acts, that what the plan was made on still
+holds: the same latest deploy, the same container, the same settings. If anything changed, it refuses and
+changes nothing. A change made outside Klaxon's code, in the moment between that check and the deploy, is not
+stopped (deploys.py says why). The rollback is itself a deploy, logged with the request that approved it.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ from dataclasses import asdict, dataclass
 from klaxon.agent.catalog import CATALOG
 from klaxon.agent.contract import check
 from klaxon.agent.tools import clean_text
-from klaxon.patient.deploys import Deploy, Deployer, DeployError
+from klaxon.patient.deploys import Deploy, DeployChanged, Deployer, DeployError, Expect, known_bad
 from klaxon.patient.stack import StackError
 
 
@@ -58,6 +63,7 @@ def plan(name: str, arguments: object, deployer: Deployer) -> Plan:
     if problems:
         raise ActionRefused("; ".join(problems))
     try:
+        deployer.check_local()  # docker must talk to this Mac before it is read
         return PLANNERS[spec.name](arguments, deployer)
     except (DeployError, StackError) as exc:
         raise ActionRefused(f"the stack could not be read: {clean_text(str(exc), 300)}") from None
@@ -73,19 +79,28 @@ def _plan_rollback(arguments: dict, deployer: Deployer) -> Plan:
     now = deployer.running(service)
     if now.container != latest.container:
         raise ActionRefused(
-            f"{service}'s running container is not the one its latest logged deploy made: it was restarted or"
-            " redeployed outside the log since"
+            f"{service}'s running container is not the one its latest logged deploy made: it was recreated"
+            " outside the log since"
         )
     if now.settings is None or now.settings != latest.settings:
         raise ActionRefused(f"{service} no longer runs the settings its latest logged deploy gave it")
     target = latest.replaced_settings
     if target == now.settings:
         raise ActionRefused(f"{service}'s latest deploy changed none of its settings: there is nothing to roll back")
+    bad = known_bad(target)
+    if bad:
+        raise ActionRefused(
+            f"rolling {service} back would deploy a known-bad setting ({', '.join(bad)}): Klaxon never deploys one;"
+            " a person can, by hand"
+        )
     change = f"redeploy {service}: " + ", ".join(
         f"{name} {now.settings[name]} -> {value}" if now.settings[name] != value else f"{name} {value} (unchanged)"
         for name, value in target.items()
     )
     back = ", ".join(f"{name}={now.settings[name]}" for name, value in target.items() if now.settings[name] != value)
+    undo = f"rollback_deploy {service} again: it would go back to {back}"
+    if known_bad(now.settings):  # undoing it would deploy what it removes: a person's call, never Klaxon's
+        undo = f"going back to {back} would deploy a known-bad setting: Klaxon will not; a person can, by hand"
     return Plan(
         action="rollback_deploy",
         arguments={"service": service},
@@ -95,7 +110,7 @@ def _plan_rollback(arguments: dict, deployer: Deployer) -> Plan:
         to_settings=dict(target),
         undoes={"seq": latest.seq, "at": latest.at, "by": latest.by, "container": latest.container[:12]},
         change=change,
-        undo=f"rollback_deploy {service} again: it would go back to {back}",
+        undo=undo,
     )
 
 
@@ -103,20 +118,13 @@ PLANNERS = {"rollback_deploy": _plan_rollback}  # one per catalog action (a test
 
 
 def run(approved: Plan, deployer: Deployer, by: str) -> Deploy:
-    """Run a plan a person approved, only if what it was made on still holds. by: who approved it, for the log."""
+    """Run a plan a person approved, only if what it was made on still holds, as the deploy checks under its lock.
+    by: who approved it, for the log."""
+    expect = Expect(approved.container, dict(approved.from_settings), approved.undoes["seq"])
     try:
-        latest = deployer.log.latest(approved.service)
-        now = deployer.running(approved.service)
-    except (DeployError, StackError) as exc:
-        raise ActionRefused(f"the stack could not be read again: {clean_text(str(exc), 300)}") from None
-    if (
-        latest is None
-        or latest.seq != approved.undoes["seq"]
-        or now.container != approved.container
-        or now.settings != approved.from_settings
-    ):
-        raise ActionRefused(f"{approved.service} changed since the request was made: nothing was done")
-    record = deployer.deploy(approved.service, approved.to_settings, by=by)
-    if record is None:  # it already runs them: the checks above make this impossible, but never claim a deploy
+        record = deployer.deploy(approved.service, approved.to_settings, by=by, expect=expect)
+    except DeployChanged:
+        raise ActionRefused(f"{approved.service} changed since the request was made: nothing was done") from None
+    if record is None:  # it already runs them: the expected settings make this impossible, but never claim a deploy
         raise ActionRefused(f"{approved.service} already runs those settings: nothing was done")
     return record

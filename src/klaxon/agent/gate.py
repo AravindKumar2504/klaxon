@@ -1,4 +1,5 @@
-"""The approval gate: no write action runs without a person's typed yes (Aravind's choice, 2026-10-19).
+"""The approval gate: a write action runs only with an approval on file, which `make approve` writes when the
+request's id is typed at a terminal (Aravind's choice, 2026-10-19).
 
 For a run whose diagnosis names an action (fix_action, klaxon.agent.contract):
 
@@ -8,16 +9,20 @@ For a run whose diagnosis names an action (fix_action, klaxon.agent.contract):
     3. In his own terminal, Aravind runs `make approve RUN=<folder>`. It shows the request, and he types the
        request's id to approve it; anything else denies it. The command refuses unless it can read from a
        terminal, so a process without one (Claude's shell, for one) cannot approve.
-    4. No decision within 10 minutes means denied. A decision counts only for the request it names, whole: one
-       that names another request, or this one changed after it was saved, is denied.
+    4. No decision within 10 minutes means denied (by the wall clock too: a Mac's other clock stops while it
+       sleeps). A decision counts only for the request it names, whole: one that names another request, or this
+       one changed after it was saved, is denied.
     5. An approved plan runs, and only if what it was made on still holds (klaxon.agent.actions.run).
 
-The decision file can be written once. Every step goes to the folder's log (gate.jsonl): the request, the
-decision, what ran and what came of it, with times, and never the Mac's user name.
+The decision file can be written once. Every step goes to the folder's log (gate.jsonl): the request; each
+decision `make approve` writes; the decision the run takes, with the decision file's own SHA-256; what ran and
+what came of it. With times, and never the Mac's user name. A decision the run took with no line from
+`make approve` before it was not written by `make approve`.
 
-Its limit, said plainly: the code cannot tell a person from a process that writes the decision file itself, or
-that makes itself a terminal (the tests do, with a pseudo-terminal). That Claude never approves is a rule, and the
-log shows every decision.
+Its limit, said plainly: any process running as Aravind can approve. It can write the decision file, run
+`make approve` in a pseudo-terminal it makes (the tests do), type into his terminal (tools that drive a terminal
+can, Claude's among them), or change this code. That Claude never approves is a rule; the log shows every decision
+the run took, and which ones `make approve` wrote.
 
 Run: python -m klaxon.agent.gate approve FOLDER     (make approve RUN=FOLDER)
 """
@@ -142,7 +147,30 @@ def read_request(folder: Path) -> dict:
     if value["sha256"] != request_sha256(value):
         raise GateError("the approval request was changed after the run saved it")
     _seconds(value["created_at"]), _seconds(value["expires_at"])
+    if not _shaped(value):  # sealed again by someone, but not in the shape a run writes: refused, never shown
+        raise GateError("the approval request is not in the shape a run writes")
     return value
+
+
+def _shaped(request: Mapping) -> bool:
+    """Whether a request has every field a run writes and render() shows, each of the kind it should be."""
+    plan, found, action = request.get("plan"), request.get("diagnosis"), request.get("action")
+    if not (isinstance(plan, dict) and isinstance(found, dict) and isinstance(action, dict)):
+        return False
+    texts = (plan.get("change"), plan.get("undo"), action.get("name"), found.get("hypothesis"))
+    texts += (found.get("blast_radius"), found.get("rollback_plan"))
+    if not all(isinstance(text, str) for text in texts) or not isinstance(action.get("arguments"), dict):
+        return False
+    undoes, fix, evidence = plan.get("undoes"), found.get("proposed_fix"), found.get("evidence")
+    if not isinstance(undoes, dict) or not {"seq", "at", "by", "container"} <= set(undoes):
+        return False
+    if not isinstance(fix, dict) or not {"kind", "target", "summary"} <= set(fix):
+        return False
+    if not isinstance(evidence, list) or not all(
+        isinstance(item, dict) and {"call_id", "tool", "shows"} <= set(item) for item in evidence
+    ):
+        return False
+    return request.get("alert") is None or isinstance(request["alert"], dict)
 
 
 def read_decision(folder: Path) -> dict | None:
@@ -255,8 +283,9 @@ def wait(
 
 
 def _take(folder: Path, request: Mapping, now: Callable[[], float]) -> Decision | None:
-    """The decision on file, as the run takes it; None while there is none. One the run cannot take as written (it
-    cannot be read, names another request, or came late) is logged here, and counts as a denial."""
+    """The decision on file, as the run takes it; None while there is none. Logged either way, with the file's own
+    SHA-256. One the run cannot take as written (it cannot be read, names another request, or came late) counts as
+    a denial."""
     try:
         found = read_decision(folder)
     except GateError:
@@ -264,8 +293,23 @@ def _take(folder: Path, request: Mapping, now: Callable[[], float]) -> Decision 
     if found is None:
         return None
     decision = judge(found or None, request)
+    try:
+        sha = hashlib.sha256((Path(folder) / DECISION).read_bytes()).hexdigest()
+    except OSError:
+        sha = None
     if decision.decision != found.get("decision"):
-        log(folder, "decision not taken", now, request=request["id"], how=decision.how)
+        log(folder, "decision not taken", now, request=request["id"], how=decision.how, decision_sha256=sha)
+    else:
+        log(
+            folder,
+            "decision taken",
+            now,
+            request=request["id"],
+            decision=decision.decision,
+            decided_at=decision.at,
+            how=decision.how,
+            decision_sha256=sha,
+        )
     return decision
 
 
@@ -334,6 +378,9 @@ def act(
         why = f"{type(exc).__name__}: {clean_text(str(exc), 300)}"
         log(folder, "failed", now, request=request["id"], why=why)
         return Outcome("failed", why, request["id"])
+    except BaseException as exc:  # anything else, an interrupt included: the log says so, then it goes on up
+        log(folder, "failed", now, request=request["id"], why=f"{type(exc).__name__}: {clean_text(str(exc), 300)}")
+        raise
     log(folder, "done", now, request=request["id"], deploy=asdict(record))
     return Outcome("done", planned.change, request["id"], asdict(record))
 
@@ -393,7 +440,7 @@ def render(request: Mapping, now: float) -> str:
         )
     lines += [
         "",
-        "The action, planned by code from the stack as it is now:",
+        "The action, planned by code from the stack as it was when the run asked:",
         f"  {_one_line(request['action']['name'], 64)} {_one_line(json.dumps(request['action']['arguments']), 300)}",
         f"  change:  {_one_line(plan['change'])}",
         f"  undoes:  deploy {undoes['seq']}, at {_one_line(undoes['at'], 40)}, by {_one_line(undoes['by'], 200)}"
@@ -433,7 +480,7 @@ def approve(
             " typed by a person.",
             file=sys.stderr,
         )
-        if folder.is_dir():
+        if (folder / REQUEST).is_file():  # a run's folder: never a log anywhere else
             log(folder, "approval refused", now, why="make approve was run without a terminal")
         return 2
     try:

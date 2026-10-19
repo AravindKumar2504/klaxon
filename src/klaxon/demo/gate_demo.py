@@ -23,6 +23,7 @@ from pathlib import Path
 
 from klaxon.agent import gate
 from klaxon.agent.contract import Diagnosis, Evidence, FixAction, ProposedFix
+from klaxon.agent.tools import clean_text
 from klaxon.patient.deploys import SERVICES, Deployer, DeployLog
 
 BANNER = (
@@ -93,13 +94,13 @@ def main(timeout: float = gate.WAIT_SECONDS, sleep: Callable[[float], None] = ti
     docker = MadeUpDocker()
     deployer = Deployer(DeployLog(folder / "deploys.jsonl"), docker.compose, docker.inspect, ensure_local=lambda: None)
     deployer.deploy(LEDGER, NAIVE, by="the gate demo: a made-up bad deploy")
-    print(f"Folder: {folder}", flush=True)
+    print(f"Folder: {clean_text(str(folder))}", flush=True)
     print("The made-up ledger consumer runs LEDGER_HANDLER=naive, from a made-up bad deploy.\n", flush=True)
     outcome = gate.act(folder, made_up_diagnosis(), deployer, ALERT, timeout=timeout, sleep=sleep)
     _, environment = docker.containers[LEDGER]
     print(f"\nOutcome: {outcome.result}: {outcome.detail}")
     print(f"The made-up ledger consumer now runs LEDGER_HANDLER={environment['LEDGER_HANDLER']}.")
-    print(f"The gate's log: {folder / gate.LOG}")
+    print(f"The gate's log: {clean_text(str(folder / gate.LOG))}")
     return 0
 
 

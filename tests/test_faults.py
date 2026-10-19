@@ -103,8 +103,11 @@ def test_a_local_stack_deploys_through_the_docker_it_was_given():
     def ensure_local():
         raise AssertionError("not called")
 
-    s = LocalStack(compose=compose, ensure_local=ensure_local)
-    assert s.deployer._compose is compose and s.deployer._ensure_local is ensure_local
+    def inspect(*ids):
+        raise AssertionError("not called")
+
+    s = LocalStack(compose=compose, ensure_local=ensure_local, inspect=inspect)
+    assert (s.deployer._compose, s.deployer._ensure_local, s.deployer._inspect) == (compose, ensure_local, inspect)
 
 
 @pytest.mark.parametrize("url", ["http://10.0.0.5:8081", "https://provider.example.com"])

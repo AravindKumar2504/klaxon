@@ -34,7 +34,8 @@ class FakeDocker:
             self.start(service, settings)
 
     def start(self, service: str, settings: dict[str, str]) -> str:
-        """A container made outside any logged deploy (make up, a restart): a new id, these settings."""
+        """A container made outside any logged deploy (make up, or a recreate by hand): a new id, these settings. (A
+        docker restart keeps a container's id; only a recreate makes a new one.)"""
         environment = {"DATABASE_URL": f"postgresql://writer:{PASSWORD}@postgres:5432/klaxon"}
         environment |= {inside: settings[name] for name, (inside, _) in SERVICES[service].items()}
         container = hashlib.sha256(f"container {next(self.ids)}".encode()).hexdigest()  # unlike prefixes too

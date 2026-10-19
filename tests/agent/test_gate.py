@@ -3,8 +3,9 @@ diagnosis to a rollback on a made-up docker (tests/fake_docker.py).
 
 Nobody approves anything here. The diagnoses are written by hand for the tests; no model wrote them. Most tests
 answer through a scripted terminal (ScriptedTerminal), a scripted approver standing in for Aravind's terminal.
-Two run the real command: one with no terminal, refused as Claude's shell is; and one in a pseudo-terminal the
-test makes, which also shows the gate's limit: a process can make itself a terminal.
+A few run the real command: with no terminal, refused as Claude's shell is; in a pseudo-terminal the test makes,
+which also shows the gate's limit (a process can make itself a terminal); and from a pipe, to see a waiting run's
+notice at once.
 """
 
 import getpass
@@ -203,6 +204,7 @@ def test_an_expired_request_cannot_be_approved(tmp_path):
     terminal = ScriptedTerminal(request["id"])
     assert gate.approve(tmp_path, lambda: terminal, clocks.time) == 1
     assert not (tmp_path / gate.DECISION).exists() and "expired" in "".join(terminal.shown)
+    assert not any("Type r-" in shown for shown in terminal.shown)  # nobody is asked about an expired request
 
 
 def test_a_request_that_expires_while_it_is_read_is_not_approved(tmp_path):
@@ -368,7 +370,7 @@ def test_an_approved_rollback_runs_and_every_step_is_logged(tmp_path):
     assert docker.settings(LEDGER) == GOOD[LEDGER]
     latest = DeployLog().latest(LEDGER)
     assert latest.by == f"Klaxon, approved request {request['id']}" and latest.replaced_settings == NAIVE
-    assert events(tmp_path) == ["requested", "approved", "running", "done"]
+    assert events(tmp_path) == ["requested", "approved", "decision taken", "running", "done"]
     assert f"Klaxon asks to act: request {request['id']}" in said[0]
     assert f"make approve RUN={tmp_path}" in said[0]  # a temporary folder: outside the home folder
 
@@ -379,7 +381,8 @@ def test_a_denied_or_unanswered_request_runs_nothing(tmp_path, answer, result):
     ups = len(docker.ups())
     outcome = act(tmp_path, docker, deployer, answer=answer)
     assert outcome.result == result and len(docker.ups()) == ups and docker.settings(LEDGER) == NAIVE
-    assert events(tmp_path) == ["requested", result]
+    # make approve logs the denial, then the run logs the decision it took; an expiry, the run writes and logs
+    assert events(tmp_path) == (["requested", "denied", "decision taken"] if answer else ["requested", "expired"])
 
 
 def test_a_stack_that_changed_while_the_request_waited_is_not_touched(tmp_path):
@@ -388,7 +391,7 @@ def test_a_stack_that_changed_while_the_request_waited_is_not_touched(tmp_path):
     outcome = act(tmp_path, docker, deployer, before=lambda: docker.start(LEDGER, NAIVE))
     assert outcome.result == "not run" and "changed since the request was made" in outcome.detail
     assert len(docker.ups()) == ups
-    assert events(tmp_path) == ["requested", "approved", "running", "not run"]
+    assert events(tmp_path) == ["requested", "approved", "decision taken", "running", "not run"]
 
 
 def test_a_rollback_that_fails_in_docker_is_logged_as_failed(tmp_path):
@@ -591,3 +594,61 @@ def test_a_mac_that_sleeps_through_a_request_finds_it_expired_when_it_wakes(tmp_
     found = gate.wait(tmp_path, request, gate.WAIT_SECONDS, clocks.monotonic, the_mac_sleeps, clocks.time)
     assert found.decision == "expired" and len(clocks.slept) == 1
     assert decision(tmp_path)["decision"] == "expired"
+
+
+def test_the_run_logs_the_decision_it_takes_so_one_not_written_by_make_approve_shows(tmp_path):
+    """The stated limit's case: a process writes the decision file itself. The gate cannot stop it, but its log
+    shows that the run took an approval with no line from make approve before it, and the file's own hash."""
+    docker, deployer = after_a_bad_deploy()
+
+    def forged():
+        request = gate.read_request(tmp_path)
+        written = {
+            "label": gate.DECISION_LABEL,
+            "request_id": request["id"],
+            "request_sha256": request["sha256"],
+            "decision": "approved",
+            "at": request["created_at"],
+            "how": gate.TYPED,  # what the file says; anyone can write it
+        }
+        (tmp_path / gate.DECISION).write_text(json.dumps(written))
+
+    outcome = act(tmp_path, docker, deployer, answer=None, before=forged)
+    assert outcome.result == "done"
+    lines = [json.loads(line) for line in (tmp_path / gate.LOG).read_text().splitlines()]
+    assert [line["event"] for line in lines] == ["requested", "decision taken", "running", "done"]
+    taken = lines[1]
+    assert taken["decision"] == "approved" and len(taken["decision_sha256"]) == 64
+    assert "approved" not in [line["event"] for line in lines]  # no line from make approve: not written by it
+
+
+def test_a_refused_make_approve_writes_no_log_outside_a_run_folder(tmp_path):
+    assert gate.approve(tmp_path, lambda: None, Clocks().time) == 2
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_request_sealed_again_in_a_shape_a_run_never_writes_is_refused_cleanly(tmp_path, capsys):
+    request = saved_request(tmp_path)
+    del request["plan"]["undoes"]
+    request["sha256"] = gate.request_sha256(request)
+    (tmp_path / gate.REQUEST).write_text(json.dumps(request))
+    assert gate.approve(tmp_path, lambda: ScriptedTerminal(request["id"]), Clocks().time) == 2
+    assert "not in the shape a run writes" in capsys.readouterr().err
+    assert not (tmp_path / gate.DECISION).exists()
+
+
+def test_anything_that_breaks_while_the_action_runs_is_logged_then_raised(tmp_path):
+    docker, deployer = after_a_bad_deploy()
+
+    def breaks():
+        docker.up_fails = OSError("the disk is full")
+
+    with pytest.raises(OSError, match="the disk is full"):
+        act(tmp_path, docker, deployer, before=breaks)
+    last = json.loads((tmp_path / gate.LOG).read_text().splitlines()[-1])
+    assert last["event"] == "failed" and last["why"] == "OSError: the disk is full"
+
+
+def test_the_request_shown_says_it_was_planned_when_the_run_asked(tmp_path):
+    request = saved_request(tmp_path)
+    assert "The action, planned by code from the stack as it was when the run asked:" in gate.render(request, NOW)

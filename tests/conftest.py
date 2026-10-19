@@ -1,3 +1,7 @@
+import atexit
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -5,6 +9,12 @@ import pytest
 from klaxon.agent import claude_code
 from klaxon.patient.ledger import Ledger, WebhookEndpoint
 from klaxon.patient.provider import FakeProvider
+
+# Before any fixture: a stack built at module scope (make e2e builds one) and torn down after the last test's own
+# log is gone still never reaches the real deploy log (~/.klaxon/deploys.jsonl). Each test then gets its own (below).
+_SESSION_LOGS = tempfile.mkdtemp(prefix="klaxon-test-deploys-")
+atexit.register(shutil.rmtree, _SESSION_LOGS, ignore_errors=True)
+os.environ["KLAXON_DEPLOY_LOG"] = str(Path(_SESSION_LOGS) / "deploys.jsonl")
 
 SECRET = b"test-secret-not-real"
 NO_CLAUDE = "/nonexistent/klaxon-offline-tests-never-call-claude"

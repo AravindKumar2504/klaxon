@@ -55,7 +55,9 @@ def test_a_rollback_plans_the_exact_change_back_to_what_the_latest_deploy_replac
     assert plan.change == (
         "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)"
     )
-    assert plan.undo == "rollback_deploy ledger-consumer again: it would go back to LEDGER_HANDLER=naive"
+    assert plan.undo == (
+        "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+    )
     assert (plan.from_settings, plan.to_settings) == (NAIVE, GOOD[LEDGER])
     assert plan.container == docker.containers[LEDGER][0]
     assert plan.undoes == {
@@ -95,7 +97,7 @@ def test_with_no_deploy_logged_there_is_nothing_to_roll_back_to():
         actions.plan("rollback_deploy", {"service": LEDGER}, docker.deployer())
 
 
-def test_a_container_restarted_or_redeployed_outside_the_log_is_never_rolled_back():
+def test_a_container_recreated_outside_the_log_is_never_rolled_back():
     """make reset and make up, say: the log then describes containers that are gone."""
     docker, deployer = after_a_bad_deploy()
     docker.start(LEDGER, NAIVE)  # the same settings, but not the container the logged deploy made
@@ -154,7 +156,7 @@ def test_a_log_that_cannot_be_trusted_is_refused():
         actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
 
 
-def test_an_approved_rollback_deploys_and_is_logged_with_its_approval_so_the_next_rollback_undoes_it():
+def test_an_approved_rollback_deploys_and_is_logged_with_its_approval_and_undoing_it_is_a_persons_call():
     docker, deployer = after_a_bad_deploy()
     plan = actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
     record = actions.run(plan, deployer, by="Klaxon, approved request r-0a1b")
@@ -164,8 +166,9 @@ def test_an_approved_rollback_deploys_and_is_logged_with_its_approval_so_the_nex
         GOOD[LEDGER],
         NAIVE,
     )
-    undo = actions.plan("rollback_deploy", {"service": LEDGER}, deployer)  # its undo: roll back again
-    assert undo.to_settings == NAIVE and undo.undoes["by"] == "Klaxon, approved request r-0a1b"
+    # Undoing it would deploy the naive handler again: a known-bad setting, which Klaxon never deploys.
+    with pytest.raises(ActionRefused, match=r"would deploy a known-bad setting \(LEDGER_HANDLER=naive\)"):
+        actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
 
 
 @pytest.mark.parametrize("change", ["container", "settings", "a new deploy", "a new line in the log"])
@@ -219,3 +222,38 @@ def test_a_deploy_of_a_stopped_service_is_never_rolled_back_to_a_guess():
     deployer.deploy(LEDGER, NAIVE, by="klaxon.faults")
     with pytest.raises(ActionRefused, match="does not know the settings ledger-consumer ran before"):
         actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
+
+
+def test_after_a_fault_was_cleared_a_rollback_never_deploys_its_bad_setting_again():
+    """The review's case: the clearing is the latest deploy, and what it replaced is the fault's bad setting."""
+    from klaxon import faults
+
+    docker = FakeDocker()
+    stack = faults.LocalStack(deployer=docker.deployer())
+    faults.FAULTS["duplicate-delivery"].inject(stack)
+    faults.FAULTS["duplicate-delivery"].clear(stack)
+    with pytest.raises(ActionRefused, match=r"known-bad setting \(LEDGER_HANDLER=naive\).*a person can, by hand"):
+        actions.plan("rollback_deploy", {"service": LEDGER}, docker.deployer())
+
+
+def test_a_line_written_by_hand_cannot_steer_a_rollback_to_a_known_bad_setting():
+    docker = FakeDocker()
+    container = docker.containers[LEDGER][0]
+    DeployLog().append(
+        at="2026-10-19T08:53:20Z",
+        service=LEDGER,
+        by="by hand",
+        container=container,
+        settings=GOOD[LEDGER],
+        replaced_container="c" * 64,
+        replaced_settings=RETRYING,
+    )
+    with pytest.raises(ActionRefused, match=r"known-bad setting \(LEDGER_BAD_EVENTS=retry\)"):
+        actions.plan("rollback_deploy", {"service": LEDGER}, docker.deployer())
+
+
+def test_planning_checks_that_docker_points_at_this_mac_before_reading_it():
+    docker, deployer = after_a_bad_deploy()
+    checks = docker.local_checks
+    actions.plan("rollback_deploy", {"service": LEDGER}, deployer)
+    assert docker.local_checks == checks + 1
