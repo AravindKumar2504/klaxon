@@ -1,0 +1,754 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic, one fault from klaxon.faults injected on purpose, an alert raised by klaxon.alerts from what the stack showed, and one live run of Klaxon's loop (Claude on Aravind's seat: recorded responses, not a simulation). Synthetic data, a simulated provider, no real money. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model.",
+  "what": "One run of Klaxon's first loop on a fault injected on purpose: the alert the rules raised, Claude on Aravind's seat, read-only tools on this Mac's stack.",
+  "fault_name": "provider-outage",
+  "rerun_command": "python -m klaxon.fault_runs run provider-outage --steps 10 --tool-calls 8",
+  "ran_at_utc": "2026-10-19T02:40:01+00:00",
+  "ran_at_local": "2026-10-18T19:40:01-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "3e5af3ebfa75bc4bd59345d252fc1f43622d6f6e04c09deffaf2e47d66c5bf07",
+  "stack_files_sha256": "897aca468182df7564a233cefbdaedf1418cf30416975029c8e73372e711e6d8",
+  "git_commit": "853feda11a4271303a65787dfda146dd7544bc3c",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d9af9bf06a48104f054ee456913054f96c69c66f8ef6acd7f706303f880d282c"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d9af9bf06a48104f054ee456913054f96c69c66f8ef6acd7f706303f880d282c"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d9af9bf06a48104f054ee456913054f96c69c66f8ef6acd7f706303f880d282c"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d9af9bf06a48104f054ee456913054f96c69c66f8ef6acd7f706303f880d282c"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d9af9bf06a48104f054ee456913054f96c69c66f8ef6acd7f706303f880d282c"
+      }
+    ]
+  },
+  "fault": {
+    "name": "provider-outage",
+    "title": "Payments time out: the provider hangs, and nothing fails fast",
+    "cause": "the provider's charge and refund API hangs (5 s, then 503), and our payments API has no circuit breaker: every payment waits through 3 timed-out attempts, the API's worker threads fill up, and even its health checks slow down",
+    "expected_symptoms": [
+      "the payments API's p95 latency climbs to about 10 s (the top of its buckets), and clients get 503 'outcome unknown'",
+      "provider calls end with no answer (timeouts): klaxon.provider.attempts, result no_answer",
+      "the payments API's health check fails while its worker threads all wait",
+      "the money check passes: nothing was charged, so no money is wrong",
+      "after it ends, payments whose outcome stayed unknown stay pending, with no charge: they need a decision (retry them, or mark them failed)"
+    ],
+    "expected_money": {
+      "during": "passed",
+      "after": "passed",
+      "quiet": "passed"
+    },
+    "remedy": "it ends when the provider recovers; a circuit breaker would fail fast meanwhile and keep the API answering (planned for week 4)"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "d59c2f6b"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 76.7,
+    "injection_took": 0.0,
+    "alert_at": 124.7,
+    "loop_ended_at": 187.2,
+    "cleared_at": 187.2
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "seconds": 60.7,
+      "at_utc": "2026-10-19T02:41:01Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.052,
+            "requests_per_second": 3.061,
+            "share": 0.017
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 1.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "seconds": 76.7,
+      "at_utc": "2026-10-19T02:41:17Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.179,
+            "share": 0.019
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "seconds": 92.7,
+      "at_utc": "2026-10-19T02:41:33Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.04
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.12,
+            "requests_per_second": 2.718,
+            "share": 0.044
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "seconds": 108.7,
+      "at_utc": "2026-10-19T02:41:49Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 9.597
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 9.6 s, above the threshold of 2 s.",
+          "in_a_row": 1,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.907,
+            "requests_per_second": 2.68,
+            "share": 0.338
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are failing: over the last minute, 34% of the answers to POST /payments on payments-api were 5xx (0.91 per second), above the threshold of 20%.",
+          "in_a_row": 1,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "seconds": 124.7,
+      "at_utc": "2026-10-19T02:42:05Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 10.0
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 10.0 s, above the threshold of 2 s.",
+          "in_a_row": 2,
+          "firing": true
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 2.198,
+            "requests_per_second": 2.978,
+            "share": 0.738
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are failing: over the last minute, 74% of the answers to POST /payments on payments-api were 5xx (2.20 per second), above the threshold of 20%.",
+          "in_a_row": 2,
+          "firing": true
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "PaymentsErrorsHigh",
+        "summary": "Payments are failing: over the last minute, 74% of the answers to POST /payments on payments-api were 5xx (2.20 per second), above the threshold of 20%. Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 10.0 s, above the threshold of 2 s.",
+        "fired_at": "2026-10-19T02:42:05Z"
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 277.7,
+      "at_utc": "2026-10-19T02:44:38Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 2.779,
+            "share": 0.014
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "injected": {
+    "provider": "charges and refunds held 5 s, then 503"
+  },
+  "cleared": {
+    "provider": "answering again"
+  },
+  "alert": {
+    "name": "PaymentsErrorsHigh",
+    "summary": "Payments are failing: over the last minute, 74% of the answers to POST /payments on payments-api were 5xx (2.20 per second), above the threshold of 20%. Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 10.0 s, above the threshold of 2 s.",
+    "fired_at": "2026-10-19T02:42:05Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.75",
+    "steps": 9,
+    "tool_calls": 7,
+    "seconds": 62.49,
+    "diagnosis": {
+      "hypothesis": "fake-provider, which stands for the outside payment provider, suddenly stopped answering POST /v1/payments and /v1/refunds at about 02:42. Its container still reports running and healthy, so it is hanging rather than down. payments-api gives each provider call 3 s and tries 3 times, so each request now takes about 9 to 16 s and then returns 503 ('provider unavailable; payment left pending'). That produces the 74% 5xx rate and the 10 s p95. Before the stall, provider calls returned 200 in about 5 ms (p95), with occasional 500s, so the change was abrupt rather than a gradual overload. No deploy lines up with it: the whole stack was created at 02:39:46. payments-api's own health check now fails, probably because its workers are tied up waiting on the provider; I did not confirm this. Still open: why the provider stalled, which we cannot see from our side. Also open: whether the timed-out requests reached the provider and were charged there. I did not run the money check.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=\"payments-api\", http_route=\"/payments\", http_request_method=\"POST\"}[1m]))",
+            "minutes": 20
+          },
+          "shows": "POST /payments: 201s fall from about 2.5/s to 0 and 503s jump to about 2.5/s at 02:42:09, confirming the alert."
+        },
+        {
+          "call_id": "c2",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (http_response_status_code, error_type) (rate(http_client_request_duration_seconds_count{service_name=\"payments-api\"}[1m]))",
+            "minutes": 10
+          },
+          "shows": "payments-api's completed provider calls (200 at about 3/s, 500 at about 0.2/s) drop to 0 at 02:42:12. The provider stopped responding."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"payments-api\"} | severity_text = \"ERROR\"",
+            "minutes": 10,
+            "limit": 20
+          },
+          "shows": "Every recent payments-api ERROR reads 'provider unavailable; payment/refund left pending' with '/v1/payments (or /v1/refunds) failed after 3 attempts: ReadTimeout'. This starts at 02:42:09."
+        },
+        {
+          "call_id": "c6",
+          "tool": "get_trace",
+          "arguments": {
+            "trace_id": "16968f9e08186db515838c880a270dcd"
+          },
+          "shows": "Trace for pmt_000276: three POSTs to fake-provider /v1/payments each hit ReadTimeout after about 3.0 s, the request took 15.9 s and returned 503. Redis and Postgres spans took under 1 ms, so they are not the cause."
+        },
+        {
+          "call_id": "c7",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "histogram_quantile(0.95, sum by (le) (rate(http_client_request_duration_seconds_bucket{service_name=\"payments-api\"}[1m])))",
+            "minutes": 5
+          },
+          "shows": "Provider-call p95 was steady at about 5 ms through 02:42:05, then has no data: a sudden stall with no gradual slowdown before it."
+        },
+        {
+          "call_id": "c4",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "All containers were created together at 02:39:46. No deploy or settings change coincides with the 02:42 onset."
+        },
+        {
+          "call_id": "c5",
+          "tool": "service_health",
+          "arguments": {},
+          "shows": "fake-provider is running and healthy with 0 restarts, so it is hung rather than crashed. payments-api is unhealthy: its health-check request fails."
+        }
+      ],
+      "confidence": 0.75,
+      "proposed_fix": {
+        "kind": "other",
+        "target": "fake-provider (external payment provider) and the payments-api provider client",
+        "summary": "Escalate to the provider: their payments and refunds API is hanging. On our side, stop requests piling up while it lasts: add a circuit breaker or fail fast on provider timeouts instead of the 3 x 3 s retry loop, so payments-api stays responsive and its health check recovers. Do not retry pending payments under new idempotency keys. When the provider recovers, reconcile every payment and refund left pending since 02:42 against the provider's records and webhooks, keeping the same idempotency keys. Then run money_check to confirm our books match the provider's.",
+        "applied": false
+      },
+      "blast_radius": "Failing fast affects every payment and refund while the breaker is open. Callers get 503 sooner, and payments that might have succeeded on a slow provider get rejected. Reconciling pending rows changes payment and refund state. If it is done without idempotency keys or provider lookups, it risks double charges or missed ledger postings.",
+      "rollback_plan": "Revert the breaker or timeout change to the previous retry and timeout settings and restart payments-api. Reconcile only from the provider's records. Change nothing on the provider's side, and leave rows pending if their state is unclear."
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading): keyword patterns per element of the fault's recorded cause, written and committed before the live runs. Not a person and not a model: it reads words, not meaning.",
+    "fault": "provider-outage",
+    "recorded_cause": "the provider's charge and refund API hangs (5 s, then 503), and our payments API has no circuit breaker: every payment waits through 3 timed-out attempts, the API's worker threads fill up, and even its health checks slow down",
+    "remedy": "it ends when the provider recovers; a circuit breaker would fail fast meanwhile and keep the API answering (planned for week 4)",
+    "verdict": "names the cause",
+    "hypothesis": "fake-provider, which stands for the outside payment provider, suddenly stopped answering POST /v1/payments and /v1/refunds at about 02:42. Its container still reports running and healthy, so it is hanging rather than down. payments-api gives each provider call 3 s and tries 3 times, so each request now takes about 9 to 16 s and then returns 503 ('provider unavailable; payment left pending'). That produces the 74% 5xx rate and the 10 s p95. Before the stall, provider calls returned 200 in about 5 ms (p95), with occasional 500s, so the change was abrupt rather than a gradual overload. No deploy lines up with it: the whole stack was created at 02:39:46. payments-api's own health check now fails, probably because its workers are tied up waiting on the provider; I did not confirm this. Still open: why the provider stalled, which we cannot see from our side. Also open: whether the timed-out requests reached the provider and were charged there. I did not run the money check.",
+    "elements": [
+      {
+        "element": "where: the payment provider",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "what: it hangs or does not answer",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "how: our API waits on it, and nothing fails fast",
+        "required": true,
+        "named": true
+      }
+    ],
+    "proposed_fix": {
+      "kind": "other",
+      "target": "fake-provider (external payment provider) and the payments-api provider client"
+    },
+    "fix_fits_the_remedy": false,
+    "fitting_fixes": {
+      "kinds": [
+        "code_change",
+        "config_change",
+        "none"
+      ],
+      "target_matches": "payments|provider"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 6,
+      "double_clicks.other": 3,
+      "double_clicks.ran_first": 4,
+      "double_clicks.sent": 13,
+      "not_sent.refunds": 1,
+      "payments.arrived": 840,
+      "payments.succeeded": 546,
+      "payments.unknown": 63,
+      "refunds.succeeded": 53,
+      "refunds.unknown": 9,
+      "retries": 370,
+      "retries.after_409": 11,
+      "retries.after_503": 257,
+      "retries.after_no_answer": 102,
+      "shed": 252,
+      "unknown_payments.still_pending": 23,
+      "unknown_refunds.still_pending": 4
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "printed_output": [
+    "Klaxon week 3: the first loop on a fault injected on purpose: provider-outage",
+    "REAL RUN on this Mac's Docker Compose stack, with synthetic traffic. The loop's replies are recorded responses from Claude on Aravind's seat. Synthetic data, a simulated provider, no real money.",
+    "",
+    "The fault: Payments time out: the provider hangs, and nothing fails fast",
+    "  recorded cause: the provider's charge and refund API hangs (5 s, then 503), and our payments API has no circuit breaker: every payment waits through 3 timed-out attempts, the API's worker threads fill up, and even its health checks slow down",
+    "",
+    "The alert rules (t counts from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.7 s  p95 0.024 s; 5xx share 0.017; lag ledger 1.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  76.7 s  p95 0.024 s; 5xx share 0.019; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  92.7 s  p95 0.04 s; 5xx share 0.044; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t= 108.7 s  p95 9.597 s; 5xx share 0.338; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t= 124.7 s  p95 10.0 s; 5xx share 0.738; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: PaymentsLatencyHigh (payments-api), PaymentsErrorsHigh (payments-api)",
+    "  after  t= 277.7 s  p95 0.024 s; 5xx share 0.014; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  the fault was injected at t=76.7 s: {\"provider\": \"charges and refunds held 5 s, then 503\"}",
+    "",
+    "Alert PaymentsErrorsHigh, fired at 2026-10-19T02:42:05Z: Payments are failing: over the last minute, 74% of the answers to POST /payments on payments-api were 5xx (2.20 per second), above the threshold of 20%. Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 10.0 s, above the threshold of 2 s.",
+    "",
+    "The loop stopped on diagnosed after 9 steps, 7 tool calls and 62.5 s.",
+    "  hypothesis: fake-provider, which stands for the outside payment provider, suddenly stopped answering POST /v1/payments and /v1/refunds at about 02:42. Its container still reports running and healthy, so it is hanging rather than down. payments-api gives each provider call 3 s and tries 3 times, so each request now takes about 9 to 16 s and then returns 503 ('provider unavailable; payment left pending'). That produces the 74% 5xx rate and the 10 s p95. Before the stall, provider calls returned 200 in about 5 ms (p95), with occasional 500s, so the change was abrupt rather than a gradual overload. No deploy lines up with it: the whole stack was created at 02:39:46. payments-api's own health check now fails, probably because its workers are tied up waiting on the provider; I did not confirm this. Still open: why the provider stalled, which we cannot see from our side. Also open: whether the timed-out requests reached the provider and were charged there. I did not run the money check.",
+    "  confidence: 0.75",
+    "  proposed fix (not applied): other fake-provider (external payment provider) and the payments-api provider client: Escalate to the provider: their payments and refunds API is hanging. On our side, stop requests piling up while it lasts: add a circuit breaker or fail fast on provider timeouts instead of the 3 x 3 s retry loop, so payments-api stays responsive and its health check recovers. Do not retry pending payments under new idempotency keys. When the provider recovers, reconcile every payment and refund left pending since 02:42 against the provider's records and webhooks, keeping the same idempotency keys. Then run money_check to confirm our books match the provider's.",
+    "",
+    "Compared by a rule (klaxon.grading): keyword patterns per element of the fault's recorded cause, written and committed before the live runs. Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: the provider's charge and refund API hangs (5 s, then 503), and our payments API has no circuit breaker: every payment waits through 3 timed-out attempts, the API's worker threads fill up, and even its health checks slow down",
+    "  hypothesis: fake-provider, which stands for the outside payment provider, suddenly stopped answering POST /v1/payments and /v1/refunds at about 02:42. Its container still reports running and healthy, so it is hanging rather than down. payments-api gives each provider call 3 s and tries 3 times, so each request now takes about 9 to 16 s and then returns 503 ('provider unavailable; payment left pending'). That produces the 74% 5xx rate and the 10 s p95. Before the stall, provider calls returned 200 in about 5 ms (p95), with occasional 500s, so the change was abrupt rather than a gradual overload. No deploy lines up with it: the whole stack was created at 02:39:46. payments-api's own health check now fails, probably because its workers are tied up waiting on the provider; I did not confirm this. Still open: why the provider stalled, which we cannot see from our side. Also open: whether the timed-out requests reached the provider and were charged there. I did not run the money check.",
+    "  named    (required) where: the payment provider",
+    "  named    (required) what: it hangs or does not answer",
+    "  named    (required) how: our API waits on it, and nothing fails fast",
+    "  proposed fix: other on fake-provider (external payment provider) and the payments-api provider client; fits the remedy: False",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "Cleared at t=187.2 s: {\"provider\": \"answering again\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}

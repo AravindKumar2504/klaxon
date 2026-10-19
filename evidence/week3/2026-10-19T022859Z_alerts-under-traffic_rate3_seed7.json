@@ -1,0 +1,1491 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic and no fault, with the alert rules of klaxon.alerts evaluated again and again. No model was called. Synthetic data, a simulated provider.",
+  "rerun_command": "python -m klaxon.fault_runs quiet --minutes 5",
+  "ran_at_utc": "2026-10-19T02:23:09+00:00",
+  "ran_at_local": "2026-10-18T19:23:09-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "3e5af3ebfa75bc4bd59345d252fc1f43622d6f6e04c09deffaf2e47d66c5bf07",
+  "stack_files_sha256": "897aca468182df7564a233cefbdaedf1418cf30416975029c8e73372e711e6d8",
+  "git_commit": "853feda11a4271303a65787dfda146dd7544bc3c",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:af7b2daa51229aae762e4fc25f4c485cf5b54c6776b3fa70deef2ac5f11b160e"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:af7b2daa51229aae762e4fc25f4c485cf5b54c6776b3fa70deef2ac5f11b160e"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:af7b2daa51229aae762e4fc25f4c485cf5b54c6776b3fa70deef2ac5f11b160e"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:af7b2daa51229aae762e4fc25f4c485cf5b54c6776b3fa70deef2ac5f11b160e"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:af7b2daa51229aae762e4fc25f4c485cf5b54c6776b3fa70deef2ac5f11b160e"
+      }
+    ]
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "9b792075"
+  },
+  "minutes": 5.0,
+  "evaluations": [
+    {
+      "seconds": 61.2,
+      "at_utc": "2026-10-19T02:24:10Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.036,
+            "requests_per_second": 2.98,
+            "share": 0.012
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 77.1,
+      "at_utc": "2026-10-19T02:24:26Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.08,
+            "requests_per_second": 3.323,
+            "share": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 93.2,
+      "at_utc": "2026-10-19T02:24:42Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.1,
+            "requests_per_second": 3.339,
+            "share": 0.03
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 1.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 109.1,
+      "at_utc": "2026-10-19T02:24:58Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.14,
+            "requests_per_second": 3.358,
+            "share": 0.042
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 125.1,
+      "at_utc": "2026-10-19T02:25:14Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.14,
+            "requests_per_second": 3.298,
+            "share": 0.042
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 141.1,
+      "at_utc": "2026-10-19T02:25:30Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.358,
+            "share": 0.018
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 157.2,
+      "at_utc": "2026-10-19T02:25:46Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.438,
+            "share": 0.012
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 173.2,
+      "at_utc": "2026-10-19T02:26:02Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.02,
+            "requests_per_second": 3.398,
+            "share": 0.006
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 189.2,
+      "at_utc": "2026-10-19T02:26:18Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.598,
+            "share": 0.011
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 205.2,
+      "at_utc": "2026-10-19T02:26:34Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.578,
+            "share": 0.011
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 221.2,
+      "at_utc": "2026-10-19T02:26:50Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.578,
+            "share": 0.011
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 237.2,
+      "at_utc": "2026-10-19T02:27:06Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.338,
+            "share": 0.018
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 253.2,
+      "at_utc": "2026-10-19T02:27:22Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.377,
+            "share": 0.018
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 269.2,
+      "at_utc": "2026-10-19T02:27:38Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 2.818,
+            "share": 0.014
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 285.2,
+      "at_utc": "2026-10-19T02:27:54Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 2.758,
+            "share": 0.022
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 301.2,
+      "at_utc": "2026-10-19T02:28:10Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.08,
+            "requests_per_second": 2.718,
+            "share": 0.029
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 317.2,
+      "at_utc": "2026-10-19T02:28:26Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.08,
+            "requests_per_second": 2.857,
+            "share": 0.028
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 333.2,
+      "at_utc": "2026-10-19T02:28:42Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 2.757,
+            "share": 0.014
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "seconds": 349.2,
+      "at_utc": "2026-10-19T02:28:58Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.0,
+            "requests_per_second": 2.778,
+            "share": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "alerts_fired": 0,
+  "conditions_held": 0,
+  "evaluations_with_problems": 0,
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 17,
+      "double_clicks.ran_first": 14,
+      "double_clicks.sent": 31,
+      "not_sent.refunds": 2,
+      "payments.arrived": 1029,
+      "payments.succeeded": 1029,
+      "refunds.succeeded": 105,
+      "retries": 36,
+      "retries.after_409": 14,
+      "retries.after_503": 22
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found"
+}

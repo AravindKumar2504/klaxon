@@ -19,7 +19,7 @@ from klaxon.agent import loop
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.claude_code import find_claude
 from klaxon.agent.contract import Diagnosis, Evidence, ProposedFix
-from klaxon.agent.model import ModelError, ScriptedModel
+from klaxon.agent.model import ModelError, ScriptedModel, text_sha256
 from klaxon.agent.tools import make_tools
 from klaxon.agent.trace import read_trace
 from klaxon.traffic import Settings
@@ -532,3 +532,38 @@ def _fired(world):
         evaluation = alerting.evaluate()
     assert evaluation.alert is not None
     return evaluation
+
+
+# The live runs on the faults, replayed: regression tests from evidence (STATUS, week 3 item 4)
+
+FAULT_RUNS = {
+    "duplicate-delivery": "2026-10-19T022933Z_fault-run_duplicate-delivery",
+    "poison-message": "2026-10-19T023414Z_fault-run_poison-message",
+    "provider-outage": "2026-10-19T024001Z_fault-run_provider-outage",
+}
+
+
+@pytest.mark.parametrize("fault", sorted(FAULT_RUNS))
+def test_each_live_fault_run_replays_exactly_and_grades_the_same(fault, tmp_path):
+    """Replies received from Claude on 2026-10-19 UTC (claude-opus-5-5) and the tool results of that run, served
+    again: the loop must make the same decisions. Nothing is called. A change to the system prompt means no recorded
+    reply can match it: then this skips, saying why. A change to the grading rule shows here as a failure."""
+    folder = loop.REPO / "evidence" / "week3" / FAULT_RUNS[fault]
+    recorded = read_trace(folder / loop.TRACE)
+    specs = mc.ReplayTools(folder / loop.TOOL_RESULTS).open()
+    if text_sha256(loop.system_prompt(loop.allowed_tools(specs))) != recorded[0]["system"]["sha256"]:
+        pytest.skip("the system prompt changed since the fault runs: record new runs to replay")
+    result, whole, differences = loop.replay(folder, tmp_path / "replay.jsonl")
+    assert (whole, differences) == (True, [])
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert result.reason == "diagnosed" and (result.steps, result.tool_calls) == (
+        saved["loop"]["steps"],
+        saved["loop"]["tool_calls"],
+    )
+    assert recorded[0]["source"] == "claude-code" and recorded[0]["model"] == "claude-opus-5-5"
+    # The loop got exactly the alert the rules raised, at the first evaluation that fired after the injection.
+    fired = [e for e in saved["evaluations"] if e["phase"] == "during" and e["alert"] is not None]
+    assert recorded[0]["extra"]["alert"] == saved["alert"] == fired[0]["alert"]
+    # The rule, run again on the diagnosis the trace kept, says what the run recorded.
+    assert grading.compare(fault, recorded[-1]["diagnosis"]) == saved["comparison"]
+    assert saved["fault"]["name"] == fault and saved["cleared"] is not None

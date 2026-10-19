@@ -1,0 +1,756 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic, one fault from klaxon.faults injected on purpose, an alert raised by klaxon.alerts from what the stack showed, and one live run of Klaxon's loop (Claude on Aravind's seat: recorded responses, not a simulation). Synthetic data, a simulated provider, no real money. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model.",
+  "what": "One run of Klaxon's first loop on a fault injected on purpose: the alert the rules raised, Claude on Aravind's seat, read-only tools on this Mac's stack.",
+  "fault_name": "poison-message",
+  "rerun_command": "python -m klaxon.fault_runs run poison-message --steps 10 --tool-calls 8",
+  "ran_at_utc": "2026-10-19T02:34:14+00:00",
+  "ran_at_local": "2026-10-18T19:34:14-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "3e5af3ebfa75bc4bd59345d252fc1f43622d6f6e04c09deffaf2e47d66c5bf07",
+  "stack_files_sha256": "897aca468182df7564a233cefbdaedf1418cf30416975029c8e73372e711e6d8",
+  "git_commit": "853feda11a4271303a65787dfda146dd7544bc3c",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a145222baa11e53277a2b0c0434cb6bfdb28f081f2ee4152b933d749950da58e"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a145222baa11e53277a2b0c0434cb6bfdb28f081f2ee4152b933d749950da58e"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a145222baa11e53277a2b0c0434cb6bfdb28f081f2ee4152b933d749950da58e"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a145222baa11e53277a2b0c0434cb6bfdb28f081f2ee4152b933d749950da58e"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a145222baa11e53277a2b0c0434cb6bfdb28f081f2ee4152b933d749950da58e"
+      }
+    ]
+  },
+  "fault": {
+    "name": "poison-message",
+    "title": "The ledger stops booking: a poison message",
+    "cause": "a deploy of the ledger consumer that retries unreadable messages forever (BAD_EVENTS=retry), then one unreadable event from the provider (a payment.updated with its amount as a decimal string): the ledger consumer is stuck on it, and books nothing behind it",
+    "expected_symptoms": [
+      "the ledger's lag climbs on every partition: one consumer reads all three, and it is stuck on that one message (head-of-line blocking); the payment confirmer keeps up",
+      "the ledger's retries climb, with 'could not book; will retry the same message' errors for one offset",
+      "the confirmer dead-letters the same event as unreadable; the ledger never does",
+      "the ledger consumer turns unhealthy: its heartbeat stops while it retries",
+      "the money check cannot settle (exit 2); without waiting, the events behind the poison look lost"
+    ],
+    "expected_money": {
+      "during": "could not run",
+      "after": "passed",
+      "quiet": "passed"
+    },
+    "remedy": "roll the ledger consumer back to dead-lettering: the poison goes to the dead-letter topic, the backlog drains, and the money check passes again"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "3073b660"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 76.7,
+    "injection_took": 2.7,
+    "alert_at": 171.5,
+    "loop_ended_at": 217.1,
+    "cleared_at": 219.1
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "seconds": 60.7,
+      "at_utc": "2026-10-19T02:35:14Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.052,
+            "requests_per_second": 3.026,
+            "share": 0.017
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "seconds": 76.7,
+      "at_utc": "2026-10-19T02:35:30Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.158,
+            "share": 0.019
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "seconds": 109.7,
+      "at_utc": "2026-10-19T02:35:48Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.12,
+            "requests_per_second": 3.398,
+            "share": 0.035
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 21.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "could not settle"
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "seconds": 140.5,
+      "at_utc": "2026-10-19T02:36:19Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.12,
+            "requests_per_second": 3.298,
+            "share": 0.036
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 124.0
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "The ledger consumer group is 124 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+          "in_a_row": 1,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "could not settle"
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "seconds": 171.5,
+      "at_utc": "2026-10-19T02:36:50Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.02,
+            "requests_per_second": 3.158,
+            "share": 0.006
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 271.0
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "The ledger consumer group is 271 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+          "in_a_row": 2,
+          "firing": true
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "could not settle"
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "ConsumerLagHigh",
+        "summary": "The ledger consumer group is 271 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+        "fired_at": "2026-10-19T02:36:50Z"
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 309.7,
+      "at_utc": "2026-10-19T02:39:23Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.08,
+            "requests_per_second": 2.919,
+            "share": 0.027
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "injected": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_BAD_EVENTS": "retry",
+    "poison": {
+      "event_id": "evt_000260",
+      "payment_id": "pay_000238",
+      "type": "payment.updated",
+      "amount_cents": "20.67"
+    }
+  },
+  "cleared": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "idempotent",
+    "LEDGER_BAD_EVENTS": "dead_letter"
+  },
+  "alert": {
+    "name": "ConsumerLagHigh",
+    "summary": "The ledger consumer group is 271 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+    "fired_at": "2026-10-19T02:36:50Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.85",
+    "steps": 8,
+    "tool_calls": 7,
+    "seconds": 45.573,
+    "diagnosis": {
+      "hypothesis": "Provider event evt_000260 (provider-events partition 1, offset 113) has an invalid amount: 'amount must be positive integer cents'. The webhook-receiver accepted and queued it at about 02:35:33. ledger-consumer had been redeployed at 02:35:31 with BAD_EVENTS=retry. With that setting it retries the same message forever, backing off up to 15s, and never commits past it. While it waits, it stops processing every partition: the posted rate fell to 0 by about 02:36:34. So the ledger group's lag grows on all three partitions as new events arrive (0, then 91, then 305), which fires ConsumerLagHigh. payment-confirmer runs with BAD_EVENTS=dead_letter. It dead-lettered the same message and keeps up. Still open: why the provider sent a non-positive or non-integer amount, and whether the earlier ledger configuration also used retry.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (group) (klaxon_kafka_consumer_lag)",
+            "minutes": 30
+          },
+          "shows": "The ledger group's lag was 0 at 02:35:08, 91 at 02:36:08 and 305 at 02:37:08, so the alert is real and the lag is growing."
+        },
+        {
+          "call_id": "c2",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "ledger-consumer was redeployed at 02:35:31 with LEDGER_HANDLER=idempotent and BAD_EVENTS=retry. payment-confirmer uses BAD_EVENTS=dead_letter."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"ledger-consumer\"} | severity_text =~ \"ERROR|WARN\"",
+            "minutes": 10,
+            "limit": 20
+          },
+          "shows": "ledger-consumer logs 'could not book; will retry the same message' for provider-events/1@113, attempts 3 to 11, error 'amount must be positive integer cents'."
+        },
+        {
+          "call_id": "c4",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"payment-confirmer\"} | severity_text =~ \"ERROR|WARN\"",
+            "minutes": 10,
+            "limit": 10
+          },
+          "shows": "payment-confirmer dead-lettered the same message, provider-events/1@113, with the same amount error."
+        },
+        {
+          "call_id": "c5",
+          "tool": "get_trace",
+          "arguments": {
+            "trace_id": "f4419bd745540e14602e46667d38a862"
+          },
+          "shows": "The trace identifies the message as event evt_000260. The receiver queued it with HTTP 200. The ledger span outcome is will_retry 13 or more times over 105s; the confirmer outcome is dead_lettered."
+        },
+        {
+          "call_id": "c6",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (group, partition) (klaxon_kafka_consumer_lag)",
+            "minutes": 0
+          },
+          "shows": "The lag is spread over all partitions (131, 138, 127), so the whole ledger consumer is blocked, not only partition 1."
+        },
+        {
+          "call_id": "c7",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (consumer, outcome) (rate(klaxon_consumer_events_total[1m]))",
+            "minutes": 5
+          },
+          "shows": "The ledger posted and already_processed rates fell to 0 by 02:36:34. payment-confirmer kept processing at about 3 events/s."
+        }
+      ],
+      "confidence": 0.85,
+      "proposed_fix": {
+        "kind": "config_change",
+        "target": "ledger-consumer",
+        "summary": "1. Redeploy ledger-consumer with BAD_EVENTS=dead_letter, as payment-confirmer has. It will then dead-letter evt_000260 and drain the backlog; the idempotent handler makes reprocessing safe. 2. Inspect evt_000260 on the dead-letter queue and in the provider's records. 3. Book or confirm it by hand (data repair) once the correct amount is known. 4. Run money_check afterwards. 5. As a follow-up, consider validating amounts in webhook-receiver.",
+        "applied": false
+      },
+      "blast_radius": "Only ledger-consumer changes. evt_000260 will be absent from the ledger until it is repaired by hand, so money_check will report it as unposted. Draining about 300 events causes a short burst of load on Postgres. If other malformed events exist, they will also be dead-lettered rather than block the consumer.",
+      "rollback_plan": "Redeploy ledger-consumer with its previous settings (BAD_EVENTS=retry, same image sha256:a145222baa11). Its committed offsets are kept, so nothing is lost. Any dead-lettered events can be replayed from the dead-letter queue once they are fixed."
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading): keyword patterns per element of the fault's recorded cause, written and committed before the live runs. Not a person and not a model: it reads words, not meaning.",
+    "fault": "poison-message",
+    "recorded_cause": "a deploy of the ledger consumer that retries unreadable messages forever (BAD_EVENTS=retry), then one unreadable event from the provider (a payment.updated with its amount as a decimal string): the ledger consumer is stuck on it, and books nothing behind it",
+    "remedy": "roll the ledger consumer back to dead-lettering: the poison goes to the dead-letter topic, the backlog drains, and the money check passes again",
+    "verdict": "names the cause",
+    "hypothesis": "Provider event evt_000260 (provider-events partition 1, offset 113) has an invalid amount: 'amount must be positive integer cents'. The webhook-receiver accepted and queued it at about 02:35:33. ledger-consumer had been redeployed at 02:35:31 with BAD_EVENTS=retry. With that setting it retries the same message forever, backing off up to 15s, and never commits past it. While it waits, it stops processing every partition: the posted rate fell to 0 by about 02:36:34. So the ledger group's lag grows on all three partitions as new events arrive (0, then 91, then 305), which fires ConsumerLagHigh. payment-confirmer runs with BAD_EVENTS=dead_letter. It dead-lettered the same message and keeps up. Still open: why the provider sent a non-positive or non-integer amount, and whether the earlier ledger configuration also used retry.",
+    "elements": [
+      {
+        "element": "where: the ledger consumer",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "what: one message it cannot read",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "how: it retries that message forever, so nothing behind it is booked",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "the deploy that brought it",
+        "required": false,
+        "named": true
+      }
+    ],
+    "proposed_fix": {
+      "kind": "config_change",
+      "target": "ledger-consumer"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "rollback",
+        "config_change"
+      ],
+      "target_matches": "ledger"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 15,
+      "double_clicks.ran_first": 11,
+      "double_clicks.sent": 26,
+      "not_sent.refunds": 1,
+      "payments.arrived": 933,
+      "payments.succeeded": 933,
+      "refunds.succeeded": 94,
+      "retries": 33,
+      "retries.after_409": 11,
+      "retries.after_503": 22
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "printed_output": [
+    "Klaxon week 3: the first loop on a fault injected on purpose: poison-message",
+    "REAL RUN on this Mac's Docker Compose stack, with synthetic traffic. The loop's replies are recorded responses from Claude on Aravind's seat. Synthetic data, a simulated provider, no real money.",
+    "",
+    "The fault: The ledger stops booking: a poison message",
+    "  recorded cause: a deploy of the ledger consumer that retries unreadable messages forever (BAD_EVENTS=retry), then one unreadable event from the provider (a payment.updated with its amount as a decimal string): the ledger consumer is stuck on it, and books nothing behind it",
+    "",
+    "The alert rules (t counts from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.7 s  p95 0.025 s; 5xx share 0.017; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  76.7 s  p95 0.025 s; 5xx share 0.019; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t= 109.7 s  p95 0.025 s; 5xx share 0.035; lag ledger 21.0, payment-confirmer 0.0; money check could not settle; firing: none",
+    "  during t= 140.5 s  p95 0.025 s; 5xx share 0.036; lag ledger 124.0, payment-confirmer 0.0; money check could not settle; firing: none",
+    "  during t= 171.5 s  p95 0.024 s; 5xx share 0.006; lag ledger 271.0, payment-confirmer 0.0; money check could not settle; firing: ConsumerLagHigh (ledger)",
+    "  after  t= 309.7 s  p95 0.024 s; 5xx share 0.027; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  the fault was injected at t=76.7 s: {\"redeployed\": \"ledger-consumer\", \"LEDGER_BAD_EVENTS\": \"retry\", \"poison\": {\"event_id\": \"evt_000260\", \"payment_id\": \"pay_000238\", \"type\": \"payment.updated\", \"amount_cents\": \"20.67\"}}",
+    "",
+    "Alert ConsumerLagHigh, fired at 2026-10-19T02:36:50Z: The ledger consumer group is 271 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+    "",
+    "The loop stopped on diagnosed after 8 steps, 7 tool calls and 45.6 s.",
+    "  hypothesis: Provider event evt_000260 (provider-events partition 1, offset 113) has an invalid amount: 'amount must be positive integer cents'. The webhook-receiver accepted and queued it at about 02:35:33. ledger-consumer had been redeployed at 02:35:31 with BAD_EVENTS=retry. With that setting it retries the same message forever, backing off up to 15s, and never commits past it. While it waits, it stops processing every partition: the posted rate fell to 0 by about 02:36:34. So the ledger group's lag grows on all three partitions as new events arrive (0, then 91, then 305), which fires ConsumerLagHigh. payment-confirmer runs with BAD_EVENTS=dead_letter. It dead-lettered the same message and keeps up. Still open: why the provider sent a non-positive or non-integer amount, and whether the earlier ledger configuration also used retry.",
+    "  confidence: 0.85",
+    "  proposed fix (not applied): config_change ledger-consumer: 1. Redeploy ledger-consumer with BAD_EVENTS=dead_letter, as payment-confirmer has. It will then dead-letter evt_000260 and drain the backlog; the idempotent handler makes reprocessing safe. 2. Inspect evt_000260 on the dead-letter queue and in the provider's records. 3. Book or confirm it by hand (data repair) once the correct amount is known. 4. Run money_check afterwards. 5. As a follow-up, consider validating amounts in webhook-receiver.",
+    "",
+    "Compared by a rule (klaxon.grading): keyword patterns per element of the fault's recorded cause, written and committed before the live runs. Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: a deploy of the ledger consumer that retries unreadable messages forever (BAD_EVENTS=retry), then one unreadable event from the provider (a payment.updated with its amount as a decimal string): the ledger consumer is stuck on it, and books nothing behind it",
+    "  hypothesis: Provider event evt_000260 (provider-events partition 1, offset 113) has an invalid amount: 'amount must be positive integer cents'. The webhook-receiver accepted and queued it at about 02:35:33. ledger-consumer had been redeployed at 02:35:31 with BAD_EVENTS=retry. With that setting it retries the same message forever, backing off up to 15s, and never commits past it. While it waits, it stops processing every partition: the posted rate fell to 0 by about 02:36:34. So the ledger group's lag grows on all three partitions as new events arrive (0, then 91, then 305), which fires ConsumerLagHigh. payment-confirmer runs with BAD_EVENTS=dead_letter. It dead-lettered the same message and keeps up. Still open: why the provider sent a non-positive or non-integer amount, and whether the earlier ledger configuration also used retry.",
+    "  named    (required) where: the ledger consumer",
+    "  named    (required) what: one message it cannot read",
+    "  named    (required) how: it retries that message forever, so nothing behind it is booked",
+    "  named    (optional) the deploy that brought it",
+    "  proposed fix: config_change on ledger-consumer; fits the remedy: True",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "Cleared at t=219.1 s: {\"redeployed\": \"ledger-consumer\", \"LEDGER_HANDLER\": \"idempotent\", \"LEDGER_BAD_EVENTS\": \"dead_letter\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}
