@@ -676,3 +676,110 @@ def test_a_request_sealed_again_without_its_confidence_is_refused_cleanly(tmp_pa
     (tmp_path / gate.REQUEST).write_text(json.dumps(request))
     assert gate.approve(tmp_path, lambda: ScriptedTerminal(request["id"]), Clocks().time) == 2
     assert "not in the shape a run writes" in capsys.readouterr().err
+
+
+# Week 4, item 2: an undo proposed after a failed verification, and the decision the run took, for its evidence
+
+
+def done_rollback(folder):
+    """An approved rollback that ran, after a fault's bad deploy, answered by a scripted approver."""
+    docker, deployer = after_a_bad_deploy()
+    outcome = act(folder, docker, deployer)
+    assert outcome.result == "done"
+    return docker, deployer, outcome
+
+
+def test_a_failed_verification_proposes_the_undo_and_the_gate_refuses_it_as_a_persons_call(tmp_path):
+    docker, deployer, done = done_rollback(tmp_path)
+    ups = len(docker.ups())
+    outcome = gate.propose_undo(tmp_path, done, deployer, "the verification failed: made up", Clocks().time)
+    assert (outcome.result, outcome.request_id) == ("refused", done.request_id)
+    assert outcome.detail == (
+        "Klaxon will not undo it: rolling ledger-consumer back would deploy a known-bad setting (LEDGER_HANDLER=naive):"
+        " Klaxon never deploys one; a person can, by hand. Undoing it is a person's call: Klaxon asks nobody to"
+        " approve it."
+    )
+    assert len(docker.ups()) == ups and docker.settings(LEDGER) == GOOD[LEDGER]  # nothing ran
+    assert events(tmp_path)[-2:] == ["undo proposed", "undo refused"]
+    assert [path.name for path in tmp_path.iterdir() if path.name.startswith("approval-request")] == [gate.REQUEST]
+
+
+def test_an_undo_is_refused_once_the_service_was_deployed_again_since_klaxons_rollback(tmp_path):
+    docker, deployer, done = done_rollback(tmp_path)
+    deployer.deploy(LEDGER, NAIVE, by="klaxon.faults")  # someone deployed since: that deploy is not Klaxon's
+    outcome = gate.propose_undo(tmp_path, done, deployer, "made up", Clocks().time)
+    assert outcome.result == "refused" and "was deployed again since Klaxon's rollback" in outcome.detail
+
+
+def test_an_undo_is_refused_once_the_container_was_recreated_outside_the_log(tmp_path):
+    docker, deployer, done = done_rollback(tmp_path)
+    docker.start(LEDGER, GOOD[LEDGER])  # a recreate by hand: the log's latest line is still Klaxon's
+    outcome = gate.propose_undo(tmp_path, done, deployer, "made up", Clocks().time)
+    assert outcome.result == "refused" and "recreated outside the log" in outcome.detail
+
+
+def test_an_undo_klaxon_could_run_is_refused_too_because_its_request_is_not_built(tmp_path, monkeypatch):
+    """Not this system: with no known-bad values, undoing the rollback would be a rollback Klaxon may make. It still
+    runs nothing, and asks nobody: an approval request for an undo, saying why, is not built."""
+    from klaxon.patient import deploys
+
+    docker, deployer, done = done_rollback(tmp_path)
+    ups = len(docker.ups())
+    monkeypatch.setattr(deploys, "KNOWN_BAD", {})
+    outcome = gate.propose_undo(tmp_path, done, deployer, "made up", Clocks().time)
+    assert outcome.result == "refused" and "an approval request for an undo is not built" in outcome.detail
+    assert gate.PERSONS_CALL in outcome.detail
+    assert len(docker.ups()) == ups and docker.settings(LEDGER) == GOOD[LEDGER]
+    assert events(tmp_path)[-1] == "undo refused"
+
+
+@pytest.mark.parametrize("result", ["denied", "expired", "not run", "failed", "refused", "no action"])
+def test_only_an_action_that_ran_can_be_undone(tmp_path, result):
+    docker, deployer = after_a_bad_deploy()
+    with pytest.raises(gate.GateError, match="only an action that ran"):
+        gate.propose_undo(tmp_path, gate.Outcome(result, "made up", "r-0000"), deployer, "made up")
+
+
+def test_an_undo_of_a_deploy_that_names_no_known_service_is_refused(tmp_path):
+    from klaxon.agent import actions
+
+    _, deployer = after_a_bad_deploy()
+    for done in ({}, {"service": "postgres", "seq": 1}, None):
+        with pytest.raises(actions.ActionRefused, match="there is no deploy of Klaxon's to undo"):
+            actions.plan_undo(done, deployer)
+
+
+def test_the_run_says_whether_make_approve_wrote_the_decision_it_took(tmp_path):
+    done_rollback(tmp_path)
+    found = gate.decided(tmp_path)
+    assert found["decision"] == "approved" and found["how"] == gate.TYPED and found["written_by_make_approve"] is True
+    assert found["at"] == decision(tmp_path)["at"]
+
+
+def test_a_decision_no_line_of_make_approve_names_is_said_as_such(tmp_path):
+    docker, deployer = after_a_bad_deploy()
+
+    def forged():
+        request = gate.read_request(tmp_path)
+        written = {
+            "label": gate.DECISION_LABEL,
+            "request_id": request["id"],
+            "request_sha256": request["sha256"],
+            "decision": "approved",
+            "at": request["created_at"],
+            "how": gate.TYPED,
+        }
+        (tmp_path / gate.DECISION).write_text(json.dumps(written))
+
+    act(tmp_path, docker, deployer, answer=None, before=forged)
+    assert gate.decided(tmp_path)["written_by_make_approve"] is False
+
+
+def test_with_no_decision_taken_there_is_none_to_say(tmp_path):
+    assert gate.decided(tmp_path) is None  # no log at all
+    docker, deployer = after_a_bad_deploy()
+    act(tmp_path, docker, deployer, answer=None)  # expired: the run's own decision, taken by no one
+    assert gate.decided(tmp_path) is None
+    (tmp_path / gate.LOG).write_text("{not json\n")
+    with pytest.raises(gate.GateError, match="cannot be read"):
+        gate.decided(tmp_path)

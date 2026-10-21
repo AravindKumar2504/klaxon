@@ -105,14 +105,14 @@ replay-run: ## replay a recorded run offline and check it reproduces: make repla
 alerts: ## the alert rules (symptoms only) read the running stack once, and print what they read; reads only (WATCH=seconds)
 	$(PY) -m klaxon.alerts $${WATCH:+--watch "$$WATCH"}
 
-alerts-under-traffic: ## traffic and no fault: do the alert rules stay quiet? (MINUTES=5, RATE=3), saved to evidence/week3/
+alerts-under-traffic: ## traffic and no fault: do the alert rules stay quiet? (MINUTES=5, RATE=3), saved to evidence/week4/
 	$(PY) -m klaxon.fault_runs quiet $${MINUTES:+--minutes "$$MINUTES"} $${RATE:+--rate "$$RATE"}
 
-investigate-fault: ## one live run of the loop on a fault, then cleared (Aravind's seat, his OK first): make investigate-fault FAULT=poison-message
+investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only)
 	$(PY) -m klaxon.fault_runs run "$$FAULT" $${STEPS:+--steps "$$STEPS"} $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} \
-		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"}
+		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions}
 
-grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline: make grade-run RUN=evidence/week3/<folder>
+grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline: make grade-run RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.fault_runs grade "$$RUN"
 
 approve: ## approve or deny the action a run asks for, in your own terminal, by typing its request id: make approve RUN=<folder>

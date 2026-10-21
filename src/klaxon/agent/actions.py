@@ -12,7 +12,8 @@ The last one matters after a fault was cleared: the latest deploy then replaced 
 "going back" would deploy it again. Klaxon never does; a person can, by hand.
 
 The plan says the exact change, which deploy it undoes, and how to undo it in turn: roll back again, unless that
-would deploy a known-bad setting, which only a person may do.
+would deploy a known-bad setting, which only a person may do. plan_undo() plans that undo, after a failed
+verification (klaxon.agent.verify), with the same rules: in this system it is always refused.
 
 run() acts, and only on a plan a person approved: the gate is its one caller. A request can wait ten minutes, so
 the deploy itself checks, under the deploy lock and right before it acts, that what the plan was made on still
@@ -23,12 +24,13 @@ stopped (deploys.py says why). The rollback is itself a deploy, logged with the 
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 
 from klaxon.agent.catalog import CATALOG
 from klaxon.agent.contract import check
 from klaxon.agent.tools import clean_text
-from klaxon.patient.deploys import Deploy, DeployChanged, Deployer, DeployError, Expect, known_bad
+from klaxon.patient.deploys import SERVICES, Deploy, DeployChanged, Deployer, DeployError, Expect, known_bad
 from klaxon.patient.stack import StackError
 
 
@@ -120,6 +122,25 @@ def _listed(settings: dict[str, str]) -> str:
 
 
 PLANNERS = {"rollback_deploy": _plan_rollback}  # one per catalog action (a test checks)
+
+
+def plan_undo(done: Mapping, deployer: Deployer) -> Plan:
+    """The plan to undo a rollback the gate ran (week 4, item 2: after a failed verification): roll the service back
+    again, to what that rollback replaced. Reads only. Refused unless the service's latest logged deploy is still
+    that rollback, from the same container: a deploy made since is not Klaxon's to undo. Then every rule of a
+    rollback holds: in this system every such undo would deploy a known-bad setting, so it is always refused."""
+    service = done.get("service") if isinstance(done, Mapping) else None
+    if service not in SERVICES:
+        raise ActionRefused("there is no deploy of Klaxon's to undo")
+    try:
+        latest = deployer.log.latest(service)
+    except DeployError as exc:
+        raise ActionRefused(f"the deploy log could not be read: {clean_text(str(exc), 300)}") from None
+    if latest is None or latest.seq != done.get("seq") or latest.container != done.get("container"):
+        raise ActionRefused(
+            f"{service} was deployed again since Klaxon's rollback: that deploy is not Klaxon's to undo"
+        )
+    return plan("rollback_deploy", {"service": service}, deployer)  # it checks docker is this Mac's before reading it
 
 
 def run(approved: Plan, deployer: Deployer, by: str) -> Deploy:

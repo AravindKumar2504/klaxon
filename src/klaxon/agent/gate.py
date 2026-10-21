@@ -13,6 +13,8 @@ For a run whose diagnosis names an action (fix_action, klaxon.agent.contract):
        sleeps). A decision counts only for the request it names, whole: one that names another request, or this
        one changed after it was saved, is denied.
     5. An approved plan runs, and only if what it was made on still holds (klaxon.agent.actions.run).
+    6. After it, code verifies (klaxon.agent.verify). A failed verification proposes undoing the action, through
+       this gate (propose_undo); in this system every undo is a person's call, so nobody is asked.
 
 The decision file can be written once. Every step goes to the folder's log (gate.jsonl): the request; each
 decision `make approve` writes; the decision the run takes, with the decision file's own SHA-256; what ran and
@@ -62,6 +64,7 @@ DECISION_KEYS = {"label", "request_id", "request_sha256", "decision", "at", "how
 REQUEST_LABEL = "An approval request from Klaxon: a write action that runs only if a person approves it."
 DECISION_LABEL = "A decision on one approval request."
 TYPED = "typed at a terminal"
+BY = "Klaxon, approved request"  # how the deploy log names a deploy the gate ran, before the request's id
 
 
 class GateError(RuntimeError):
@@ -388,7 +391,7 @@ def act(
         return Outcome(decision.decision, decision.how, request["id"])
     log(folder, "running", now, request=request["id"], change=planned.change)
     try:
-        record = actions.run(planned, deployer, by=f"Klaxon, approved request {request['id']}")
+        record = actions.run(planned, deployer, by=f"{BY} {request['id']}")
     except ActionRefused as exc:
         log(folder, "not run", now, request=request["id"], why=str(exc))
         return Outcome("not run", str(exc), request["id"])
@@ -401,6 +404,58 @@ def act(
         raise
     log(folder, "done", now, request=request["id"], deploy=asdict(record))
     return Outcome("done", planned.change, request["id"], asdict(record))
+
+
+def decided(folder: Path) -> dict | None:
+    """The decision the run took, as its log says, and whether `make approve` wrote it: a line of `make approve`
+    names the same SHA-256. None when the run took none (no request, or no answer: an expiry is the run's own)."""
+    try:
+        text = (Path(folder) / LOG).read_text(encoding="utf-8")
+        lines = [json.loads(line) for line in text.splitlines() if line.strip()]
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        raise GateError("the gate's log cannot be read") from None
+    lines = [line for line in lines if isinstance(line, dict)]
+    taken = [line for line in lines if line.get("event") == "decision taken"]
+    if not taken:
+        return None
+    sha = taken[-1].get("decision_sha256")
+    written = {line.get("decision_sha256") for line in lines if line.get("event") in ("approved", "denied")}
+    return {
+        "decision": taken[-1].get("decision"),
+        "how": taken[-1].get("how"),
+        "at": taken[-1].get("decided_at"),
+        "written_by_make_approve": sha is not None and sha in written,
+    }
+
+
+PERSONS_CALL = "Undoing it is a person's call: Klaxon asks nobody to approve it."
+
+
+def propose_undo(
+    folder: Path, done: Outcome, deployer: Deployer, why: str, now: Callable[[], float] = time.time
+) -> Outcome:
+    """After a failed verification (klaxon.agent.verify): propose undoing a done action, through the gate. The undo
+    is planned as any action is, by code, with the same rules (actions.plan_undo). In this system every undo of a
+    rollback would deploy a known-bad setting, which Klaxon never does: so the proposal is refused, and says plainly
+    that undoing it is a person's call. Nobody is asked, and nothing runs. An undo Klaxon could run would need an
+    approval request of its own, saying why, which is not built: it is refused too."""
+    folder = Path(folder)
+    if done.result != "done" or done.deploy is None:
+        raise GateError("only an action that ran can be undone")
+    log(folder, "undo proposed", now, request=done.request_id, why=why)
+    try:
+        planned = actions.plan_undo(done.deploy, deployer)
+    except ActionRefused as exc:
+        log(folder, "undo refused", now, request=done.request_id, why=str(exc))
+        return Outcome("refused", f"Klaxon will not undo it: {exc}. {PERSONS_CALL}", done.request_id)
+    detail = (
+        f"Klaxon will not undo it: undoing it would {planned.change}, and an approval request for an undo is not"
+        f" built. {PERSONS_CALL}"
+    )
+    log(folder, "undo refused", now, request=done.request_id, why="an approval request for an undo is not built")
+    return Outcome("refused", detail, done.request_id)
 
 
 # The person's side: make approve.
