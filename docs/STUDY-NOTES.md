@@ -569,3 +569,46 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 - *What if Klaxon names the wrong service?* The request shows the exact change before you answer. The plan can only undo that service's latest logged deploy, from the container that deploy made, and never to a known-bad setting.
 - *Why ten minutes?* Long enough to read the request and check the evidence, short enough that a run never waits on a stack that has moved on. And the plan is checked again before it runs.
 - *Why not Kubernetes' own rollback?* The stack runs in Docker Compose until week 6, where `kubectl rollout undo` can replace this deploy log.
+
+## Week 4, item 2 (built 2026-10-20 and 21, offline so far): verification, and the gated runs
+
+**What it is.** Item 1 built the way an action can run: the gate. Item 2 closes the loop around it. After an action that ran, code checks whether it worked: the stack is healthy again, and the money is right. A failed check makes Klaxon propose undoing its action. And the fault runs now let Klaxon act: the harness no longer clears the fault before Klaxon has had its say. All of it was built and tested offline: no stack command and no model call ran. The live runs on faults 1 and 2 wait for your review of item 1, and your OK for each step.
+
+**A gated run, in one breath.** The fault is injected and an alert fires, as in week 3. The loop investigates, now offered one action, `rollback_deploy`. Its diagnosis names it. Once the gate has a plan, the run reads the money check (the damage at the request), and the gate saves the request and waits for you. You run `make approve` and type the id. The rollback runs. Code then reads the money check right away (the damage at the action), waits until the rules are quiet twice in a row and every container is healthy, and reads the money again a minute after the action (the damage after it). Only then does the harness clear the fault, as a safety net: after Klaxon's rollback it finds the good settings already running and changes nothing. The deploy log says who removed the cause.
+
+**The cause removed is not the money right.** These are two questions, and verification answers them apart.
+- *The cause is removed* when nothing the provider made between the action and the last check was booked wrong. That is about the future: no new damage.
+- *The money is right* when the money check passes. That is about the past too: a rollback stops new damage and repairs nothing.
+So after fault 1, the expected answer is: the cause is removed, the money is not right, here is what remains (events counted twice, our books ahead of the provider by their amounts). Repairing it means reversals, a person's job, not week 4's.
+
+**How verification tells old damage from new.** It takes a money check right after the action. Its cutoff (the provider's clock, to the second) is the line. A minute later it takes another. Each finding of the later check is then:
+1. *before the action*, if the first check had it too;
+2. *from before the action, found only by the later check*, if everything it is about (the provider's events, charges, refunds) was made up to the line;
+3. *new*, if something it is about was made after the line, or if it cannot be dated at all.
+The last rule is strict on purpose: Klaxon says "the cause is removed" only when it can show it.
+
+**A rollback does not dedupe the past, and the check waits for it.** The naive ledger handler books every webhook and writes no record of the events it booked (in the live ledger, `pg_ledger.py`, only the idempotent mode writes `processed_events`). Now picture an event the naive handler booked just before the rollback, whose acknowledgement got lost. The provider sends it again a second later. The new, idempotent handler has no record of it, so it books it again: a double posting made after the action, by the right handler, and the rollback was still right. The money check right after the action waits until every webhook up to its cutoff is acknowledged and handled, so it counts that posting: it is damage at the action, not new damage. "Found only by the later check" is for old damage that check did not show. Mostly that is because it could not settle (a backlog still draining after fault 2), so it showed nothing; rarely, a webhook that stalled in the network and landed late. A test shows the re-booking with the first piece's own ledger code.
+
+**Health.** Every container must be healthy (the one-shot `kafka-init` must have exited 0), and the metric rules (latency, errors, lag) must each read their signal with no condition holding, at two rounds in a row, within three minutes. The money rule is left out of health on purpose: after fault 1 it keeps firing for the old damage, and the money is judged on its own.
+
+**The verdict.** Passed: healthy, and the cause removed. Failed: not healthy, or new damage. Could not verify: a money check that could not run, so nobody can say. Failed makes Klaxon propose the undo.
+
+**The undo is always your call here.** The undo is planned by the same code as any rollback, with the same rules. Undoing Klaxon's rollback of fault 1 would deploy `LEDGER_HANDLER=naive` again, a known-bad value. Klaxon never deploys one, so the gate refuses, logs it, and says plainly that undoing it is a person's call. Nobody is asked. An undo Klaxon could run would need an approval request of its own, saying why; it is not built, because no such undo exists in this system, and that branch refuses too.
+
+**Who removed the cause.** The harness reads the deploy log before the fault, before the clearing, and after. Klaxon's rollback is logged as "Klaxon, approved request r-...". If the clearing then logs nothing, Klaxon removed the cause. If the clearing deploys, the harness did (after a denial, say). For a fault whose cause is not a deploy (the outage), only the clearing removes it.
+
+**What the review taught.** It found no way to act without an approval on file, and no undo that can run. Its two medium findings, and three lessons:
+- *A stop signal is not Ctrl-C.* Python runs `finally` blocks on Ctrl-C, not on SIGTERM or SIGHUP: a stopped background run would have left its fault in place, with no evidence. A gated run can wait ten minutes at the gate, so the window grew. Now both signals act as Ctrl-C does.
+- *"Not known" is not a who.* The label said "removed by not known". Every sentence built from a value needs a test of the sentence, not only of the value.
+- *Check your own story against the code.* I had written that an old event booked again would show only after the check right after the action. That check waits for exactly those webhooks, so it counts them. The rule was right; my account of when it matters was not.
+
+Its re-check found two more, both fixed: a run started under `nohup` must keep ignoring SIGHUP, so a signal ignored on purpose stays ignored; and a request whose notice failed (a closed pipe) stayed open, so the request is now closed from the moment it is saved. A safety net has to start where the risk starts.
+
+**What I can say ran (STATUS has the commands and commits).** Offline only, so far: no stack command and no model call. `make test`: 1,564 passed, 111 more than item 1's. Every mutant of every file this item changed was caught: 122 of 122. Six offline runs of the whole gated command, with a scripted approver answering through `make approve`'s real code. A separate Claude reviewed it, then re-checked the fixes. What has not run: the stack, the model, and you. The first gated runs on faults 1 and 2 need your review of item 1 and your OK for each step.
+
+**Likely questions.**
+- *Why not just check the money passes?* After fault 1 it never passes until someone repairs the double postings. A check that demanded it would fail every right rollback.
+- *Why a minute?* At 3 payments a second, a cause still in place shows within a minute: in week 3's fault 1 run, the money check that ended 18 s after the injection began found 7 events counted more than once. The limit is said in the code: a cause that shows only now and then may not show in that minute.
+- *Why is an undatable finding new?* Because "the cause is removed" is a claim Klaxon must be able to back. When it cannot, it says the cause is not removed, and a person looks.
+- *Could Klaxon undo its own rollback without you?* No. The undo goes through the gate's planner, which refuses any known-bad value. And even an undo that passed would not run: its request is not built.
+- *Why does the harness still clear the fault?* A safety net. If you deny the request, or Klaxon names the wrong service, the fault must not stay in place after the run.
