@@ -500,3 +500,12 @@ After his review of item 1 (above), in the same session. Each live step needed h
 - **Fault 2's first request went unanswered** (2026-10-21 09:16 to 09:26 UTC). He was asking what the step was, and why he had to type it when Claude Code runs in auto mode. Claude explained: it is Klaxon's own approval gate, his week 4 choice, not a password, and auto mode covers only Claude's own actions. The request expired, so it was denied; nothing ran, and the harness's clearing removed the cause. The run is kept as evidence of the expiry path.
 - **What to check before approving** (Claude, at his question "how will I know what to approve or to deny?"): in these runs the right fix is known, since each fault was injected on purpose. Approve only when the three lines written by code (the action and its service, the change, and the deploy it undoes) reverse the fault's own deploy; otherwise type `no`. Claude also posted each request's lines and its read of them; the decision stayed his.
 - **Fault 2, again** (Aravind: "okay rerun it now"). He approved request `r-af6d`; verification passed, and the money check passed.
+
+
+## 2026-10-21 (Aravind's review of week 4, item 2)
+
+In item 2's session, at his request ("Walk me through reviewing item 2 now; if I accept it, merge it into main and push"). He answered three questions, choosing an option each:
+
+- **Claude's defaults: all kept** (Aravind: "Keep them all"). Health leaves the money rule out; the money is judged against a check right after the action, with findings that cannot be dated counted as new; the last check comes a minute after the action; every undo is refused here, with no undo request built; gated runs are the default, and `NO_ACTIONS=1` keeps week 3's.
+- **Item 2: accepted** (Aravind: "Accept, I read it"): the study notes and the code listed, after approving both live runs himself.
+- **Merged and pushed** (Aravind: "Merge and push"). `main` fast-forwarded to item 2, with this record on top; `main` only.
