@@ -198,16 +198,17 @@ FAULTS = {
             title="Payments fail: the provider hangs, and our circuit breaker fails fast",
             cause=(
                 f"the provider's charge and refund API hangs ({OUTAGE_DELAY_SECONDS:g} s, then 503): our payments API's"
-                " calls to it time out, each after 3 attempts, until its circuit breaker opens, after the calls for"
-                f" {BREAKER_FAILURES} requests in a row failed; from then on it fails fast, answering 503 'outcome"
+                " calls to it time out, each after 3 attempts, until its circuit breaker opens, after"
+                f" {BREAKER_FAILURES} calls in a row got no answer; from then on it fails fast, answering 503 'outcome"
                 " unknown' at once without calling the provider, and lets one trial call through"
                 f" {BREAKER_OPEN_SECONDS:g} s after it opened, and again after each trial that fails"
             ),
             symptoms=(
                 "clients get 503 'outcome unknown', most of them at once: the 5xx share of POST /payments climbs",
                 "the first calls still wait out their 3 timed-out attempts (about 10 s) until the breaker opens; after"
-                f" that only the trial calls wait, one {BREAKER_OPEN_SECONDS:g} s after each failed one: the p95"
-                " latency may climb for about a minute, then drops",
+                f" that only the trial calls wait, the first {BREAKER_OPEN_SECONDS:g} s after it opened, then one"
+                f" {BREAKER_OPEN_SECONDS:g} s after each that fails: the p95 latency may climb for about a minute, then"
+                " drops",
                 "provider calls end with no answer (timeouts) at first, klaxon.provider.attempts result no_answer;"
                 " then the breaker refuses them, klaxon.provider.refused",
                 "the payments API logs 'circuit breaker open', and its health check keeps passing: once the breaker"

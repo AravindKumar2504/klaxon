@@ -192,7 +192,7 @@ def test_with_its_breaker_a_provider_outage_fails_fast_keeps_the_api_healthy_and
                 assert payments_api_health() == "healthy"
                 time.sleep(5)
             until(lambda: counted_refusals() > refused_before, timeout=60, every=2)  # refused calls, counted
-            assert "circuit breaker open: calls for 5 requests in a row failed" in payments_api_logs()
+            assert "circuit breaker open: 5 provider calls in a row got no answer" in payments_api_logs()
             assert check_live(timeout_seconds=60).report.passed  # nothing was charged, so no money is wrong
         finally:
             faults.get("provider-outage").clear(fault_stack)

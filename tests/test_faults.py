@@ -199,7 +199,7 @@ def test_fault_3_version_2_names_the_breaker_and_keeps_what_version_1_recorded()
     from klaxon.patient.stack import REPO
 
     outage = FAULTS["provider-outage"]
-    assert f"after the calls for {BREAKER_FAILURES} requests in a row failed" in outage.cause
+    assert f"after {BREAKER_FAILURES} calls in a row got no answer" in outage.cause
     assert f"one trial call through {BREAKER_OPEN_SECONDS:g} s after it opened" in outage.cause
     assert outage.remedy.startswith("nothing to change on our side") and outage.describe()["cause"] == outage.cause
     saved = json.loads((REPO / "evidence/week3/2026-10-19T024001Z_fault-run_provider-outage/run.json").read_text())
