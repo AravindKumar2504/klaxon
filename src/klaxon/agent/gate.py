@@ -380,20 +380,20 @@ def act(
     request = make_request(planned, diagnosis, folder, alert, now, timeout)
     if _create_once(folder / REQUEST, request) is None:
         raise GateError("this folder already holds an approval request: one request per run")
-    log(
-        folder,
-        "requested",
-        now,
-        request=request["id"],
-        action=request["action"],
-        change=planned.change,
-        undo=planned.undo,
-        expires_at=request["expires_at"],
-    )
-    say(how_to_answer(folder, request))
-    try:
+    try:  # from here, a run that stops (Ctrl-C, a stop signal, a failed write) closes its request: no later yes counts
+        log(
+            folder,
+            "requested",
+            now,
+            request=request["id"],
+            action=request["action"],
+            change=planned.change,
+            undo=planned.undo,
+            expires_at=request["expires_at"],
+        )
+        say(how_to_answer(folder, request))
         decision = wait(folder, request, timeout, clock, sleep, now)
-    except BaseException:  # the run stops while it waits (Ctrl-C, a stop signal): no later yes may count for it
+    except BaseException:
         _close(folder, request, now)
         raise
     if decision.decision != "approved":
@@ -415,13 +415,13 @@ def act(
     return Outcome("done", planned.change, request["id"], asdict(record))
 
 
-STOPPED = "the run stopped while it waited"
+STOPPED = "the run stopped before it took a decision"
 
 
 def _close(folder: Path, request: Mapping, now: Callable[[], float]) -> None:
-    """Close the request of a run that stopped while it waited: a denial, written once, so `make approve` finds it
-    decided and logs no approval for a run that is gone. A decision that landed first stands as written; the log
-    then shows that no run took it."""
+    """Close the request of a run that stopped before it took a decision: a denial, written once, so `make approve`
+    finds it decided and logs no approval for a run that is gone. A decision that landed first stands as written;
+    the log then shows that no run took it."""
     closed = {
         "label": DECISION_LABEL,
         "request_id": request["id"],

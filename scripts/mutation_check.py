@@ -1657,6 +1657,19 @@ MUTANTS = [
     ("a gated run whose traffic never began is said as week 3's", 'src/klaxon/fault_runs.py',
      '    record.gated = gated is not None  # first: a run whose traffic never starts is still said as gated\n    generator = stack.new_traffic(settings)\n    generator.start()  # a provider out of reach raises here, before any traffic\n',
      '    generator = stack.new_traffic(settings)\n    generator.start()  # a provider out of reach raises here, before any traffic\n    record.gated = gated is not None\n', False),
+    # Week 4, item 2: the review's re-check
+    ('an ignored stop signal is turned into an interrupt', 'src/klaxon/fault_runs.py',
+     '        if signal.getsignal(stop) is not signal.SIG_IGN:\n            before[stop] = signal.signal(stop, interrupt)',
+     '        if True:\n            before[stop] = signal.signal(stop, interrupt)', False),
+    ("the stop signals' handlers are not put back", 'src/klaxon/fault_runs.py',
+     '        for stop, handler in before.items():\n            signal.signal(stop, handler)',
+     '        pass', False),
+    ('the gated command passes an approved action that could not run', 'src/klaxon/fault_runs.py',
+     'in ("not run", "failed"):  # approved, and it did not run',
+     'in ("failed",):  # approved, and it did not run', False),
+    ('a request whose notice fails stays open', 'src/klaxon/agent/gate.py',
+     '    try:  # from here, a run that stops (Ctrl-C, a stop signal, a failed write) closes its request: no later yes counts\n        log(',
+     '    say(how_to_answer(folder, request))\n    try:  # from here, a run that stops (Ctrl-C, a stop signal, a failed write) closes its request: no later yes counts\n        log(', False),
 ]
 
 

@@ -838,3 +838,16 @@ def test_the_caller_hears_right_before_a_request_and_only_when_a_plan_was_made(t
         (tmp_path / name).mkdir()
         gate.act(tmp_path / name, diagnosis, planned_on, ALERT, timeout=0.0, say=[].append, before_asking=before_asking)
     assert heard == [False]  # once, for the plan that was made, before its request was saved
+
+
+def test_a_request_that_could_not_even_be_announced_is_closed(tmp_path):
+    # The re-check's B: the request was saved, then its notice failed (a closed pipe). Nothing would have closed it.
+    docker, deployer = after_a_bad_deploy()
+
+    def broken_pipe(text):
+        raise BrokenPipeError("the reader of the run's output is gone")
+
+    with pytest.raises(BrokenPipeError):
+        gate.act(tmp_path, made_up_diagnosis(), deployer, ALERT, now=Clocks().time, say=broken_pipe)
+    assert (decision(tmp_path)["decision"], decision(tmp_path)["how"]) == ("denied", gate.STOPPED)
+    assert events(tmp_path) == ["requested", "stopped"] and docker.settings(LEDGER) == NAIVE

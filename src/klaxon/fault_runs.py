@@ -730,12 +730,16 @@ def stops_as_interrupts() -> Iterator[None]:
     """While a run lasts, a stop signal does what Ctrl-C does: SIGTERM (a background task stopped) and SIGHUP (its
     terminal closed) raise KeyboardInterrupt, so the fault is still cleared, the traffic stopped and the evidence
     saved. Python's own default for them ends the process at once, with no finally run. A gated run can wait ten
-    minutes at the gate, so this matters more than it did."""
+    minutes at the gate, so this matters more than it did. A signal ignored on purpose (SIGHUP under nohup, to
+    outlive a closed terminal) stays ignored, as Python leaves an ignored SIGINT."""
 
     def interrupt(signum: int, frame: object) -> None:
         raise KeyboardInterrupt(signal.Signals(signum).name)
 
-    before = {stop: signal.signal(stop, interrupt) for stop in (signal.SIGTERM, signal.SIGHUP)}
+    before = {}
+    for stop in (signal.SIGTERM, signal.SIGHUP):
+        if signal.getsignal(stop) is not signal.SIG_IGN:
+            before[stop] = signal.signal(stop, interrupt)
     try:
         yield
     finally:

@@ -28,9 +28,10 @@ How each finding of the later money check is judged:
        add an old event's posting after it.
     3. Else, made after it, or impossible to date: new damage. Klaxon says the cause is removed only when it can show
        it.
-A payment whose books differ from the provider's follows the findings about its own events: from before the action
-when one of them is, and none is new; else new, a change nothing explains. The difference over all payments is
-their sum, and follows all the other findings the same way.
+A payment whose books differ from the provider's, when the first check had no such finding, follows the findings
+about its own events: from before the action, found later, when one of them is that and none is new; else new, a
+change nothing explains. The difference over all payments is their sum, and follows all the other findings the same
+way.
 
 Why the dates matter: a rollback does not dedupe the past. The naive ledger handler keeps no record of the events it
 books (in the live ledger, klaxon.patient.services.pg_ledger, only the idempotent mode writes processed_events). So
@@ -76,7 +77,7 @@ UNBALANCED, BOOKS_DIFFER, TOTAL_DIFFERS = "unbalanced", "books differ", "total d
 PAYMENT, REFUND, OTHER = "payment", "refund", "other"
 EVENTS = (COUNTED_TWICE, LOST)  # the findings about one event the provider sent, so about its payment
 # How a finding of the later check is judged.
-BEFORE, SURFACED, NEW = "before the action", "from before the action, seen later", "new"
+BEFORE, SURFACED, NEW = "before the action", "from before the action, found only by the later check", "new"
 
 
 @dataclass(frozen=True)
@@ -273,8 +274,9 @@ def judge(at_action: Reading, after: Reading) -> Money:
 
 
 def _follows(verdicts: Sequence[str | None]) -> str:
-    """The verdict of a finding that follows others (a payment's books, the total): from before the action when one
-    of them is, and none is new; else new, since nothing explains the change."""
+    """The verdict of a finding that follows others (a payment's books, the total): from before the action, found
+    later, when one of them is that and none is new; else new, since nothing explains the change. One that is the
+    same as in the first check never gets here."""
     return SURFACED if SURFACED in verdicts and NEW not in verdicts else NEW
 
 

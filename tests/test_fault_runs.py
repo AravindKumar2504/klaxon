@@ -1126,7 +1126,6 @@ def test_a_stop_signal_during_a_run_clears_the_fault_as_ctrl_c_does(stop, monkey
     # stopped background run would have left its fault in place, and no evidence.
     world = World()
     patch_command(monkeypatch, world)
-    before = signal.getsignal(stop)
 
     def stopped(*args, **kwargs):
         world.calls.append("investigate")
@@ -1134,12 +1133,28 @@ def test_a_stop_signal_during_a_run_clears_the_fault_as_ctrl_c_does(stop, monkey
         raise AssertionError("the stop signal did not interrupt the run")
 
     monkeypatch.setattr(fault_runs.loop, "investigate_live", stopped)
-    assert fault_runs.main(["run", "provider-outage", *WEEK3, "--evidence-dir", str(tmp_path)]) == 130
+    inherited = signal.signal(stop, signal.SIG_DFL)  # as a terminal leaves it (under nohup, SIGHUP is ignored: below)
+    try:
+        assert fault_runs.main(["run", "provider-outage", *WEEK3, "--evidence-dir", str(tmp_path)]) == 130
+        assert signal.getsignal(stop) == signal.SIG_DFL  # put back once the run is over
+    finally:
+        signal.signal(stop, inherited)
     [folder] = tmp_path.iterdir()
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     assert saved["stopped"] == f"interrupted ({stop.name})" and saved["cleared"] == {"made_up": "cleared"}
     assert calls(world)[-3:] == ["clear", "traffic closed", "traffic joined"]
-    assert signal.getsignal(stop) == before  # put back once the run is over
+
+
+def test_a_stop_signal_ignored_on_purpose_stays_ignored():
+    # The re-check's A: a run started under nohup ignores SIGHUP to outlive its terminal, and must keep doing so.
+    inherited = signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    try:
+        with fault_runs.stops_as_interrupts():
+            assert signal.getsignal(signal.SIGHUP) is signal.SIG_IGN
+            assert signal.getsignal(signal.SIGTERM) not in (signal.SIG_DFL, signal.SIG_IGN, None)
+        assert signal.getsignal(signal.SIGHUP) is signal.SIG_IGN
+    finally:
+        signal.signal(signal.SIGHUP, inherited)
 
 
 def test_a_stop_signal_during_a_quiet_run_still_stops_the_traffic(monkeypatch, tmp_path):
@@ -1465,3 +1480,19 @@ def test_the_gated_command_exits_1_when_an_approved_rollback_fails_in_docker(mon
     assert saved["gate"]["result"] == "failed" and "did not turn healthy" in saved["gate"]["detail"]
     assert saved["verification"] is None and saved["removed_by"] == "the harness's clearing (klaxon.faults)"
     assert "the request was approved with make approve" in saved["label"] and "the action failed" in saved["label"]
+
+
+def test_the_gated_command_exits_1_when_an_approved_rollback_could_not_run(monkeypatch, tmp_path):
+    # The re-check: "not run" had no test. The ledger consumer is recreated by hand between the approval and the run.
+    world = DockerStack()
+    patch_gated(
+        monkeypatch,
+        world,
+        [tool("money_check", wait=True), NAMES_ROLLBACK],
+        before_answer=lambda: world.docker.start(LEDGER, world.docker.settings(LEDGER)),
+    )
+    assert fault_runs.main(["run", "duplicate-delivery", "--evidence-dir", str(tmp_path)]) == 1
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["gate"]["result"] == "not run" and "changed since the request was made" in saved["gate"]["detail"]
+    assert saved["verification"] is None and saved["removed_by"] == "the harness's clearing (klaxon.faults)"
