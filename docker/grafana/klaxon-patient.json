@@ -447,7 +447,7 @@
     {
       "type": "timeseries",
       "title": "Provider calls per second (each attempt, and those the breaker refused)",
-      "description": "Every attempt the payments API made, and the calls its circuit breaker refused without sending them. Timeouts show as error types; a provider outage shows here first.",
+      "description": "Every attempt the payments API made, and the calls its circuit breaker refused (the refused attempt was never sent). Timeouts show as error types; a provider outage shows here first.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -505,7 +505,7 @@
             "uid": "prometheus"
           },
           "refId": "C",
-          "legendFormat": "refused by the circuit breaker (not sent)",
+          "legendFormat": "refused by the circuit breaker",
           "expr": "sum(rate(klaxon_provider_refused_total[1m]))"
         }
       ],

@@ -28,11 +28,11 @@ rubric's version and the fingerprint of its patterns. A test pins each version's
 verdicts pin how it counts (the hypothesis only, case ignored, all elements for "names", half for "partly"), each with
 a mutant. So a change to either fails a test: a later rubric must then come as a new version.
 
-Version 2 (week 4, item 3), committed before any live run on fault 3 with the circuit breaker: the payments API now
-fails fast when the provider keeps failing, on by default, so fault 3 records a new cause (klaxon.faults keeps version
-1's). Its third element becomes the breaker failing fast, and the fixes that fit are none and other (escalate to the
-provider): there is nothing to change on our side. Faults 1 and 2 are graded as in version 1. New comparisons use the
-latest version; a saved run is graded again with the version that graded it (klaxon.fault_runs grade).
+Version 2 (week 4, item 3), committed in 8e58e7f before any live run on fault 3 with the circuit breaker: the payments
+API now fails fast when the provider keeps failing, on by default, so fault 3 records a new cause (klaxon.faults keeps
+version 1's). Its third element becomes the breaker failing fast, and the fixes that fit are none and other (escalate
+to the provider): there is nothing to change on our side. Faults 1 and 2 are graded as in version 1. New comparisons
+use the latest version; a saved run is graded again with the version that graded it (klaxon.fault_runs grade).
 """
 
 from __future__ import annotations
@@ -54,8 +54,8 @@ BY = {
         f" {HOW}"
     ),
     2: (
-        "a rule (klaxon.grading, rubric version 2, committed before any live run on fault 3 with the circuit breaker):"
-        f" {HOW}"
+        "a rule (klaxon.grading, rubric version 2, committed in 8e58e7f before any live run on fault 3 with the circuit"
+        f" breaker): {HOW}"
     ),
 }
 
@@ -201,19 +201,22 @@ def fingerprint(version: int = RUBRIC_VERSION) -> str:
     return hashlib.sha256(json.dumps(rubric, sort_keys=True).encode()).hexdigest()
 
 
-def version_of(saved: Mapping | None) -> int:
+def version_of(saved: object) -> int:
     """The rubric version a saved comparison was made with, so a run can be graded again the same way. One saved
     before comparisons recorded their version (the week 3 fault runs, 2026-10-19 UTC) was made with the rubric that
     became version 1: its patterns did not change, and their replay tests grade them again with it. A run that saved
-    no comparison gets the latest."""
+    no comparison gets the latest. Anything else is refused: ValueError."""
     if saved is None:
         return RUBRIC_VERSION
-    rubric = saved.get("rubric")
-    if rubric is None:
+    if not isinstance(saved, Mapping):
+        raise ValueError("the saved comparison is not an object")
+    if "rubric" not in saved:
         return 1
-    if not isinstance(rubric, Mapping) or rubric.get("version") not in VERSIONS:
+    rubric = saved["rubric"]
+    version = rubric.get("version") if isinstance(rubric, Mapping) else None
+    if type(version) is not int or version not in VERSIONS:  # not a bool: True would read as version 1
         raise ValueError("the saved comparison names a rubric version this code does not have")
-    return rubric["version"]
+    return version
 
 
 def names(element: Element, text: str) -> bool:

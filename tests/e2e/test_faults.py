@@ -133,25 +133,41 @@ def payer(api: httpx.Client):
     return pay
 
 
+def payments_api_logs() -> str:
+    """The running payments API container's own lines: a redeploy starts a new container, and a new log."""
+    return stack.compose("logs", "--no-log-prefix", "payments-api")
+
+
+def payments_api_health() -> str:
+    [row] = [row for row in stack.containers() if row.get("Service") == "payments-api"]
+    return row.get("Health") or row.get("State") or "unknown"
+
+
 def test_without_its_breaker_a_provider_outage_makes_payments_wait_through_their_timeouts(fault_stack):
-    """The old behavior, kept as a known-bad setting (week 4, item 3): PROVIDER_BREAKER=off, deployed and logged."""
-    fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "off"})
+    """The old behavior, kept as a known-bad setting (week 4, item 3): PROVIDER_BREAKER=off, deployed and logged,
+    then rolled back. A breaker would have opened about 11 s in; without one, a payment 15 s in still waits."""
     try:
+        fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "off"})
         assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "off"
-        with Traffic(rate=3.0, seed=4), httpx.Client(base_url=live.API_URL, timeout=30.0, trust_env=False) as api:
+        with Traffic(rate=3.0, seed=4), httpx.Client(base_url=live.API_URL, timeout=60.0, trust_env=False) as api:
             pay = payer(api)
             time.sleep(3)
             faults.get("provider-outage").inject(fault_stack)
+            injected = time.monotonic()
             try:
                 held, waited = timed(lambda: pay(4_200))
                 assert held.status_code == 503 and held.json()["error"]["code"] == "provider_unavailable"
-                assert waited >= 9  # three attempts, each waiting out its 3 s timeout: no circuit breaker
+                assert waited >= 9  # three attempts, each waiting out its 3 s timeout
+                time.sleep(max(0.0, 15 - (time.monotonic() - injected)))  # past the time a breaker would have opened
+                later, waited_later = timed(lambda: pay(4_202))
+                assert later.status_code == 503 and waited_later >= 9  # still waiting: no circuit breaker
                 assert check_live(timeout_seconds=60).report.passed  # nothing was charged, so no money is wrong
                 until(lambda: counted_no_answers() >= 3, timeout=60, every=2)  # and the timeouts show in the metrics
             finally:
                 faults.get("provider-outage").clear(fault_stack)
             until(lambda: pay(4_201).status_code == 201, timeout=60)
         assert check_live(timeout_seconds=60).report.passed
+        assert "circuit breaker" not in payments_api_logs()
     finally:
         fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "on"})  # never leave the known-bad setting behind
     assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "on"
@@ -162,7 +178,7 @@ def test_with_its_breaker_a_provider_outage_fails_fast_keeps_the_api_healthy_and
     is answered 503 at once, the provider is not called, and the API stays healthy. Once the outage ends, a trial
     call gets an answer and payments go through again."""
     assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "on"
-    with Traffic(rate=3.0, seed=6), httpx.Client(base_url=live.API_URL, timeout=30.0, trust_env=False) as api:
+    with Traffic(rate=3.0, seed=6), httpx.Client(base_url=live.API_URL, timeout=60.0, trust_env=False) as api:
         pay = payer(api)
         time.sleep(3)
         refused_before = counted_refusals()
@@ -171,17 +187,17 @@ def test_with_its_breaker_a_provider_outage_fails_fast_keeps_the_api_healthy_and
             fast, seconds = until(lambda: (found := timed(lambda: pay(4_300)))[1] < 1.0 and found, timeout=90)
             assert fast.status_code == 503 and fast.json()["error"]["code"] == "provider_unavailable"
             assert fast.json()["payment"]["status"] == "pending"  # its outcome is unknown, as before: no money moved
-            health, health_seconds = timed(lambda: api.get("/healthz"))
-            assert health.status_code == 200 and health_seconds < 2  # its worker threads are free
-            until(lambda: counted_refusals() > refused_before, timeout=60, every=2)  # refused calls, never sent
-            logs = stack.compose("logs", "--no-log-prefix", "--since", "10m", "payments-api")
-            assert "circuit breaker open: 5 provider calls failed in a row" in logs
+            until(lambda: (health := timed(lambda: api.get("/healthz")))[0].status_code == 200 and health[1] < 1.0, 30)
+            for _ in range(6):  # half a minute into the outage, docker's own health check still passes
+                assert payments_api_health() == "healthy"
+                time.sleep(5)
+            until(lambda: counted_refusals() > refused_before, timeout=60, every=2)  # refused calls, counted
+            assert "circuit breaker open: calls for 5 requests in a row failed" in payments_api_logs()
             assert check_live(timeout_seconds=60).report.passed  # nothing was charged, so no money is wrong
         finally:
             faults.get("provider-outage").clear(fault_stack)
         until(lambda: pay(4_301).status_code == 201, timeout=60)  # a trial call got an answer: the breaker closed
-    logs = stack.compose("logs", "--no-log-prefix", "--since", "10m", "payments-api")
-    assert "circuit breaker closed: the provider answered the trial call" in logs
+    assert "circuit breaker closed: the provider answered the trial call" in payments_api_logs()
     assert check_live(timeout_seconds=60).report.passed
 
 

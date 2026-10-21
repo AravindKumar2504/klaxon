@@ -840,10 +840,12 @@ def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
 def _grade(folder: Path) -> int:
     try:
         saved = json.loads((folder / RUN_FILE).read_text())
+        if not isinstance(saved, dict):
+            raise ValueError("its run.json is not an object")
         stop = read_trace(folder / loop.TRACE)[-1]
         version = grading.version_of(saved.get("comparison"))  # the version that graded it, so the verdict is the same
         comparison = grading.compare(saved["fault"]["name"], stop.get("diagnosis"), version)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
         print(
             f"Cannot grade {clean_text(str(folder))}: {type(exc).__name__}: {clean_text(str(exc), 300)}",
             file=sys.stderr,

@@ -13,8 +13,8 @@ with reversals (week 4, with a human's approval).
     provider-outage     the provider's charge API hangs, and our payments API's circuit breaker fails fast
 
 Fault 3's recorded cause has a version 2 (week 4, item 3): the payments API has had a circuit breaker since, on by
-default, so the outage no longer makes payments wait. Each fault keeps what it recorded for an earlier version of the
-grading rule (klaxon.grading), so a comparison made then can be made again the same way.
+default, so after its first seconds the outage no longer makes payments wait. Each fault keeps what it recorded for an
+earlier version of the grading rule (klaxon.grading), so a comparison made then can be made again the same way.
 
 The first two are bad deploys: one container is recreated with a known-bad setting, the way the
 week 1 demos use HANDLER=naive. They need traffic to show (make traffic): fault 1 needs the duplicate
@@ -198,28 +198,31 @@ FAULTS = {
             title="Payments fail: the provider hangs, and our circuit breaker fails fast",
             cause=(
                 f"the provider's charge and refund API hangs ({OUTAGE_DELAY_SECONDS:g} s, then 503): our payments API's"
-                " calls to it time out, each after 3 attempts, until its circuit breaker opens, after"
-                f" {BREAKER_FAILURES} failed calls in a row; from then on it fails fast, answering 503 'outcome"
-                " unknown' at once without calling the provider, and lets one trial call through every"
-                f" {BREAKER_OPEN_SECONDS:g} s"
+                " calls to it time out, each after 3 attempts, until its circuit breaker opens, after the calls for"
+                f" {BREAKER_FAILURES} requests in a row failed; from then on it fails fast, answering 503 'outcome"
+                " unknown' at once without calling the provider, and lets one trial call through"
+                f" {BREAKER_OPEN_SECONDS:g} s after it opened, and again after each trial that fails"
             ),
             symptoms=(
                 "clients get 503 'outcome unknown', most of them at once: the 5xx share of POST /payments climbs",
                 "the first calls still wait out their 3 timed-out attempts (about 10 s) until the breaker opens; after"
-                f" that only one trial call every {BREAKER_OPEN_SECONDS:g} s waits: the p95 latency may climb for about"
-                " a minute, then drops",
+                f" that only the trial calls wait, one {BREAKER_OPEN_SECONDS:g} s after each failed one: the p95"
+                " latency may climb for about a minute, then drops",
                 "provider calls end with no answer (timeouts) at first, klaxon.provider.attempts result no_answer;"
                 " then the breaker refuses them, klaxon.provider.refused",
-                "the payments API logs 'circuit breaker open' and stays healthy: its worker threads do not fill up",
+                "the payments API logs 'circuit breaker open', and its health check keeps passing: once the breaker"
+                " opens, its worker threads are free again",
                 "the money check passes: nothing was charged, so no money is wrong",
-                "after it ends, the next trial call gets an answer and the breaker closes; payments whose outcome"
-                " stayed unknown stay pending, with no charge: they need a decision (retry them, or mark them failed)",
+                "after it ends, the next trial call gets an answer and the breaker closes; payments and refunds whose"
+                " outcome stayed unknown stay pending, with nothing charged or refunded: they need a decision (retry"
+                " them with their keys, or mark them failed), and until then such a refund blocks new refunds on its"
+                " payment",
             ),
             remedy=(
                 "nothing to change on our side: the provider must recover (escalate to it). Meanwhile the circuit"
                 " breaker keeps the API answering at once, and closes again when a trial call gets an answer. After"
-                " it recovers, the payments left pending with no charge need a decision (retry them, or mark them"
-                " failed)"
+                " it recovers, the payments and refunds left pending need a decision (retry them with their keys, or"
+                " mark them failed): a refund left pending blocks new refunds on its payment until it settles"
             ),
             expected_money={"during": "passed", "after": "passed", "quiet": "passed"},  # nothing was charged
             inject=_start_outage,

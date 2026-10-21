@@ -19,7 +19,10 @@ A rollback stops new damage and repairs nothing. Money booked wrong before it st
 and verification says what damage remains.
 
 How each finding of the later money check is judged:
-    1. The check right after the action had the same finding: damage from before the action.
+    1. The check right after the action had the same finding, about records made up to its cutoff (or that cannot
+       be dated): damage from before the action. That check also judges some findings whatever the cutoff (a
+       payment charged twice, a charge refunded more than its amount), so it can see one about a record made after
+       its cutoff, after the action: that one goes on to 3, and is new.
     2. Else, if everything it is about (the provider's events, charges or refunds) was made up to that check's
        cutoff: damage from before the action that the check right after it did not show. Mostly because that check
        could not settle (a backlog still draining), so it showed nothing. Rarely otherwise: that check waits until
@@ -262,7 +265,10 @@ def judge(at_action: Reading, after: Reading) -> Money:
     known = {finding.key for finding in at_action.findings}
     boundary = at_action.cutoff
     findings = after.findings
-    verdicts: list[str | None] = [BEFORE if finding.key in known else None for finding in findings]
+    verdicts: list[str | None] = [
+        BEFORE if finding.key in known and (finding.created is None or finding.created <= boundary) else None
+        for finding in findings
+    ]
     for n, finding in enumerate(findings):  # first what can be dated by itself
         if verdicts[n] is None and finding.kind not in (BOOKS_DIFFER, TOTAL_DIFFERS):
             verdicts[n] = SURFACED if finding.created is not None and finding.created <= boundary else NEW

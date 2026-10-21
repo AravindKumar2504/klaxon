@@ -12,8 +12,9 @@ and tries again later:
 
     closed     every attempt goes to the provider. A call fails when none of its
                attempts got an answer we can trust (each timed out, or got a
-               5xx): that adds one to a count of failed calls in a row. Any
-               answer below 500 sets it back to 0. At 5 in a row, it opens.
+               5xx). The breaker keeps the requests whose calls failed in a
+               row, each once, by its idempotency key; any answer below 500
+               clears them. At 5 requests, it opens.
     open       no attempt goes out: each call fails at once (CircuitOpen, a
                ProviderUnavailable, so the API leaves the payment pending as
                before), for 10 s.
@@ -21,21 +22,24 @@ and tries again later:
                the breaker closes; if not, it opens again for 10 s more. Other
                calls still fail at once while the trial is out.
 
-It counts calls, not attempts: a charge whose answer the provider loses on
-purpose (the traffic's noise) gets a 500 at each of its 3 attempts, and two of
-those close together must not look like an outage. Only the trial decides: a
-result counts only while the breaker is in the state that let its attempt go,
-so an attempt sent before the breaker opened, which fails after, changes
-nothing. The API's worker threads share one breaker, behind a lock.
-PROVIDER_BREAKER=off runs without it, the old behavior, kept as a known-bad
-setting (klaxon.patient.deploys.KNOWN_BAD).
+It counts requests, not attempts or calls: a charge whose answer the provider
+loses on purpose (the traffic's noise) gets a 500 at each of its 3 attempts,
+and again at every retry the client makes with its key. One bad request is
+not an outage; 5 different ones in a row, with no answer between, are. Only
+the trial decides: a result counts only while the breaker is in the state that
+let its attempt go, so an attempt sent before the breaker opened, which fails
+after, changes nothing. The API's worker threads share one breaker, behind a
+lock. Any answer below 500 counts as one, a 409 or a 429 too: a provider that
+answers every call so never opens it. PROVIDER_BREAKER=off runs without it,
+the old behavior, kept as a known-bad setting (klaxon.patient.deploys).
 
 Telemetry: klaxon.provider.attempts counts every attempt by its result, an
 HTTP status or "no_answer" (with the error's type). The httpx instrumentation
 records a call's duration only when an answer came back, so without this
 count a provider that times out would not show in the metrics at all.
-klaxon.provider.refused counts the calls the breaker refused, which never
-reached the provider. The breaker logs each change of its state.
+klaxon.provider.refused counts the calls the breaker refused: the attempt it
+refused never reached the provider (a call refused at its second or third
+attempt did send the ones before). The breaker logs each change of its state.
 """
 
 from __future__ import annotations
@@ -53,7 +57,7 @@ from klaxon.patient.services.common import log
 logger = logging.getLogger("klaxon.provider_client")
 
 RETRYABLE_STATUSES = {409, 429}  # "a request with this key is still running" and "slow down"
-BREAKER_FAILURES = 5  # failed calls in a row that open the breaker
+BREAKER_FAILURES = 5  # requests in a row whose calls failed, which open the breaker
 BREAKER_OPEN_SECONDS = 10.0  # how long it stays open before a trial attempt
 CLOSED, OPEN, HALF_OPEN = "closed", "open", "half-open"
 meter = metrics.get_meter("klaxon.provider_client")
@@ -65,7 +69,7 @@ ATTEMPTS = meter.create_counter(
 REFUSED = meter.create_counter(
     "klaxon.provider.refused",
     unit="{call}",
-    description="Calls the open circuit breaker refused: none of them reached the provider.",
+    description="Calls the circuit breaker refused: the attempt it refused never reached the provider.",
 )
 
 
@@ -102,7 +106,7 @@ class CircuitBreaker:
         self.clock = clock
         self.state = CLOSED
         self._lock = threading.Lock()
-        self._in_a_row = 0  # failed calls in a row, while closed
+        self._failed: set[str] = set()  # the requests whose calls failed in a row, while closed: their keys
         self._opened_at = 0.0
         self._period = 0  # one more at every change of state: an attempt's result counts only in the period it began
 
@@ -126,20 +130,25 @@ class CircuitBreaker:
                 else:
                     self._open("circuit breaker open again: the trial call failed")
             elif answered:
-                self._in_a_row = 0
+                self._failed.clear()
 
-    def failed(self, period: int) -> None:
-        """A call none of whose attempts got an answer we can trust. At `failures` in a row, closed, it opens."""
+    def failed(self, period: int, key: str) -> None:
+        """A call for this request (its idempotency key) none of whose attempts got an answer we can trust. At
+        `failures` different requests in a row, closed, it opens."""
         with self._lock:
             if period != self._period:
                 return  # its last attempt began in a state that has changed since: only a closed one counts
-            self._in_a_row += 1
-            if self._in_a_row >= self.failures:
-                self._open(f"circuit breaker open: {self._in_a_row} provider calls failed in a row")
+            if key in self._failed:
+                return  # a retry of a request that failed already: one bad request is not an outage
+            self._failed.add(key)
+            if len(self._failed) >= self.failures:
+                self._open(f"circuit breaker open: calls for {len(self._failed)} requests in a row failed")
 
     def why(self) -> str:
         """Why a call fails at once, in a few words."""
         with self._lock:
+            if self.state == CLOSED:  # its trial got an answer just after this call was refused
+                return "the circuit breaker was open, and has just closed"
             if self.state == HALF_OPEN:
                 return "the circuit breaker is half-open, and its trial call is still out"
             left = max(0.0, self.open_seconds - (self.clock() - self._opened_at))
@@ -152,7 +161,7 @@ class CircuitBreaker:
     def _change(self, state: str, level: int, message: str) -> None:
         self.state = state
         self._period += 1
-        self._in_a_row = 0
+        self._failed.clear()
         log(logger, level, message, breaker=state)
 
 
@@ -177,6 +186,8 @@ class ProviderClient:
         sleep: Callable[[float], None] = time.sleep,
         breaker: CircuitBreaker | None = None,
     ) -> None:
+        if attempts < 1:
+            raise ValueError("a provider client makes at least one attempt per call")
         self.http = http or httpx.Client(base_url=base_url, timeout=timeout_seconds)
         self.attempts = attempts
         self.backoff_seconds = backoff_seconds
@@ -223,10 +234,10 @@ class ProviderClient:
             finally:
                 if self.breaker is not None:  # whatever happened, so a trial can never be left out forever
                     self.breaker.attempted(period, answered)
-            if attempt < self.attempts:
-                self.sleep(self.backoff_seconds * 2 ** (attempt - 1))
+            if attempt < self.attempts and (self.breaker is None or self.breaker.state == CLOSED):
+                self.sleep(self.backoff_seconds * 2 ** (attempt - 1))  # not once it opened: the next attempt fails now
         if self.breaker is not None:
-            self.breaker.failed(period)  # no attempt got an answer we can trust: one failed call
+            self.breaker.failed(period, idempotency_key)  # no attempt got an answer we can trust
         raise ProviderUnavailable(f"{path} failed after {self.attempts} attempts: {problem}")
 
 

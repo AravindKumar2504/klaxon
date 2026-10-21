@@ -21,11 +21,11 @@ Five invariants, each with evidence:
    succeeded, for the same amount and the same payment, linked to that
    refund, and made exactly once; one we call succeeded was made; and the
    provider refunded nothing that is not ours. A pending or failed refund
-   the provider never made is fine: no money moved back. And per payment
-   (week 4, known gap 1): the provider never refunded more than it charged.
-   Every refund can agree with ours and the total still be too much: two
-   refunds of one payment, each ours and each made once, can add up to more
-   than its charge.
+   the provider never made is fine: no money moved back. And per charge (a
+   payment at the provider; week 4, known gap 1): the provider never refunded
+   more than it charged. Every refund can agree with ours and the total still
+   be too much: two refunds of one payment, each ours and each made once, can
+   add up to more than its charge.
 
 Invariant 2 alone is not enough: a double posting is itself balanced. And
 invariants 1-3 compare the ledger with the provider, so they pass whenever
@@ -483,8 +483,8 @@ def _describe_payment(item: dict, named: dict[str, str | None]) -> str:
 def _refunds_match_provider(
     provider_refunds: list[ProviderRefund],
     db: SqlConnection,
-    cutoff: int | None = None,
-    provider_payments: list[ProviderPayment] | None = None,
+    cutoff: int | None,
+    provider_payments: list[ProviderPayment],
 ) -> tuple[InvariantResult, int]:
     """Invariant 5, invariant 4's twin for refunds, and how many of the provider's refunds it left for the next
     check. One more thing can be wrong with a refund: the provider refunded another payment than ours. And one
@@ -576,7 +576,7 @@ def _refunds_match_provider(
                 "problem": "refunded but not ours",
             }
         )
-    evidence += _refunded_more_than_charged(provider_refunds, provider_payments or [], ours, newer)
+    evidence += _refunded_more_than_charged(provider_refunds, provider_payments, ours, newer)
 
     left = left_ours + left_strangers
     if not evidence:
@@ -584,7 +584,7 @@ def _refunds_match_provider(
         summary = (
             f"all {judged} of our refunds agree with the provider"
             f" ({judged - never_made} refunded once, {never_made} never refunded),"
-            " and no payment was refunded more than it was charged"
+            " and no charge was refunded more than its amount"
             if ours or left
             else "no refunds yet, ours or the provider's"
         )

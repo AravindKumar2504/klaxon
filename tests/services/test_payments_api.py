@@ -1,6 +1,7 @@
 """The payments API: a retried request never charges twice, with or without Redis."""
 
 import json
+import threading
 
 import httpx
 import pytest
@@ -228,6 +229,54 @@ def test_once_a_stuck_refund_is_refused_the_payment_can_be_refunded(api, parts):
     provider.reject = None
     assert refund(api, payment_id, 2_500, "new-key").status_code == 201
     assert [r.status for r in store.refunds_for(payment_id)] == ["failed", "succeeded"]
+
+
+class BothAtOnce(MemoryPaymentsStore):
+    """Two refunds at once, at their closest: each has written its pending row, and read the others, before either
+    acts on what it read. (PostgreSQL's store commits each statement at once, so each request sees the other's row
+    as this one does.)"""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.lock = threading.Lock()
+        self.racing = False
+        self.both_written, self.both_read = threading.Barrier(2, timeout=5), threading.Barrier(2, timeout=5)
+
+    def insert_or_get_refund(self, *args):
+        with self.lock:
+            return super().insert_or_get_refund(*args)
+
+    def refunds_for(self, payment_id):
+        if not self.racing:
+            return super().refunds_for(payment_id)
+        self.both_written.wait()
+        rows = super().refunds_for(payment_id)
+        self.both_read.wait()
+        return rows
+
+
+def test_two_refunds_at_once_that_together_exceed_the_payment_never_both_reach_the_provider():
+    """The review's finding 6. Each has written its pending row before it reads the others, so each sees the
+    other's, and both are refused, though one would have fit: the cost of never refunding twice. (When one reads
+    after the other was refused, and marked failed, it passes.) Before week 4, only succeeded refunds counted, and
+    both went to the provider."""
+    store, redis, provider = BothAtOnce(), FakeRedis(), FakeProvider()
+    api = TestClient(create_app(store, RedisIdempotency(redis), provider))
+    payment_id = pay(api).json()["id"]  # $25.00
+    store.racing = True
+    answers = {}
+
+    def ask(key):
+        answers[key] = refund(api, payment_id, 2_000, key).status_code
+
+    threads = [threading.Thread(target=ask, args=(key,)) for key in ("support-1", "support-2")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert answers == {"support-1": 422, "support-2": 422}
+    assert [call for call, _, _ in provider.calls].count("create_refund") == 0
+    assert sorted(r.status for r in store.refunds.values()) == ["failed", "failed"]  # either may be asked again
 
 
 def test_with_the_breaker_open_a_payment_fails_at_once_and_stays_pending(parts, telemetry):

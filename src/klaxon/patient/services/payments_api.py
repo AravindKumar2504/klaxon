@@ -286,6 +286,10 @@ def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: Pr
             if not created and row.status == "failed":
                 return refused(422, "refund_failed", "this refund was refused", True, True, refund=refund_view(row))
             if created:
+                # The order matters: this refund's pending row was written, and committed (the pool's connections
+                # autocommit), before the others are read here. So of two refunds at once, the later reader sees
+                # the other's row, and they cannot both pass. Both can be refused, when only one would have fit:
+                # each can be asked again with a new key. Reading first would let both through.
                 others = [r for r in store.refunds_for(payment_id) if r.id != row.id]
                 counted = sum(r.amount_cents for r in others if r.status in COUNTED_REFUNDS)
                 if counted + row.amount_cents > payment.amount_cents:

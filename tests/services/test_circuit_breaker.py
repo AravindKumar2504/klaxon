@@ -2,6 +2,7 @@
 
 The clock is made up and moved by hand, and the provider is httpx's MockTransport: nothing waits, nothing is sent."""
 
+import itertools
 import logging
 import threading
 
@@ -33,13 +34,16 @@ class Clock:
         return self.now
 
 
-def failed_calls(breaker: CircuitBreaker, n: int = 1, attempts: int = 3) -> None:
-    """n calls, each of whose attempts got no answer we can trust."""
+KEYS = (f"pmt_{n:06d}" for n in itertools.count(1))  # a new request each time
+
+
+def failed_calls(breaker: CircuitBreaker, n: int = 1, attempts: int = 3, key: str | None = None) -> None:
+    """n calls, each of whose attempts got no answer we can trust: each for a new request, unless a key is given."""
     for _ in range(n):
         for _ in range(attempts):
             period = breaker.admit()
             breaker.attempted(period, answered=False)
-        breaker.failed(period)
+        breaker.failed(period, key or next(KEYS))
 
 
 def answered(breaker: CircuitBreaker) -> None:
@@ -65,7 +69,7 @@ def test_off_is_no_breaker_and_anything_else_is_refused():
         breaker_setting("yes")
 
 
-def test_it_opens_at_the_fifth_failed_call_in_a_row_not_before():
+def test_it_opens_at_the_fifth_failed_request_in_a_row_not_before():
     breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
     failed_calls(breaker, 4)
     assert breaker.state == CLOSED and breaker.admit() is not None
@@ -73,14 +77,19 @@ def test_it_opens_at_the_fifth_failed_call_in_a_row_not_before():
     assert breaker.state == OPEN and breaker.admit() is None
 
 
-def test_it_counts_calls_not_attempts():
-    """A charge whose answer the provider loses on purpose gets a 500 at each of its attempts: one failed call."""
+def test_it_counts_requests_not_attempts_or_calls():
+    """A charge whose answer the provider loses on purpose gets a 500 at each of its attempts, and again at every
+    retry the client makes with its key: one bad request, not an outage (the review's finding 2)."""
     breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
     for _ in range(14):  # 14 failed attempts, all in a row, but not one failed call yet
         breaker.attempted(breaker.admit(), answered=False)
     assert breaker.state == CLOSED
-    failed_calls(breaker, 4)
-    assert breaker.state == CLOSED
+    failed_calls(breaker, 4, key="pmt_lost_1")  # one request, retried 3 times by its client: counted once
+    failed_calls(breaker, 4, key="pmt_lost_2")
+    failed_calls(breaker, 2)
+    assert breaker.state == CLOSED  # 10 failed calls in a row, for 4 requests
+    failed_calls(breaker)
+    assert breaker.state == OPEN
 
 
 def test_any_answer_sets_the_count_back_to_zero():
@@ -94,6 +103,7 @@ def test_any_answer_sets_the_count_back_to_zero():
 def test_open_it_refuses_every_call_until_its_time_is_up():
     clock = Clock()
     breaker = opened(clock)
+    assert breaker.why() == "the circuit breaker is open (the next trial call in 10.0 s)"
     clock.now += 9.99
     assert breaker.admit() is None and breaker.state == OPEN
     assert breaker.why() == "the circuit breaker is open (the next trial call in 0.0 s)"
@@ -116,6 +126,7 @@ def test_a_trial_that_gets_an_answer_closes_it():
     clock.now += 10
     answered(breaker)
     assert breaker.state == CLOSED and breaker.admit() is not None
+    assert breaker.why() == "the circuit breaker was open, and has just closed"  # for a call refused a moment before
     failed_calls(breaker, 4)
     assert breaker.state == CLOSED  # and the count starts again from zero
 
@@ -146,11 +157,11 @@ def test_a_result_from_before_a_change_of_state_changes_nothing():
     clock.now += 10
     trial = breaker.admit()
     breaker.attempted(late, answered=False)
-    breaker.failed(late)
+    breaker.failed(late, "pmt_late")
     assert breaker.state == HALF_OPEN
     breaker.attempted(trial, answered=True)
     assert breaker.state == CLOSED
-    breaker.failed(early)  # a call from before it all ends: it began in another period
+    breaker.failed(early, "pmt_early")  # a call from before it all ends: it began in another period
     failed_calls(breaker, 4)
     assert breaker.state == CLOSED
 
@@ -185,7 +196,7 @@ def test_each_change_of_state_is_logged_once(caplog):
     answered(breaker)
     said = [(record.levelname, record.getMessage(), record.fields["breaker"]) for record in caplog.records]
     assert said == [
-        ("WARNING", "circuit breaker open: 5 provider calls failed in a row; calls fail at once for 10 s", "open"),
+        ("WARNING", "circuit breaker open: calls for 5 requests in a row failed; calls fail at once for 10 s", "open"),
         ("INFO", "circuit breaker half-open: one trial call to the provider", "half-open"),
         ("WARNING", "circuit breaker open again: the trial call failed; calls fail at once for 10 s", "open"),
         ("INFO", "circuit breaker half-open: one trial call to the provider", "half-open"),
@@ -255,12 +266,16 @@ def test_without_a_breaker_every_call_waits_out_all_its_attempts():
     assert len(seen) == 24
 
 
-def test_5xx_answers_count_as_failures():
+@pytest.mark.parametrize("status", [500, 502, 503, 504])
+def test_5xx_answers_count_as_failures(status):
     breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
-    client, _ = client_with(lambda request: httpx.Response(503), breaker)
-    for n in range(5):
+    client, _ = client_with(lambda request: httpx.Response(status), breaker)
+    for n in range(4):
         with pytest.raises(ProviderUnavailable):
             client.create_payment("cus", 100, "usd", f"pmt_00000{n}", {})
+    assert breaker.state == CLOSED
+    with pytest.raises(ProviderUnavailable):
+        client.create_payment("cus", 100, "usd", "pmt_000009", {})
     assert breaker.state == OPEN
 
 
@@ -270,17 +285,22 @@ def test_lost_answers_among_answered_calls_never_open_it():
 
     def handler(request):
         key = request.headers["idempotency-key"]
-        return httpx.Response(500) if key.endswith("lost") else httpx.Response(200, json={"id": "pay_1"})
+        return httpx.Response(500) if "_lost" in key else httpx.Response(200, json={"id": "pay_1"})
 
     client, _ = client_with(handler, breaker)
     for n in range(40):
         lost = n % 2 == 0  # every other call: far more than the 2% the traffic loses
         if lost:
-            with pytest.raises(ProviderUnavailable):
-                client.create_payment("cus", 100, "usd", f"pmt_{n:06d}_lost", {})
+            for _ in range(4):  # and each lost one asked again 3 times, with its key, as the traffic does
+                with pytest.raises(ProviderUnavailable):
+                    client.create_payment("cus", 100, "usd", f"pmt_{n:06d}_lost", {})
         else:
             client.create_payment("cus", 100, "usd", f"pmt_{n:06d}", {})
     assert breaker.state == CLOSED
+    for n in range(5):  # but 5 different requests in a row, each with a lost answer, look like an outage
+        with pytest.raises(ProviderUnavailable):
+            client.create_payment("cus", 100, "usd", f"pmt_{n:06d}_lost_again", {})
+    assert breaker.state == OPEN
 
 
 @pytest.mark.parametrize("status", [400, 402, 404])
@@ -303,6 +323,26 @@ def test_busy_and_slow_down_are_answers_too(status):
     assert client.create_refund("pay_1", 100, "rfd_000001") == {"id": "re_1"}
     failed_calls(breaker, 4)
     assert breaker.state == CLOSED
+
+
+def test_a_call_does_not_wait_out_its_backoff_once_the_breaker_opened():
+    """The review's finding 10: once the breaker is open, the call's next attempt would only be refused."""
+    breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
+    failed_calls(breaker, 4)
+
+    def handler(request):
+        failed_calls(breaker)  # meanwhile another request's call fails: the fifth, so the breaker opens
+        raise httpx.ReadTimeout("timed out")
+
+    client, sleeps = client_with(handler, breaker)
+    with pytest.raises(CircuitOpen):
+        client.create_payment("cus", 100, "usd", "pmt_000001", {})
+    assert sleeps == [] and breaker.state == OPEN
+
+
+def test_a_client_makes_at_least_one_attempt():
+    with pytest.raises(ValueError, match="at least one attempt"):
+        ProviderClient("http://provider", attempts=0)
 
 
 def test_a_trial_that_crashes_still_counts_so_the_breaker_is_never_stuck_half_open():

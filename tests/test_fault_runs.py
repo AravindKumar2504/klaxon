@@ -770,6 +770,23 @@ def test_each_live_fault_run_replays_exactly_and_grades_the_same(fault, tmp_path
     assert saved["fault"]["name"] == fault and saved["cleared"] is not None
 
 
+@pytest.mark.parametrize(
+    "saved, trace, why",
+    [
+        ("[]", '{"step": 0}\n', "ValueError: its run.json is not an object"),
+        ('{"fault": {"name": "provider-outage"}, "comparison": "v1"}', '{"step": 0}\n', "is not an object"),
+        ('{"fault": {"name": "provider-outage"}}', "", "IndexError"),  # an empty trace
+    ],
+)
+def test_a_saved_run_that_cannot_be_read_is_not_graded(tmp_path, capsys, saved, trace, why):
+    """The review's finding 8: a run.json in a shape a run never writes is refused, without a traceback."""
+    (tmp_path / fault_runs.RUN_FILE).write_text(saved)
+    (tmp_path / loop.TRACE).write_text(trace)
+    assert fault_runs.main(["grade", str(tmp_path)]) == 2
+    said = capsys.readouterr().err
+    assert said.startswith("Cannot grade") and why in said
+
+
 def test_grading_a_saved_run_again_uses_the_version_that_graded_it(capsys):
     """make grade-run on the week 3 run of fault 3 (week 4, item 3): version 1 graded it, and grades it again the same
     way. Version 2 reads the same diagnosis as only partly right: with the breaker, it misses how the API fails."""

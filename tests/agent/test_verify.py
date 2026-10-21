@@ -58,7 +58,13 @@ class Records:
 
 def report(**failed):
     """A money report whose named invariants failed with this evidence; the others passed."""
-    names = ("posted_exactly_once", "ledger_balanced", "matches_provider", "payments_match_provider")
+    names = (
+        "posted_exactly_once",
+        "ledger_balanced",
+        "matches_provider",
+        "payments_match_provider",
+        "refunds_match_provider",
+    )
     invariants = [InvariantResult(name, name not in failed, "made up", list(failed.get(name, []))) for name in names]
     off = sum(item["difference_cents"] for item in failed.get("matches_provider", []) if item["scope"] == verify.TOTAL)
     return MoneyReport(not failed, 0, 0, off, invariants)
@@ -251,6 +257,59 @@ def test_damage_about_records_made_after_the_action_is_new_and_the_cause_is_not_
         "all payments: books off by 5000 cents",
     ]
     assert money.judged[BEFORE] == ["event evt_0001 posted 2 times"]
+
+
+def over_refund(*refunds):
+    """refunds_match_provider's over-refund evidence for a $25.00 charge, as klaxon.checks.money writes it."""
+    return {
+        "refund_id": None,
+        "payment_id": "pmt_000001",
+        "provider_payment_id": "ch_1",
+        "charged_cents": 2_500,
+        "refunded_cents": sum(r.amount_cents for r in refunds),
+        "provider_refunds": [
+            {"id": r.id, "provider_payment_id": "ch_1", "amount_cents": r.amount_cents} for r in refunds
+        ],
+        "problem": "refunded more than charged",
+    }
+
+
+def charged_twice(*charges):
+    return {"payment_id": "pmt_000001", "provider_charges": [{"id": c.id} for c in charges], "problem": "charged twice"}
+
+
+def test_a_finding_both_checks_have_is_new_when_the_first_saw_records_made_after_its_cutoff():
+    """The review's finding 1 (week 4, item 3). Some findings are judged whatever the cutoff, so the check right after
+    the action can already list a record made after its cutoff, after the action: then the same finding later is new
+    damage, not damage from before the action."""
+    first, late = (
+        ProviderRefund("re_1", "ch_1", 1_500, "rfd_1", EARLY),
+        ProviderRefund("re_2", "ch_1", 1_500, "rfd_2", LATE),
+    )
+    refunds = Records(payments=[ProviderPayment("ch_1", 2_500, "pmt_000001", EARLY)], refunds=[first, late])
+    seen = {"refunds_match_provider": [over_refund(first, late)]}
+    money = verify.judge(reading(BOUNDARY, refunds, **seen), reading(LATE + 30, refunds, **seen))
+    assert money.judged[NEW] == ["charge ch_1 (re_1, re_2): refunded 3000 cents of 2500"]
+    assert money.cause_removed is False
+    one, two = ProviderPayment("ch_1", 2_500, "pmt_000001", EARLY), ProviderPayment("ch_2", 2_500, "pmt_000001", LATE)
+    charges = Records(payments=[one, two])
+    seen = {"payments_match_provider": [charged_twice(one, two)]}
+    money = verify.judge(reading(BOUNDARY, charges, **seen), reading(LATE + 30, charges, **seen))
+    assert money.judged[NEW] == ["payment pmt_000001 (ch_1, ch_2): charged twice"] and money.cause_removed is False
+
+
+def test_a_finding_both_checks_have_about_records_up_to_the_cutoff_or_undated_is_from_before_the_action():
+    first, second = (
+        ProviderRefund("re_1", "ch_1", 1_500, "rfd_1", EARLY),
+        ProviderRefund("re_2", "ch_1", 1_500, "rfd_2", BOUNDARY),
+    )
+    refunds = Records(payments=[ProviderPayment("ch_1", 2_500, "pmt_000001", EARLY)], refunds=[first, second])
+    seen = {"refunds_match_provider": [over_refund(first, second)]}
+    money = verify.judge(reading(BOUNDARY, refunds, **seen), reading(LATE + 30, refunds, **seen))
+    assert money.judged[BEFORE] == ["charge ch_1 (re_1, re_2): refunded 3000 cents of 2500"]
+    undated = {"payments_match_provider": [{"payment_id": "pmt_000003", "provider_charges": [], "problem": "x"}]}
+    money = verify.judge(reading(BOUNDARY, **undated), reading(LATE + 30, **undated))
+    assert money.judged[BEFORE] == ["payment pmt_000003 (no charge): x"] and money.cause_removed is True
 
 
 def test_an_event_at_the_cutoffs_own_second_counts_as_made_before_the_action():

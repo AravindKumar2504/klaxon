@@ -252,7 +252,10 @@ def test_version_2_is_version_1_but_for_fault_3_and_new_comparisons_use_it():
         faults.FAULTS["provider-outage"].cause,
         faults.FAULTS["provider-outage"].remedy,
     )
-    assert "rubric version 2, committed before any live run on fault 3 with the circuit breaker" in grading.BY[2]
+    assert (
+        "rubric version 2, committed in 8e58e7f before any live run on fault 3 with the circuit breaker"
+        in grading.BY[2]
+    )
 
 
 def test_a_comparison_by_version_1_reads_the_cause_fault_3_recorded_then():
@@ -276,10 +279,16 @@ def test_a_saved_comparison_is_graded_again_with_its_own_version(saved, version)
     assert grading.version_of(saved) == version
 
 
-@pytest.mark.parametrize("rubric", [{"version": 9}, {"version": "1"}, "1", {}])
+@pytest.mark.parametrize("rubric", [{"version": 9}, {"version": "1"}, {"version": True}, "1", {}, None])
 def test_a_saved_comparison_naming_a_version_this_code_does_not_have_is_refused(rubric):
     with pytest.raises(ValueError, match="does not have"):
         grading.version_of({"rubric": rubric})
+
+
+@pytest.mark.parametrize("saved", [[], "v1", 1])
+def test_a_saved_comparison_that_is_not_an_object_is_refused(saved):
+    with pytest.raises(ValueError, match="not an object"):
+        grading.version_of(saved)
 
 
 @pytest.mark.parametrize("version", VERSIONS)

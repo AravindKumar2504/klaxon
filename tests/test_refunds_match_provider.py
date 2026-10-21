@@ -116,7 +116,7 @@ def test_refunds_that_agree_with_the_provider_pass():
     ]
     assert report.invariant(FIFTH).summary == (
         "all 3 of our refunds agree with the provider (1 refunded once, 2 never refunded),"
-        " and no payment was refunded more than it was charged"
+        " and no charge was refunded more than its amount"
     )
 
 
@@ -320,7 +320,7 @@ def test_a_refund_after_the_cutoff_is_left_for_the_next_check():
     assert report.left_for_next_check == {"provider_events": 2, "provider_charges": 0, "provider_refunds": 2}
     assert report.invariant(FIFTH).summary == (
         "all 1 of our refunds agree with the provider (1 refunded once, 0 never refunded),"
-        " and no payment was refunded more than it was charged; 2 refunds newer than the cutoff left for the next check"
+        " and no charge was refunded more than its amount; 2 refunds newer than the cutoff left for the next check"
     )
 
 
@@ -467,6 +467,16 @@ def test_a_charge_no_payment_of_ours_names_is_said_as_the_providers():
     assert "the provider's charge pay_000002 ($10.00) was refunded $12.00 at the provider" in (
         world.check().invariant(FIFTH).summary
     )
+
+
+def test_an_over_refund_names_our_payment_from_its_charges_metadata_when_no_refund_of_ours_links_it():
+    """Refunds that are not ours (their metadata names none of our refunds): only the charge says whose it is."""
+    world = World()
+    charge = world.paid()  # its metadata names pmt_000001
+    world.refund(charge, 1_500, None)
+    world.refund(charge, 1_500, None)
+    over = [i for i in world.check().invariant(FIFTH).evidence if i["problem"] == OVER_REFUNDED]
+    assert [(item["provider_payment_id"], item["payment_id"]) for item in over] == [("pay_000001", "pmt_000001")]
 
 
 def test_a_refund_that_names_no_payment_is_never_tied_to_one_of_ours_that_has_no_provider_id():
