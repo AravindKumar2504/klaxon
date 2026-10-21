@@ -487,3 +487,16 @@ In item 2's session, at his request ("can we review item 1 now, get done with it
 - **The known-bad rule: kept** (Aravind: "Keep it"). Klaxon never deploys a known-bad value, so undoing its rollback is always his to do by hand. Item 2's undo proposal relies on it.
 - **Item 1: accepted, to be read later** (Aravind: "Accept, read later"). He tried the gate: in the gate demo (a simulation), he approved request `r-a4fb` with `make approve` in his own terminal, by typing its id, and the run took that decision and rolled back the made-up ledger consumer. He will read the study notes and the code later; STATUS keeps that as his.
 - **Merged and pushed** (Aravind: "Merge and push"). `main` fast-forwarded to item 1, with the week 4 plan under it and this record on top; `main` only.
+
+
+## 2026-10-21 (week 4, item 2: the live steps, with Aravind's OK for each)
+
+After his review of item 1 (above), in the same session. Each live step needed his OK; Claude never approved a request.
+
+- **All four live steps, at once** (Aravind, choosing every option of a multiple-choice: "(a) Read-only docker look", "Claude sign-in check", "(b)+(c) Reset, run fault 1", "(d) Reset, run fault 2"). Claude reported after each.
+- **Docker Desktop was started by Claude** (`open -a Docker`): it was not running, and every step he chose needed it. It starts the app; no container changed until `make reset`.
+- **The sign-in check went to `evidence/week4/`** (Claude), not to `make claude-check`'s default folder, `evidence/week3/`.
+- **The runs started in the background, under `caffeinate -i`** (Claude; the review's M1): a gated run can wait ten minutes at the gate, and the Mac must not sleep meanwhile. Each run printed its folder first; Claude posted the `make approve` line, and Aravind ran it in his own terminal.
+- **Fault 2's first request went unanswered** (2026-10-21 09:16 to 09:26 UTC). He was asking what the step was, and why he had to type it when Claude Code runs in auto mode. Claude explained: it is Klaxon's own approval gate, his week 4 choice, not a password, and auto mode covers only Claude's own actions. The request expired, so it was denied; nothing ran, and the harness's clearing removed the cause. The run is kept as evidence of the expiry path.
+- **What to check before approving** (Claude, at his question "how will I know what to approve or to deny?"): in these runs the right fix is known, since each fault was injected on purpose. Approve only when the three lines written by code (the action and its service, the change, and the deploy it undoes) reverse the fault's own deploy; otherwise type `no`. Claude also posted each request's lines and its read of them; the decision stayed his.
+- **Fault 2, again** (Aravind: "okay rerun it now"). He approved request `r-af6d`; verification passed, and the money check passed.
