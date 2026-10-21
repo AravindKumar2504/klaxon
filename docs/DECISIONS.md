@@ -443,3 +443,12 @@ Built in item 5's session, at Aravind's choice ("Do this task here" on the card 
   5. *A request sealed again without its confidence crashed `make approve`* (a nit; it failed closed): refused now.
   6. *The known-bad check also counted values a rollback leaves as they run* (a nit; it was only stricter): it now looks only at the values the rollback would set.
 
+
+## 2026-10-21 (Aravind's review of week 4, item 1)
+
+In item 2's session, at his request ("can we review item 1 now, get done with it, and continue with item 2 so that there are no blockers for item 2"). He answered four questions, choosing an option each:
+
+- **The deploy log's design: kept** (Aravind: "Keep it"). A rollback goes back to the settings the latest deploy replaced, only from the container that deploy made, logged in `~/.klaxon/deploys.jsonl`.
+- **The known-bad rule: kept** (Aravind: "Keep it"). Klaxon never deploys a known-bad value, so undoing its rollback is always his to do by hand. Item 2's undo proposal relies on it.
+- **Item 1: accepted, to be read later** (Aravind: "Accept, read later"). He tried the gate: in the gate demo (a simulation), he approved request `r-a4fb` with `make approve` in his own terminal, by typing its id, and the run took that decision and rolled back the made-up ledger consumer. He will read the study notes and the code later; STATUS keeps that as his.
+- **Merged and pushed** (Aravind: "Merge and push"). `main` fast-forwarded to item 1, with the week 4 plan under it and this record on top; `main` only.
