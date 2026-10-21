@@ -14,10 +14,10 @@ and tries again later:
                attempts got an answer from it: each timed out or could not
                connect; got a 5xx other than 500 and 501 (the provider, or a
                gateway in front of it, cannot serve: 502, 503, 504, a CDN's
-               52x); or got a 500 or 501 only after more than half the
-               timeout (it held a worker thread as long as a hang). Any other
-               answer counts as one, a quick 500 included: the provider is
-               there. It sets the count of failed calls in a row back to 0.
+               52x, 530); or got a 500 or 501 only after more than half the
+               timeout (it held a worker thread for most of a timeout). Any
+               other answer counts as one, a quick 500 included: the provider
+               is there. It sets the count of failed calls in a row back to 0.
                At 5 failed calls in a row, the breaker opens.
     open       no attempt goes out: each call fails at once (CircuitOpen, a
                ProviderUnavailable, so the API leaves the payment pending as
@@ -34,10 +34,12 @@ loses on purpose) is a quick 500 at every attempt with its key, and again at
 each retry of the client. Counted as failures, such requests can open the
 breaker while the provider is up: with 20% of answers lost at 5 payments per
 second and the known-bad confirmer, it was not closed about half the time, by
-the review's simulation. The limits: a provider that answers quick 500s, or
-409s or 429s, to every call never opens it (its calls fail fast anyway); and
-in a partial outage, where some calls hang and others get quick 500s, each
-500 starts the count again.
+the review's simulation. The limits: a provider that answers quick 500s to
+every call never opens it (its calls fail fast anyway); one that answers 409
+or 429, which the client retries, never does either, even slowly, though a
+slow one holds a thread (this fake provider sends neither slowly); and in a
+partial outage, where some calls hang and others get quick 500s, each 500
+starts the count again.
 
 Only the trial decides: a result counts only while the breaker is in the
 state that let its attempt go, so an attempt sent before the breaker opened,
@@ -70,7 +72,7 @@ logger = logging.getLogger("klaxon.provider_client")
 
 RETRYABLE_STATUSES = {409, 429}  # "a request with this key is still running" and "slow down"
 OWN_ERRORS = {500, 501}  # 5xx that are the provider's own answer about one request; any other 5xx is no answer
-SLOW_SHARE = 0.5  # of the timeout: a 500 or 501 that took longer held a thread as long as a hang, so it is no answer
+SLOW_SHARE = 0.5  # of the timeout: a 500 or 501 that took longer held a thread for most of a timeout: no answer
 BREAKER_FAILURES = 5  # failed calls in a row that open the breaker
 BREAKER_OPEN_SECONDS = 10.0  # how long it stays open before a trial attempt
 CLOSED, OPEN, HALF_OPEN = "closed", "open", "half-open"
