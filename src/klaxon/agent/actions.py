@@ -127,8 +127,9 @@ PLANNERS = {"rollback_deploy": _plan_rollback}  # one per catalog action (a test
 def plan_undo(done: Mapping, deployer: Deployer) -> Plan:
     """The plan to undo a rollback the gate ran (week 4, item 2: after a failed verification): roll the service back
     again, to what that rollback replaced. Reads only. Refused unless the service's latest logged deploy is still
-    that rollback, from the same container: a deploy made since is not Klaxon's to undo. Then every rule of a
-    rollback holds: in this system every such undo would deploy a known-bad setting, so it is always refused."""
+    that rollback: a deploy made since is not Klaxon's to undo. Then every rule of a rollback holds (the running
+    container must be the one it made, and so on): in this system every such undo would deploy a known-bad setting,
+    so it is always refused."""
     service = done.get("service") if isinstance(done, Mapping) else None
     if service not in SERVICES:
         raise ActionRefused("there is no deploy of Klaxon's to undo")
@@ -136,7 +137,7 @@ def plan_undo(done: Mapping, deployer: Deployer) -> Plan:
         latest = deployer.log.latest(service)
     except DeployError as exc:
         raise ActionRefused(f"the deploy log could not be read: {clean_text(str(exc), 300)}") from None
-    if latest is None or latest.seq != done.get("seq") or latest.container != done.get("container"):
+    if latest is None or latest.seq != done.get("seq"):
         raise ActionRefused(
             f"{service} was deployed again since Klaxon's rollback: that deploy is not Klaxon's to undo"
         )

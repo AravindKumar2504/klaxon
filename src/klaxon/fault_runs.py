@@ -54,9 +54,11 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+import signal
 import sys
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,10 +134,11 @@ class Gated:
     """Klaxon's part after its diagnosis, in a gated run: the gate, verification, and any undo it proposes. The
     command builds the real ones (klaxon_parts); tests replace each."""
 
-    read_money: Callable[[], verify.Reading]  # the money check, read right before the gate asks
-    act: Callable[[Alert, Diagnosis], gate.Outcome]  # plan, ask, wait for make approve, run if approved
+    read_money: Callable[[], verify.Reading]  # the money check, read once a plan is made, right before its request
+    # plan, ask, wait for make approve, run if approved; the third argument is called right before the request
+    act: Callable[[Alert, Diagnosis, Callable[[], None]], gate.Outcome]
     decided: Callable[[], dict | None]  # the decision the run took, and whether make approve wrote it
-    verify_action: Callable[[gate.Outcome, Callable[[], alerts.Evaluation]], verify.Verification]
+    verify_action: Callable[[Callable[[], alerts.Evaluation]], verify.Verification]  # given the rules, fresh
     propose_undo: Callable[[gate.Outcome, verify.Verification], gate.Outcome]
     deploys: Callable[[], list[Deploy]]  # the deploy log, oldest first
 
@@ -199,10 +202,10 @@ def run(
     """One run, filling in record as it goes. The fault is always cleared once its injection began, and the
     traffic always stopped, whatever happens; an error is raised after both. With gated, Klaxon may act on its
     diagnosis, through the gate, before the fault is cleared."""
+    record.gated = gated is not None  # first: a run whose traffic never starts is still said as gated
     generator = stack.new_traffic(settings)
     generator.start()  # a provider out of reach raises here, before any traffic
     started = stack.clock()
-    record.gated = gated is not None
     marks: dict[str, int | None] = {}  # the deploy log's last line before the fault, and before its clearing
 
     def since() -> float:
@@ -279,13 +282,15 @@ def _act(
     alerting: alerts.Alerting,
     rules: Callable[[], alerts.Evaluation],
 ) -> None:
-    """Klaxon's part after its diagnosis: the gate (which asks only for a named action), verification of an action
-    that ran, and an undo proposed when verification failed."""
-    if diagnosis.fix_action is not None:  # a request will be made: the damage as it is asked
+    """Klaxon's part after its diagnosis: the gate (which asks only for a named action it could plan), verification
+    of an action that ran, and an undo proposed when verification failed."""
+
+    def at_request() -> None:  # the gate made a plan, and is about to ask: the damage as it is asked
         began = since()
         record.damage["at_request"] = gated.read_money().to_dict() | {"began": began, "took": round(since() - began, 1)}
+
     record.timings["gate_began_at"] = since()
-    outcome = gated.act(alert, diagnosis)  # waits here, up to 10 minutes, for make approve
+    outcome = gated.act(alert, diagnosis, at_request)  # waits here, up to 10 minutes, for make approve
     record.timings["gate_ended_at"] = since()
     try:
         decided = gated.decided() if outcome.request_id else None
@@ -296,7 +301,7 @@ def _act(
         return
     alerting.reset()  # verification reads the rules afresh: no count carried over from before the action
     record.timings["verify_began_at"] = since()
-    found = gated.verify_action(outcome, rules)
+    found = gated.verify_action(rules)
     record.timings["verify_ended_at"] = since()
     record.verification = found.to_dict()
     record.damage["at_action"] = found.at_action.to_dict()
@@ -542,7 +547,17 @@ def _gated_label(record: Record) -> list[str]:
             }.get(result, f"{asked}: {result}.")
         )
     if record.verification is not None:
-        said.append(f"Code, not the model, then verified it (klaxon.agent.verify): {record.verification['verdict']}.")
+        money = record.verification["money"]
+        cause = {True: "the cause is removed", False: "the cause is not removed"}.get(
+            money["cause_removed"], "whether the cause is removed is not known"
+        )
+        right = {True: "the money is right", False: "the money is not right"}.get(
+            money["right"], "whether the money is right is not known"
+        )
+        said.append(
+            f"Code, not the model, then verified it (klaxon.agent.verify): {record.verification['verdict']}; {cause},"
+            f" and {right}."
+        )
     elif "verify_began_at" in record.timings:
         said.append(f"Its verification began and did not finish: {record.stopped}.")
     if record.undo is not None:
@@ -551,8 +566,18 @@ def _gated_label(record: Record) -> list[str]:
             f" {clean_text(record.undo['detail'], 300)}"
         )
     if record.removed_by is not None:
-        said.append(f"The fault's cause was removed by {record.removed_by}.")
+        said.append(removed_sentence(record.removed_by))
     return said
+
+
+NOT_KNOWN = "not known: "
+
+
+def removed_sentence(removed_by: str) -> str:
+    """Who removed the fault's cause, in a sentence: "not known" is never said as if it were someone."""
+    if removed_by.startswith(NOT_KNOWN):
+        return f"Who removed the fault's cause is not known: {removed_by[len(NOT_KNOWN) :]}."
+    return f"The fault's cause was removed by {removed_by}."
 
 
 def damage_line(entry: Mapping) -> str:
@@ -587,7 +612,9 @@ def _render_gated(record: Record) -> list[str]:
         if outcome.get("request_id"):
             made = record.timings.get("gate_began_at")
             ended = record.timings.get("gate_ended_at")
-            lines.append(f"  request {outcome['request_id']}, asked at t={made:g} s, answered by t={ended:g} s")
+            lines.append(
+                f"  request {outcome['request_id']}: the gate began at t={made:g} s and was done at t={ended:g} s"
+            )
         if decided and "error" in decided:
             lines.append(f"  decision: not known: {clean_text(decided['error'], 200)}")
         elif decided:
@@ -614,7 +641,7 @@ def _render_gated(record: Record) -> list[str]:
             settings = ", ".join(f"{name}={value}" for name, value in (line["settings"] or {}).items())
             lines.append(f"  {line['seq']} {line['at']} {line['service']} by {clean_text(line['by'], 100)}: {settings}")
     if record.removed_by is not None:
-        lines += ["", f"The fault's cause was removed by {record.removed_by}."]
+        lines += ["", removed_sentence(record.removed_by)]
     return lines
 
 
@@ -698,6 +725,24 @@ def preflight(model_id: str, client: Callable[[], McpClient] = McpClient) -> Pat
     return binary
 
 
+@contextmanager
+def stops_as_interrupts() -> Iterator[None]:
+    """While a run lasts, a stop signal does what Ctrl-C does: SIGTERM (a background task stopped) and SIGHUP (its
+    terminal closed) raise KeyboardInterrupt, so the fault is still cleared, the traffic stopped and the evidence
+    saved. Python's own default for them ends the process at once, with no finally run. A gated run can wait ten
+    minutes at the gate, so this matters more than it did."""
+
+    def interrupt(signum: int, frame: object) -> None:
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+
+    before = {stop: signal.signal(stop, interrupt) for stop in (signal.SIGTERM, signal.SIGHUP)}
+    try:
+        yield
+    finally:
+        for stop, handler in before.items():
+            signal.signal(stop, handler)
+
+
 def klaxon_parts(folder: Path, deployer: Deployer) -> Gated:
     """The real gate, verification and undo, for one run's folder, on this Mac's stack. deployer: the faults' own
     (klaxon.faults.LocalStack), so a fault's deploys and Klaxon's share one deploy log, and one lock."""
@@ -707,9 +752,9 @@ def klaxon_parts(folder: Path, deployer: Deployer) -> Gated:
 
     return Gated(
         read_money=lambda: verify.read(live.check_live, alerts.MONEY_SETTLE_SECONDS),
-        act=lambda alert, diagnosis: gate.act(folder, diagnosis, deployer, asdict(alert)),
+        act=lambda alert, diagnosis, asking: gate.act(folder, diagnosis, deployer, asdict(alert), before_asking=asking),
         decided=lambda: gate.decided(folder),
-        verify_action=lambda outcome, rules: verify.verify(rules),
+        verify_action=verify.verify,
         propose_undo=propose_undo,
         deploys=deployer.log.records,
     )
@@ -741,9 +786,10 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
 
     code = 0
     try:
-        run(fault, record, parts, settings, investigate, gated=gated)
-    except KeyboardInterrupt:
-        record.stopped, code = "interrupted", 130
+        with stops_as_interrupts():
+            run(fault, record, parts, settings, investigate, gated=gated)
+    except KeyboardInterrupt as exc:
+        record.stopped, code = "interrupted" + (f" ({exc})" if str(exc) else ""), 130
     except Exception as exc:  # the fault was cleared and the traffic stopped, unless this is where it failed
         record.stopped, code = f"error: {type(exc).__name__}: {clean_text(str(exc), 300)}", 2
     (folder / RUN_FILE).write_text(json.dumps(evidence(record, header), indent=2, default=str) + "\n")
@@ -755,6 +801,8 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
         return code
     if record.loop is None or record.loop["reason"] != "diagnosed":
         return 1
+    if record.gate is not None and record.gate["result"] in ("not run", "failed"):  # approved, and it did not run
+        return 1
     return 1 if record.verification is not None and record.verification["verdict"] != "passed" else 0
 
 
@@ -763,7 +811,8 @@ def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
         alerting = alerts.Alerting()
         header = _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
-        found = quiet(alerting, settings, args.minutes)
+        with stops_as_interrupts():
+            found = quiet(alerting, settings, args.minutes)
     except (ValueError, StackError, httpx.HTTPError) as exc:
         print(f"Could not run: {clean_text(str(exc), 300)}. Is the stack up (make up)?", file=sys.stderr)
         return 2

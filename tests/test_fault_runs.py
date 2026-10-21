@@ -8,6 +8,7 @@ runs Klaxon's real loop with scripted replies, and Klaxon's real MCP server code
 import json
 import os
 import re
+import signal
 import subprocess
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -27,6 +28,7 @@ from klaxon.checks import live
 from klaxon.checks.money import InvariantResult, MoneyReport
 from klaxon.patient.deploys import Deploy, DeployError
 from klaxon.patient.provider import Event
+from klaxon.patient.stack import StackError
 from klaxon.traffic import Settings
 from tests.agent.test_gate import ScriptedTerminal
 from tests.agent.test_loop import Served, tool
@@ -676,6 +678,7 @@ def test_the_make_targets_pass_their_values_through_the_environment():
     # Finding 9: the four new targets were not in item 3's quoting test.
     for target, value, name in [
         ("investigate-fault", "FAULT=x' ; echo pwned", '"$FAULT"'),
+        ("investigate-fault", "NO_ACTIONS=1' ; echo pwned", "${NO_ACTIONS:+--no-actions}"),  # week 4: never pasted
         ("grade-run", "RUN=x' ; echo pwned", '"$RUN"'),
         ("alerts", "WATCH=1' ; echo pwned", '"$WATCH"'),
         ("alerts-under-traffic", "MINUTES=1' ; echo pwned", '"$MINUTES"'),
@@ -783,7 +786,7 @@ def made_up_verification(verdict="passed"):
     health = verify.Health(verdict != "failed", None if verdict != "failed" else "made up", ())
     cause = {"passed": True, "failed": False, "could not verify": None}[verdict]
     money = verify.Money(cause, cause, {verify.BEFORE: [], verify.SURFACED: [], verify.NEW: []})
-    return verify.Verification(verdict, health, reading, reading, money, (f"made up: {verdict}",))
+    return verify.Verification(verdict, health, reading, reading, money)
 
 
 class Klaxon:
@@ -804,11 +807,14 @@ class Klaxon:
         self.world.calls.append("money at the request")
         return verify.Reading("2026-10-20T00:03:00Z", "failed", 1_792_399_900, money_off_cents=46_100)
 
-    def act(self, alert, diagnosis):
+    def act(self, alert, diagnosis, before_asking):
         self.world.calls.append("gate")
+        if self.result in ("no action", "refused"):  # as the real gate: no plan, so no request and nobody asked
+            return gate.Outcome(self.result, "made up")
+        before_asking()  # as the real gate: once a plan is made, right before its request
         self.world.now += 45.0  # the time it took to answer
         if self.result != "done":
-            return gate.Outcome(self.result, "made up", "r-1234" if self.result != "no action" else None)
+            return gate.Outcome(self.result, "made up", "r-1234")
         self.log.append(
             deploy_line(len(self.log) + 1, "Klaxon, approved request r-1234", {"LEDGER_HANDLER": "idempotent"})
         )
@@ -818,7 +824,7 @@ class Klaxon:
     def decided(self):
         return {"decision": "approved", "how": "typed at a terminal", "at": "x", "written_by_make_approve": True}
 
-    def verify_action(self, outcome, rules):
+    def verify_action(self, rules):
         self.world.calls.append("verify")
         self.rules_read += [rules(), rules()]
         return made_up_verification(self.verdict)
@@ -877,8 +883,8 @@ def test_a_gated_run_lets_klaxon_act_and_verify_before_the_harness_clears_the_fa
         "traffic on",
         "inject",
         "investigate",
-        "money at the request",
         "gate",
+        "money at the request",  # once the gate has a plan, right before its request
         "verify",
         "clear",
         "traffic closed",
@@ -904,8 +910,8 @@ def test_verification_reads_the_rules_afresh_after_the_action():
     world = DeployFault()
     act = world.klaxon.act
 
-    def leaves_old_damage(alert, diagnosis):
-        outcome = act(alert, diagnosis)
+    def leaves_old_damage(alert, diagnosis, before_asking):
+        outcome = act(alert, diagnosis, before_asking)
         world.money_before = FAILED  # the rollback removed the cause; the money booked twice stays wrong
         return outcome
 
@@ -939,7 +945,8 @@ def test_an_action_that_did_not_run_is_not_verified_and_the_harness_removes_the_
     assert "verify" not in calls(world) and record.verification is None and record.undo is None
     assert calls(world).index("gate") < calls(world).index("clear")
     assert record.gate["result"] == result and record.removed_by == "the harness's clearing (klaxon.faults)"
-    assert list(record.damage) == ["at_alert", "at_request"]
+    # the review's L1: a plan the gate refused makes no request, so there is no damage "at the request"
+    assert list(record.damage) == (["at_alert"] if result == "refused" else ["at_alert", "at_request"])
 
 
 def test_a_diagnosis_that_names_no_action_reads_no_money_and_the_gate_asks_nobody():
@@ -1001,8 +1008,8 @@ def test_who_removed_the_cause_when_klaxon_rolled_back_the_wrong_service():
     world = DeployFault()
     act = world.klaxon.act
 
-    def wrong_service(alert, diagnosis):
-        outcome = act(alert, diagnosis)
+    def wrong_service(alert, diagnosis, before_asking):
+        outcome = act(alert, diagnosis, before_asking)
         world.fault_on = True  # its rollback did not touch the ledger consumer's bad setting
         return outcome
 
@@ -1031,28 +1038,123 @@ def test_a_deploy_log_that_cannot_be_read_never_stops_the_clearing_and_is_said()
     assert record.removed_by.startswith("not known: the deploy log could not be read")
 
 
+def gated_record(world, investigate=None):
+    """A gated run's own record, kept even when the run raises: run() fills it in as it goes."""
+    record = record_for(world.fault())
+
+    def diagnosed_with_rollback(alert):
+        return loop.RunResult("diagnosed", "x", replace(DIAGNOSIS, fix_action=ROLLBACK), 1, 1, 1.0, Path("t"))
+
+    try:
+        fault_runs.run(
+            world.fault(),
+            record,
+            world.stack(),
+            Settings(run_id="r1"),
+            investigate or diagnosed_with_rollback,
+            gated=world.klaxon.parts(),
+        )
+    except RuntimeError:
+        pass
+    return record
+
+
 def test_a_clearing_that_failed_is_said_as_the_cause_not_known_removed():
     world = DeployFault()
-    world.klaxon.result = "denied"
-    world.clear_fails = True
-    with pytest.raises(RuntimeError, match="docker did not answer"):
-        gated_run(world)
-    # the record is filled as it goes: the run's own record object, again
-    record = record_for(world.fault())
-    world2 = DeployFault()
-    world2.klaxon.result, world2.clear_fails = "denied", True
-    with pytest.raises(RuntimeError):
-        fault_runs.run(
-            world2.fault(),
-            record,
-            world2.stack(),
-            Settings(run_id="r1"),
-            lambda alert: loop.RunResult(
-                "diagnosed", "x", replace(DIAGNOSIS, fix_action=ROLLBACK), 1, 1, 1.0, Path("t")
-            ),
-            gated=world2.klaxon.parts(),
-        )
+    world.klaxon.result, world.clear_fails = "denied", True
+    record = gated_record(world)
     assert record.removed_by == "not known: the harness's clearing failed, so the fault may still be in place"
+    # The review's M2: "not known" is never said as if it were someone who removed the cause.
+    said = fault_runs.label(record)
+    assert (
+        "Who removed the fault's cause is not known: the harness's clearing failed, so the fault may still be in place."
+    ) in said
+    assert "removed by not known" not in said and "removed by not known" not in fault_runs.render(record)
+
+
+def test_a_deploy_log_unreadable_only_at_the_clearing_never_lets_klaxon_take_the_clearings_work():
+    # The review's L2: with the clearing's mark unknown, a clearing that deployed could be missed, and the record
+    # would say Klaxon removed the cause. Here Klaxon's rollback missed the bad setting, and the clearing deployed.
+    world = DeployFault()
+    act, reads = world.klaxon.act, []
+
+    def wrong_service(alert, diagnosis, before_asking):
+        outcome = act(alert, diagnosis, before_asking)
+        world.fault_on = True
+        return outcome
+
+    def unreadable_at_the_clearing():
+        reads.append(1)
+        if len(reads) == 2:  # the first read is the mark before the fault, the second the clearing's
+            raise DeployError("the deploy log has a line it cannot read (line 4)")
+        return list(world.klaxon.log)
+
+    world.klaxon.act, world.klaxon.deploys = wrong_service, unreadable_at_the_clearing
+    record = gated_record(world)
+    assert record.removed_by == "not known: the deploy log could not be read"
+    assert [line["by"] for line in record.deploys] == [
+        "klaxon.faults",
+        "Klaxon, approved request r-1234",
+        "klaxon.faults",
+    ]
+
+
+def test_a_gated_run_that_stopped_before_its_fault_says_nothing_of_who_removed_it():
+    # The review's L2: no fault was injected, so there is no cause to remove, and no deploy log is read for one.
+    world = DeployFault(before=SLOW)
+    record = gated_record(world)
+    assert "inject" not in calls(world)
+    assert record.removed_by is None and record.deploys is None and record.damage == {}
+    assert "removed" not in fault_runs.label(record)
+
+
+def test_a_gated_run_whose_traffic_never_began_is_still_said_as_gated():
+    # A nit from the review: record.gated was set after the traffic started.
+    world = DeployFault()
+    world.traffic_fails = True
+    record = record_for(world.fault())
+    with pytest.raises(httpx.ConnectError):
+        fault_runs.run(
+            world.fault(), record, world.stack(), Settings(run_id="r1"), diagnosed(world), gated=world.klaxon.parts()
+        )
+    assert record.gated and fault_runs.render(record).startswith("Klaxon week 4: a gated run on a fault")
+
+
+@pytest.mark.parametrize("stop", [signal.SIGTERM, signal.SIGHUP])
+def test_a_stop_signal_during_a_run_clears_the_fault_as_ctrl_c_does(stop, monkeypatch, tmp_path):
+    # The review's M1: Python's own default for these signals ends the process at once, with no finally run, so a
+    # stopped background run would have left its fault in place, and no evidence.
+    world = World()
+    patch_command(monkeypatch, world)
+    before = signal.getsignal(stop)
+
+    def stopped(*args, **kwargs):
+        world.calls.append("investigate")
+        os.kill(os.getpid(), stop)
+        raise AssertionError("the stop signal did not interrupt the run")
+
+    monkeypatch.setattr(fault_runs.loop, "investigate_live", stopped)
+    assert fault_runs.main(["run", "provider-outage", *WEEK3, "--evidence-dir", str(tmp_path)]) == 130
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["stopped"] == f"interrupted ({stop.name})" and saved["cleared"] == {"made_up": "cleared"}
+    assert calls(world)[-3:] == ["clear", "traffic closed", "traffic joined"]
+    assert signal.getsignal(stop) == before  # put back once the run is over
+
+
+def test_a_stop_signal_during_a_quiet_run_still_stops_the_traffic(monkeypatch, tmp_path):
+    world = World()
+    patch_quiet(monkeypatch, world)
+    real = world.prometheus
+
+    def stopped(query):
+        os.kill(os.getpid(), signal.SIGTERM)
+        return real(query)
+
+    world.prometheus = stopped
+    with pytest.raises(KeyboardInterrupt, match="SIGTERM"):
+        fault_runs.main(["quiet", "--minutes", "1", "--evidence-dir", str(tmp_path)])
+    assert calls(world)[-2:] == ["traffic closed", "traffic joined"]
 
 
 @pytest.mark.parametrize(
@@ -1168,7 +1270,7 @@ def money_checks(world, new_damage=False):
     return check
 
 
-def patch_gated(monkeypatch, world, script, answer="{id}", new_damage=False):
+def patch_gated(monkeypatch, world, script, answer="{id}", new_damage=False, before_answer=None, after_gate=None):
     monkeypatch.setattr(fault_runs, "preflight", lambda model: Path("/made-up/claude"))
     monkeypatch.setattr(fault_runs.faults, "LocalStack", lambda: world.local)
     monkeypatch.setattr(fault_runs.alerts, "Alerting", world.alerting)
@@ -1192,15 +1294,24 @@ def patch_gated(monkeypatch, world, script, answer="{id}", new_damage=False):
         def scripted_approver(seconds):  # the run waits: a scripted approver answers, in make approve's real code
             if not answered and answer is not None:
                 answered.append(True)
+                if before_answer is not None:
+                    before_answer()
                 typed = answer.replace("{id}", gate.read_request(folder)["id"])
                 gate.approve(folder, lambda: ScriptedTerminal(typed), now)
             world.sleep(seconds)
 
         check = money_checks(world, new_damage)
+
+        def decided():
+            if after_gate is not None:
+                after_gate()
+            return gate.decided(folder)
+
         return replace(
             parts,
+            decided=decided,
             read_money=lambda: verify.read(check, 15.0, now),
-            act=lambda alert, diagnosis: gate.act(
+            act=lambda alert, diagnosis, asking: gate.act(
                 folder,
                 diagnosis,
                 deployer,
@@ -1209,8 +1320,9 @@ def patch_gated(monkeypatch, world, script, answer="{id}", new_damage=False):
                 clock=world.clock,
                 now=now,
                 say=said.append,
+                before_asking=asking,
             ),
-            verify_action=lambda outcome, rules: verify.verify(
+            verify_action=lambda rules: verify.verify(
                 rules, check, lambda: HEALTHY_ROWS, world.sleep, world.clock, now
             ),
         )
@@ -1253,7 +1365,8 @@ def test_the_gated_command_asks_waits_for_the_approval_acts_verifies_then_clears
         "duplicate-delivery, was injected on purpose",
         "offered one write action (rollback_deploy)",
         "approved with make approve (the request's id typed at a terminal), and the action ran",
-        "Code, not the model, then verified it (klaxon.agent.verify): passed.",
+        "Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is"
+        " not right.",
         "The fault's cause was removed by Klaxon",
     ):
         assert claim in saved["label"], claim
@@ -1331,3 +1444,24 @@ def test_the_gated_command_with_new_damage_after_the_action_fails_and_proposes_t
     assert events[-2:] == ["undo proposed", "undo refused"]
     assert world.docker.settings(LEDGER) == GOOD[LEDGER]  # the undo ran nothing: Klaxon's rollback stays
     assert "the gate refused it" in saved["label"]
+
+
+def test_the_gated_command_exits_1_when_an_approved_rollback_fails_in_docker(monkeypatch, tmp_path):
+    # The review's L7: an approved action that failed exited 0, as a denial does.
+    world = DockerStack()
+
+    def breaks():
+        world.docker.up_fails = StackError("the container did not turn healthy")
+
+    def mends():  # once the gate is done: the harness's clearing must still be able to deploy
+        world.docker.up_fails = None
+
+    patch_gated(
+        monkeypatch, world, [tool("money_check", wait=True), NAMES_ROLLBACK], before_answer=breaks, after_gate=mends
+    )
+    assert fault_runs.main(["run", "duplicate-delivery", "--evidence-dir", str(tmp_path)]) == 1
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["gate"]["result"] == "failed" and "did not turn healthy" in saved["gate"]["detail"]
+    assert saved["verification"] is None and saved["removed_by"] == "the harness's clearing (klaxon.faults)"
+    assert "the request was approved with make approve" in saved["label"] and "the action failed" in saved["label"]

@@ -11,7 +11,7 @@ For a run whose diagnosis names an action (fix_action, klaxon.agent.contract):
        terminal, so a process without one (Claude's shell, for one) cannot approve.
     4. No decision within 10 minutes means denied (by the wall clock too: a Mac's other clock stops while it
        sleeps). A decision counts only for the request it names, whole: one that names another request, or this
-       one changed after it was saved, is denied.
+       one changed after it was saved, is denied. A run that stops while it waits closes its request with a denial.
     5. An approved plan runs, and only if what it was made on still holds (klaxon.agent.actions.run).
     6. After it, code verifies (klaxon.agent.verify). A failed verification proposes undoing the action, through
        this gate (propose_undo); in this system every undo is a person's call, so nobody is asked.
@@ -360,8 +360,11 @@ def act(
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.time,
     say: Callable[[str], None] = _say,
+    before_asking: Callable[[], None] | None = None,
 ) -> Outcome:
-    """The gate, for one diagnosis: plan its action, ask, wait, and run it only if a person approved it."""
+    """The gate, for one diagnosis: plan its action, ask, wait, and run it only if a person approved it.
+    before_asking: called once a plan is made, right before its request is (week 4, item 2: the run reads the
+    money then, so the evidence has the damage at the request)."""
     folder = Path(folder)
     named = diagnosis.fix_action
     if named is None:
@@ -372,6 +375,8 @@ def act(
     except ActionRefused as exc:
         log(folder, "refused", now, action=named.name, arguments=named.arguments, why=str(exc))
         return Outcome("refused", str(exc))
+    if before_asking is not None:
+        before_asking()
     request = make_request(planned, diagnosis, folder, alert, now, timeout)
     if _create_once(folder / REQUEST, request) is None:
         raise GateError("this folder already holds an approval request: one request per run")
@@ -386,7 +391,11 @@ def act(
         expires_at=request["expires_at"],
     )
     say(how_to_answer(folder, request))
-    decision = wait(folder, request, timeout, clock, sleep, now)
+    try:
+        decision = wait(folder, request, timeout, clock, sleep, now)
+    except BaseException:  # the run stops while it waits (Ctrl-C, a stop signal): no later yes may count for it
+        _close(folder, request, now)
+        raise
     if decision.decision != "approved":
         return Outcome(decision.decision, decision.how, request["id"])
     log(folder, "running", now, request=request["id"], change=planned.change)
@@ -404,6 +413,25 @@ def act(
         raise
     log(folder, "done", now, request=request["id"], deploy=asdict(record))
     return Outcome("done", planned.change, request["id"], asdict(record))
+
+
+STOPPED = "the run stopped while it waited"
+
+
+def _close(folder: Path, request: Mapping, now: Callable[[], float]) -> None:
+    """Close the request of a run that stopped while it waited: a denial, written once, so `make approve` finds it
+    decided and logs no approval for a run that is gone. A decision that landed first stands as written; the log
+    then shows that no run took it."""
+    closed = {
+        "label": DECISION_LABEL,
+        "request_id": request["id"],
+        "request_sha256": request["sha256"],
+        "decision": "denied",
+        "at": utc(now()),
+        "how": STOPPED,
+    }
+    if _create_once(Path(folder) / DECISION, closed) is not None:
+        log(folder, "stopped", now, request=request["id"], how=STOPPED)
 
 
 def decided(folder: Path) -> dict | None:

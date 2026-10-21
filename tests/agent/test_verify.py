@@ -507,7 +507,7 @@ def test_a_rollback_that_removed_the_cause_but_left_old_damage_passes_and_says_b
     assert found.verdict == "passed"
     assert found.said == (
         "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row.",
-        "The cause is removed: nothing the provider made after the action was booked wrong.",
+        "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
         "The money is not right: 1 event counted more than once, 1 payment whose books differ from the provider's;"
         " our books $25.00 ahead of the provider's balance. A rollback repairs nothing: this damage stays until a"
         " person repairs it.",
@@ -520,7 +520,7 @@ def test_a_rollback_that_removed_the_cause_but_left_old_damage_passes_and_says_b
 def test_a_rollback_that_fixed_everything_passes_with_the_money_right():
     found, _ = verified(check(BOUNDARY), check(LATE))
     assert found.verdict == "passed" and found.said[1:] == (
-        "The cause is removed: nothing the provider made after the action was booked wrong.",
+        "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
         "The money is right: the money check passed.",
     )
 
@@ -563,8 +563,8 @@ def test_damage_seen_later_is_said_as_from_before_the_action():
     )
     assert found.verdict == "passed"
     assert (
-        "1 finding showed only after the action, about records made before it: damage from before the action, seen"
-        " later."
+        "1 finding showed only after the money check right after the action, about records made before it: damage"
+        " from before the action, seen later."
     ) in found.said
 
 
@@ -586,3 +586,63 @@ def test_health_and_money_use_the_same_rules_as_klaxons_alerting():
     assert verify.EVERY_SECONDS == alerts.EVERY_SECONDS
     assert {subject for _, subject, _ in verify.METRICS} == {"payments-api"}
     assert HEALTHY["lag_by_group"] and PASSED["outcome"] == "passed"
+
+
+# After the independent review (DECISIONS.md lists its findings by number)
+
+
+def test_a_payments_books_that_changed_with_nothing_to_explain_it_count_as_new():
+    # L3: the books moved while the finding about the payment's event stayed the same. Nothing old explains it.
+    old = event(1, EARLY)
+    before = reading(
+        BOUNDARY, Records([old]), posted_exactly_once=[posted(old)], matches_provider=[differs("pay_0001", 2_500)]
+    )
+    later = reading(
+        LATE,
+        Records([old]),
+        posted_exactly_once=[posted(old)],
+        matches_provider=[differs("pay_0001", 252_500), total(252_500)],
+    )
+    money = verify.judge(before, later)
+    assert money.judged[BEFORE] == ["event evt_0001 posted 2 times"]
+    assert money.judged[NEW] == [
+        "payment pay_0001: books off by 252500 cents",
+        "all payments: books off by 252500 cents",
+    ]
+    assert money.cause_removed is False
+
+
+def test_the_total_that_changed_while_everything_else_stayed_counts_as_new():
+    old = event(1, EARLY)
+    same = {"posted_exactly_once": [posted(old)], "matches_provider": [differs("pay_0001", 2_500)]}
+    before = reading(
+        BOUNDARY, Records([old]), **{**same, "matches_provider": [*same["matches_provider"], total(2_500)]}
+    )
+    later = reading(LATE, Records([old]), **{**same, "matches_provider": [*same["matches_provider"], total(9_999)]})
+    assert verify.judge(before, later).judged[NEW] == ["all payments: books off by 9999 cents"]
+
+
+def test_the_whole_ledgers_imbalance_keeps_its_key_while_bookings_grow():
+    # L4: the totals grow with every booking; how far apart they are does not, unless something new is wrong.
+    def whole(debits, credits):
+        return {"ledger_balanced": [{"scope": "whole ledger", "debits_cents": debits, "credits_cents": credits}]}
+
+    money = verify.judge(reading(BOUNDARY, **whole(10_000, 9_900)), reading(LATE, **whole(50_000, 49_900)))
+    assert money.judged[BEFORE] == ["the whole ledger: debits minus credits 100 cents"]
+    assert verify.judge(reading(BOUNDARY, **whole(10_000, 9_900)), reading(LATE, **whole(50_000, 49_000))).judged[NEW]
+
+
+def test_old_damage_a_check_that_could_not_settle_did_not_show_is_said_so():
+    # L5: with no verdict right after the action, old damage did not "show only later": that check could not see it.
+    old = event(1, EARLY)
+
+    def stalled(wait, timeout_seconds):
+        raise live.NotSettled(live.Settling(False, 60.0, BOUNDARY, 0, {"ledger": 300}, {}))
+
+    found, _ = verified(stalled, check(LATE, Records([old]), posted_exactly_once=[posted(old)]))
+    assert found.verdict == "passed"
+    assert (
+        "1 finding is about records made before the action, which the money check right after it could not see (it"
+        " could not settle): damage from before the action."
+    ) in found.said
+    assert not [line for line in found.said if "seen later" in line]

@@ -4,13 +4,15 @@ An action that ran (klaxon.agent.gate) does not end an incident. After it, code 
 model:
 
     health  every container is healthy (the one-shot kafka-init has exited 0), and the metric rules of klaxon.alerts
-            are quiet at 2 evaluations in a row: every signal read, no condition holding. Within 3 minutes.
+            are quiet at 2 evaluations in a row: every signal read, no condition holding. Within 3 minutes of the
+            first evaluation, which comes once the first money check below is done.
     money   the money check (klaxon.checks.live) right after the action, and again at least 60 s after it.
 
 The money rule is left out of health: the money is judged on its own, below, because a rollback can remove a cause
 and still leave the money wrong. So the money has two questions, said apart:
 
-    the cause is removed   no new damage after the action: nothing the provider made after it was booked wrong
+    the cause is removed   no new damage after the action: nothing the provider made in the minute after it was
+                           booked wrong
     the money is right     the money check passes
 
 A rollback stops new damage and repairs nothing. Money booked wrong before it stays wrong until a person repairs it,
@@ -19,13 +21,22 @@ and verification says what damage remains.
 How each finding of the later money check is judged:
     1. The check right after the action had the same finding: damage from before the action.
     2. Else, if everything it is about (the provider's events, charges or refunds) was made up to that check's
-       cutoff: damage from before the action that showed only later. This happens. The naive ledger handler keeps no
-       record of the events it booked, so after a rollback to the idempotent one, a webhook the provider sends again
-       for such an event is booked once more.
+       cutoff: damage from before the action that the check right after it did not show. Mostly because that check
+       could not settle (a backlog still draining), so it showed nothing. Rarely otherwise: that check waits until
+       every webhook up to its cutoff is acknowledged and handled, and the provider never sends an acknowledged one
+       again, so only a webhook that stalled in the network and landed late (the gap klaxon.checks.live names) can
+       add an old event's posting after it.
     3. Else, made after it, or impossible to date: new damage. Klaxon says the cause is removed only when it can show
        it.
-A payment whose books differ from the provider's is judged as the findings about its events are: one with no such
-finding cannot be dated. The difference over all payments is their sum: it is judged as all the other findings are.
+A payment whose books differ from the provider's follows the findings about its own events: from before the action
+when one of them is, and none is new; else new, a change nothing explains. The difference over all payments is
+their sum, and follows all the other findings the same way.
+
+Why the dates matter: a rollback does not dedupe the past. The naive ledger handler keeps no record of the events it
+books (in the live ledger, klaxon.patient.services.pg_ledger, only the idempotent mode writes processed_events). So
+after a rollback to the idempotent handler, a webhook the provider sends again for such an event, its first
+acknowledgement lost, is booked once more. The check right after the action waits for those webhooks and counts
+what they booked, so it is damage at the action.
 
 The verdict: passed (healthy, and the cause removed), failed (not healthy, or new damage), or could not verify (no
 money check that could run, so whether the cause is removed is not known). A failed verification makes Klaxon
@@ -40,18 +51,18 @@ import json
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
 
 from klaxon import alerts
 from klaxon.agent.tools import ONE_SHOT, clean_text
 from klaxon.checks import live
 from klaxon.checks.money import MoneyReport, format_cents
 from klaxon.patient import stack
+from klaxon.patient.deploys import utc_now
 
 EVERY_SECONDS = alerts.EVERY_SECONDS  # between two evaluations of the rules
 QUIET_IN_A_ROW = 2  # evaluations in a row at which the metric rules must be quiet and every container healthy
-HEALTHY_WITHIN_SECONDS = 180.0  # after the action: not healthy by then, and the verification fails
+HEALTHY_WITHIN_SECONDS = 180.0  # from health's first evaluation: not healthy by then, and the verification fails
 OBSERVE_SECONDS = 60.0  # the later money check comes no sooner than this after the action
 SETTLE_SECONDS = 60.0  # how long each money check may wait to settle (a drained backlog takes a while)
 DOCKER_TIMEOUT = 30.0
@@ -66,10 +77,6 @@ PAYMENT, REFUND, OTHER = "payment", "refund", "other"
 EVENTS = (COUNTED_TWICE, LOST)  # the findings about one event the provider sent, so about its payment
 # How a finding of the later check is judged.
 BEFORE, SURFACED, NEW = "before the action", "from before the action, seen later", "new"
-
-
-def utc(seconds: float) -> str:
-    return datetime.fromtimestamp(seconds, timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -115,7 +122,7 @@ def read(
 ) -> Reading:
     """One money check, waiting up to timeout seconds to settle. Never raises: a check that cannot settle or run is
     a reading too, with why."""
-    at = utc(now())
+    at = utc_now(now)
     try:
         result = check(wait=True, timeout_seconds=timeout)
     except live.NotSettled as exc:
@@ -198,8 +205,10 @@ def _finding(name: str, item: Mapping, events: Mapping, charges: Mapping, refund
             _id(item.get("payment_id")),
         )
     if name == "ledger_balanced":
-        if "scope" in item:
-            text = f"the whole ledger: debits {item.get('debits_cents')}, credits {item.get('credits_cents')}"
+        if "scope" in item:  # by how far apart they are: the totals themselves grow with every booking
+            debits, credits = item.get("debits_cents"), item.get("credits_cents")
+            off = debits - credits if isinstance(debits, int) and isinstance(credits, int) else "?"
+            text = f"the whole ledger: debits minus credits {off} cents"
         else:
             text = f"transaction {item.get('transaction_id')} has {item.get('lines')} lines, unbalanced"
         return Finding(name, UNBALANCED, _key(text))
@@ -253,14 +262,20 @@ def judge(at_action: Reading, after: Reading) -> Money:
     for n, finding in enumerate(findings):  # then a payment's books, as the findings about its events
         if verdicts[n] is None and finding.kind == BOOKS_DIFFER:
             own = [verdicts[m] for m, f in enumerate(findings) if f.payment == finding.payment and f.kind in EVENTS]
-            verdicts[n] = NEW if not own or NEW in own else SURFACED
+            verdicts[n] = _follows(own)
     others = [verdict for m, verdict in enumerate(verdicts) if findings[m].kind != TOTAL_DIFFERS]
     for n in range(len(findings)):  # last, the total, as everything else
         if verdicts[n] is None:
-            verdicts[n] = NEW if not others or NEW in others else SURFACED
+            verdicts[n] = _follows(others)
     for finding, verdict in zip(findings, verdicts, strict=True):
         judged[str(verdict)].append(finding.key)
     return Money(not judged[NEW], False, judged)
+
+
+def _follows(verdicts: Sequence[str | None]) -> str:
+    """The verdict of a finding that follows others (a payment's books, the total): from before the action when one
+    of them is, and none is new; else new, since nothing explains the change."""
+    return SURFACED if SURFACED in verdicts and NEW not in verdicts else NEW
 
 
 # Health: the containers, and the metric rules.
@@ -351,14 +366,17 @@ def wait_healthy(
 
 @dataclass(frozen=True)
 class Verification:
-    """What code found after the action. Sentences in said; numbers in the rest."""
+    """What code found after the action: numbers, and the same in plain sentences (said)."""
 
     verdict: str  # passed, failed, could not verify
     health: Health
     at_action: Reading  # the money check right after the action
     after: Reading  # the money check at least a minute after it
     money: Money
-    said: tuple[str, ...] = field(default=())
+
+    @property
+    def said(self) -> tuple[str, ...]:
+        return tuple(say(self))
 
     def to_dict(self) -> dict:
         return {
@@ -398,8 +416,7 @@ def verify(
         verdict = "could not verify"
     else:
         verdict = "passed"
-    found = Verification(verdict, health, at_action, after, money)
-    return Verification(verdict, health, at_action, after, money, tuple(say(found)))
+    return Verification(verdict, health, at_action, after, money)
 
 
 def _n(n: int, one: str, many: str) -> str:
@@ -449,7 +466,10 @@ def say(found: Verification) -> list[str]:
     else:
         lines = [f"Not healthy within {HEALTHY_WITHIN_SECONDS:g} s: {health.why}."]
     if money.cause_removed is True:
-        lines.append("The cause is removed: nothing the provider made after the action was booked wrong.")
+        lines.append(
+            "The cause is removed: nothing the provider made between the action and the last money check was booked"
+            " wrong."
+        )
     elif money.cause_removed is False:
         new = money.judged[NEW]
         lines.append(
@@ -459,10 +479,15 @@ def say(found: Verification) -> list[str]:
     else:
         lines.append(f"Whether the cause is removed is not known: {money.why}.")
     surfaced = len(money.judged[SURFACED])
-    if surfaced:
+    if surfaced and found.at_action.outcome in ("passed", "failed"):
         lines.append(
-            f"{_n(surfaced, 'finding', 'findings')} showed only after the action, about records made before it:"
-            " damage from before the action, seen later."
+            f"{_n(surfaced, 'finding', 'findings')} showed only after the money check right after the action, about"
+            " records made before it: damage from before the action, seen later."
+        )
+    elif surfaced:
+        lines.append(
+            f"{_n(surfaced, 'finding is', 'findings are')} about records made before the action, which the money check"
+            f" right after it could not see (it {found.at_action.outcome}): damage from before the action."
         )
     after = found.after
     if money.right is True:

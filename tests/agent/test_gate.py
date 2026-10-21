@@ -783,3 +783,58 @@ def test_with_no_decision_taken_there_is_none_to_say(tmp_path):
     (tmp_path / gate.LOG).write_text("{not json\n")
     with pytest.raises(gate.GateError, match="cannot be read"):
         gate.decided(tmp_path)
+
+
+def test_a_run_stopped_while_it_waits_closes_its_request_so_no_later_yes_counts(tmp_path):
+    # The review's L6: an interrupted wait left the request open, so make approve still offered it and logged a yes.
+    docker, deployer = after_a_bad_deploy()
+
+    def stopped(seconds):
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        gate.act(tmp_path, made_up_diagnosis(), deployer, ALERT, sleep=stopped, now=Clocks().time, say=[].append)
+    closed = decision(tmp_path)
+    assert (closed["decision"], closed["how"]) == ("denied", gate.STOPPED)
+    assert events(tmp_path) == ["requested", "stopped"]
+    request = gate.read_request(tmp_path)
+    terminal = ScriptedTerminal(request["id"])
+    assert gate.approve(tmp_path, lambda: terminal, Clocks().time) == 1  # nothing left to decide
+    assert "Already decided: denied" in "".join(terminal.shown) and events(tmp_path) == ["requested", "stopped"]
+    assert docker.settings(LEDGER) == NAIVE
+
+
+def test_a_decision_that_landed_before_the_run_stopped_stands_as_written(tmp_path):
+    docker, deployer = after_a_bad_deploy()
+    clocks = Clocks()
+
+    def approved_then_stopped(seconds):
+        gate.approve(tmp_path, lambda: ScriptedTerminal(gate.read_request(tmp_path)["id"]), clocks.time)
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        gate.act(
+            tmp_path, made_up_diagnosis(), deployer, ALERT, sleep=approved_then_stopped, now=clocks.time, say=[].append
+        )
+    assert decision(tmp_path)["decision"] == "approved"  # written first: it stands, and no run took it
+    assert events(tmp_path) == ["requested", "approved"]
+    assert docker.settings(LEDGER) == NAIVE  # nothing ran
+
+
+def test_the_caller_hears_right_before_a_request_and_only_when_a_plan_was_made(tmp_path):
+    # The review's L1: the run reads the money right before the request, never for a plan the gate refused.
+    heard = []
+    _, deployer = after_a_bad_deploy()
+
+    def before_asking():
+        heard.append((tmp_path / "asked" / gate.REQUEST).exists())
+
+    cases = [
+        ("asked", made_up_diagnosis(), deployer),
+        ("refused", made_up_diagnosis(), FakeDocker().deployer()),  # nothing deployed: nothing to roll back to
+        ("no action", made_up_diagnosis(fix_action=None), deployer),
+    ]
+    for name, diagnosis, planned_on in cases:
+        (tmp_path / name).mkdir()
+        gate.act(tmp_path / name, diagnosis, planned_on, ALERT, timeout=0.0, say=[].append, before_asking=before_asking)
+    assert heard == [False]  # once, for the plan that was made, before its request was saved
