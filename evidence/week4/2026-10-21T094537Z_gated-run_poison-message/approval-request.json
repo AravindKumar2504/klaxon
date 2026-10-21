@@ -1,0 +1,76 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-af6d",
+  "created_at": "2026-10-21T09:49:32Z",
+  "expires_at": "2026-10-21T09:59:32Z",
+  "run": "2026-10-21T094537Z_gated-run_poison-message",
+  "alert": {
+    "name": "ConsumerLagHigh",
+    "summary": "The ledger consumer group is 250 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+    "fired_at": "2026-10-21T09:48:13Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    },
+    "service": "ledger-consumer",
+    "container": "1ac2e0ff63a6ec60e7f56de87669195d7d41889716208cb37c91b650ea23b889",
+    "from_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "retry"
+    },
+    "to_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "undoes": {
+      "seq": 5,
+      "at": "2026-10-21T09:46:56Z",
+      "by": "klaxon.faults",
+      "container": "1ac2e0ff63a6"
+    },
+    "change": "redeploy ledger-consumer: LEDGER_HANDLER idempotent (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter",
+    "undo": "going back to LEDGER_BAD_EVENTS=retry would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "Ledger-consumer is stuck on a poison message. It was redeployed at 09:46:54 with BAD_EVENTS=retry. Seconds later it hit provider-events/1@114, whose amount is not positive integer cents. It cannot book it, so it retries the same message forever (attempt 11+, every 15s) and never commits past offset 114. Partition 1 stalls and ledger lag climbs from 0 to 332, past the threshold of 50. Payment-confirmer runs BAD_EVENTS=dead_letter: it dead-lettered the same event and another at 1@116, and kept going. The stall comes from the ledger's bad-event policy, not from Kafka or the producer. Still open: why the provider sent invalid amounts, and what settings ledger-consumer ran before 09:46:54. I did not run money_check, and I have not broken lag down by partition.",
+    "confidence": 0.75,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "query_metrics",
+        "shows": "Ledger group lag was 0 at 09:46:32, then 109 at 09:47:32 and 332 at 09:48:32. The alert's symptom is real and growing."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "Ledger-consumer was recreated at 09:46:54 with LEDGER_HANDLER=idempotent and BAD_EVENTS=retry. It is the only service changed after the 09:45:19 stack start. Payment-confirmer uses BAD_EVENTS=dead_letter."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "Starting 09:46:58, ledger-consumer logs 'could not book; will retry the same message' for provider-events/1@114 at attempts 3 through 11. The error is 'amount must be positive integer cents', and the backoff has grown to 15s. It never moves past this message."
+      },
+      {
+        "call_id": "c4",
+        "tool": "search_logs",
+        "shows": "Payment-confirmer dead-lettered the same event 1@114 at 09:46:56, and 1@116, for the same invalid-amount reason. It kept consuming, so the stall is specific to the ledger's retry policy."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer",
+      "summary": "Roll ledger-consumer back to the settings it ran before the 09:46:54 deploy. If those settings dead-letter bad events, it will skip 1@114 and 1@116 and drain the backlog. If they also retry, set BAD_EVENTS=dead_letter with a config change instead. Then check the dead-lettered events against the provider's records, repair them by hand, and run money_check. Separately, find out why the provider sent invalid amounts."
+    },
+    "blast_radius": "Ledger-consumer pauses while its container is recreated, so lag grows briefly. Dead-lettered events are left out of the ledger until someone handles them by hand, and money_check will flag them as not posted. If the earlier settings used a non-idempotent LEDGER_HANDLER, redeliveries could book events twice. Check the deploy log's earlier settings before approving.",
+    "rollback_plan": "Redeploy ledger-consumer with the current settings (LEDGER_HANDLER=idempotent, BAD_EVENTS=retry, image sha256:5e1ee3c63089). Then watch klaxon_kafka_consumer_lag and the ledger-consumer error logs."
+  },
+  "sha256": "e2c86a4347a071c6a19dbf5cf660512eb6fd262d8645de9f23ff731f8e871980"
+}

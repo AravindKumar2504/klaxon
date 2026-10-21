@@ -1,0 +1,86 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-7b3b",
+  "created_at": "2026-10-21T09:16:36Z",
+  "expires_at": "2026-10-21T09:26:36Z",
+  "run": "2026-10-21T091242Z_gated-run_poison-message",
+  "alert": {
+    "name": "ConsumerLagHigh",
+    "summary": "The ledger consumer group is 249 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+    "fired_at": "2026-10-21T09:15:18Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    },
+    "service": "ledger-consumer",
+    "container": "c944fc86e120ee0ac37097ea6152d008ca75ae9e27e1a664cbbe92af15933fc6",
+    "from_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "retry"
+    },
+    "to_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "undoes": {
+      "seq": 3,
+      "at": "2026-10-21T09:14:01Z",
+      "by": "klaxon.faults",
+      "container": "c944fc86e120"
+    },
+    "change": "redeploy ledger-consumer: LEDGER_HANDLER idempotent (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter",
+    "undo": "going back to LEDGER_BAD_EVENTS=retry would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "One malformed provider event at provider-events/2＠79 has an amount that is not a positive integer in cents. ledger-consumer was redeployed at 09:13:59 with BAD_EVENTS=retry. Because of that setting it retries this event forever, with backoff that grows to 15s, instead of setting it aside. The retry blocks the consumer, so it stops booking anything. Its 'posted' rate fell from about 2.3/s to about 0.06/s. Meanwhile new events keep arriving, so lag for the ledger group grew from 0 at 09:13:37 to over 330. The lag is spread over all three partitions, which suggests the one blocked handler stalls the whole consumer and not just partition 2. payment-confirmer got the same event, but it runs with BAD_EVENTS=dead_letter. It dead-lettered the event at 09:14:01 and kept up. Still open: why the provider's event has a bad amount, which I did not check. I also did not see the settings ledger-consumer ran before 09:13:59. I assume BAD_EVENTS was not 'retry' then.",
+    "confidence": 0.8,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "query_metrics",
+        "shows": "Ledger group lag was 0 at 09:13:37, then 110 at 09:14:37 and 332 at 09:15:37. This confirms the alert."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "ledger-consumer was redeployed at 09:13:59 with LEDGER_HANDLER=idempotent and BAD_EVENTS=retry. payment-confirmer runs BAD_EVENTS=dead_letter. Every other service was created at 09:12:22."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "From 09:14:03, ledger-consumer retries the same message, provider-events/2＠79, again and again (attempts 3 to 11 and still going). The error is 'amount must be positive integer cents'."
+      },
+      {
+        "call_id": "c4",
+        "tool": "query_metrics",
+        "shows": "The lag is spread across partitions 0, 1 and 2, about 120 to 133 each. The whole consumer is stalled, not just partition 2."
+      },
+      {
+        "call_id": "c5",
+        "tool": "query_metrics",
+        "shows": "The ledger 'posted' rate collapses from about 2.3/s to about 0.06/s after 09:14:36. payment-confirmer keeps processing and shows a small dead_lettered rate."
+      },
+      {
+        "call_id": "c6",
+        "tool": "search_logs",
+        "shows": "payment-confirmer dead-lettered the same event, provider-events/2＠79, at 09:14:01 with the same bad-amount reason (trace 1fcbceb08b1d56916eccfc56f79d1e50)."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer",
+      "summary": "Roll ledger-consumer back to its settings from before 09:13:59, which were presumably BAD_EVENTS=dead_letter. It will then set aside the poison event at 2＠79 and work through the backlog. After that, look into the bad-amount event separately: find out why the provider sent it, then book it or repair it by hand. Confirm with money_check once lag reaches 0."
+    },
+    "blast_radius": "ledger-consumer pauses while its container is recreated, and lag grows briefly. If the earlier settings also had a different LEDGER_HANDLER, booking behavior could change. Check the deploy log before approving. The dead-lettered event will be missing from the ledger until someone handles it, so money_check will flag it.",
+    "rollback_plan": "Redeploy ledger-consumer with the current settings (LEDGER_HANDLER=idempotent, BAD_EVENTS=retry). Note that this brings the stall back for as long as the poison event is still at the committed offset."
+  },
+  "sha256": "223aa78c6896df9f8f8029ea09bb6b0717cfd320fc2fd3f7459af837f0b41c41"
+}

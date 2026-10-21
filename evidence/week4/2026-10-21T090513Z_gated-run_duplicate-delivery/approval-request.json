@@ -1,0 +1,76 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-e16d",
+  "created_at": "2026-10-21T09:07:35Z",
+  "expires_at": "2026-10-21T09:17:35Z",
+  "run": "2026-10-21T090513Z_gated-run_duplicate-delivery",
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+    "fired_at": "2026-10-21T09:06:47Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    },
+    "service": "ledger-consumer",
+    "container": "77e2ae702e7601a7ce6b92f3df1ef29ee538e422d103616c58e87a349002b672",
+    "from_settings": {
+      "LEDGER_HANDLER": "naive",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "to_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "undoes": {
+      "seq": 1,
+      "at": "2026-10-21T09:06:32Z",
+      "by": "klaxon.faults",
+      "container": "77e2ae702e76"
+    },
+    "change": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "undo": "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "At 09:06:30 ledger-consumer was redeployed with LEDGER_HANDLER=naive. This handler appears to book every Kafka record it reads without deduplicating by event_id. The provider resends webhooks until they are acknowledged, so one event can land on provider-events more than once, at different offsets. Each copy was booked as a new ledger transaction. That gives 7 events posted 2 or 3 times (posted_exactly_once failed). It also puts provider_clearing $493.23 ahead of the provider (matches_provider failed). Duplicate payment.succeeded events inflate the balance. The duplicate refund.succeeded for pay_000217 leaves that payment at 1 cent against the provider's 2456. The ledger stays balanced because each duplicate is a full double-entry transaction. Our payments and refunds still match the provider, so the damage is confined to the ledger. Still open: the handler that ran before this deploy, and whether it was idempotent, was not confirmed.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "money_check",
+        "shows": "Symptom reproduced. posted_exactly_once failed: 7 events posted 2 or 3 times, e.g. evt_000308 three times. matches_provider is off by +$493.23. ledger_balanced passed, and payments and refunds match the provider."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "ledger-consumer was redeployed at 09:06:30Z with LEDGER_HANDLER=naive, about 17 seconds before the alert. No other service changed after 09:04:46."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "evt_000308 was posted 3 times between 09:06:44 and 09:06:46, from provider-events/0 offsets 100, 101 and 103. These are redelivered copies of one event, each booked again."
+      },
+      {
+        "call_id": "c4",
+        "tool": "search_logs",
+        "shows": "evt_000251 was posted twice at 09:06:31, just after the deploy, from provider-events/2 offsets 73 and 76. Same pattern: no dedupe by event_id."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer",
+      "summary": "Roll ledger-consumer back to the settings it ran before the 09:06:30 deploy, presumably an idempotent handler that dedupes by event_id. Then repair the ledger separately: reverse the extra transactions the money check lists (e.g. 255, 266, 272, 273, 297, plus the extras for evt_000298 and evt_000308). Then rerun money_check."
+    },
+    "blast_radius": "Recreating ledger-consumer pauses ledger booking briefly. Events wait in Kafka and are booked after the restart, so lag rises for a short time. payment-confirmer is unaffected. Duplicate entries already booked stay until a separate data repair. The previous handler's name was not confirmed from the deploy log.",
+    "rollback_plan": "If the restored settings misbehave, stop ledger-consumer and let events queue in Kafka. Only as a last resort redeploy LEDGER_HANDLER=naive, since it keeps double-booking."
+  },
+  "sha256": "92a4163c9f81a66b0515e3e32954e9056ede2fd098ab89a8c92aed09d05ffcb1"
+}

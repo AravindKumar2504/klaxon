@@ -1,0 +1,2818 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, duplicate-delivery, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, offered one write action (rollback_deploy), which runs only if a person approves it at the gate, and stopped on diagnosed after 6 steps; any reply it got is a recorded response, not a simulation. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Klaxon asked at the approval gate to act on its diagnosis; the request was approved with make approve (the request's id typed at a terminal), and the action ran: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged). Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is not right. The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-e16d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+  "fault_name": "duplicate-delivery",
+  "rerun_command": "python -m klaxon.fault_runs run duplicate-delivery --steps 10 --tool-calls 8",
+  "ran_at_utc": "2026-10-21T09:05:13+00:00",
+  "ran_at_local": "2026-10-21T02:05:13-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "0ab9bb50b9929c7a87f0e421eb6831b2b611b7958a72aa00fbf88e253ee59182",
+  "stack_files_sha256": "8de16fc01a619ebd46755521b5da9665be380b3b162963ac722838568fe10132",
+  "git_commit": "22942cc0df49d58cccb75b23a90c4cff167fdaf8",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:2be424fae0f2002efd69965c02bbc3712423083048db2827df618a61e741f254"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:2be424fae0f2002efd69965c02bbc3712423083048db2827df618a61e741f254"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:2be424fae0f2002efd69965c02bbc3712423083048db2827df618a61e741f254"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:2be424fae0f2002efd69965c02bbc3712423083048db2827df618a61e741f254"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:2be424fae0f2002efd69965c02bbc3712423083048db2827df618a61e741f254"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      }
+    ]
+  },
+  "fault": {
+    "name": "duplicate-delivery",
+    "title": "Payments counted twice in the books",
+    "cause": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "expected_symptoms": [
+      "the money check fails: events counted twice, the books ahead of the provider by their amounts",
+      "the webhook dashboard stays green, and consumer lag stays at 0",
+      "the ledger stops reporting 'already processed' while the confirmer still sees the same duplicates"
+    ],
+    "expected_money": {
+      "during": "failed",
+      "after": "failed",
+      "quiet": "failed"
+    },
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "6db8ced6"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 76.3,
+    "injection_took": 2.5,
+    "alert_evaluation_began": 93.8,
+    "loop_started_at": 94.3,
+    "loop_ended_at": 140.2,
+    "gate_began_at": 140.2,
+    "gate_ended_at": 239.8,
+    "verify_began_at": 239.8,
+    "verify_ended_at": 300.4,
+    "cleared_at": 300.6
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 0.4,
+      "at_utc": "2026-10-21T09:06:13Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.036,
+            "requests_per_second": 2.977,
+            "share": 0.012
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 75.4,
+      "took": 0.9,
+      "at_utc": "2026-10-21T09:06:29Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.161,
+            "share": 0.013
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 93.8,
+      "took": 0.5,
+      "at_utc": "2026-10-21T09:06:47Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.1,
+            "requests_per_second": 3.378,
+            "share": 0.03
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 7,
+              "matches_provider": 8
+            },
+            "money_off_cents": 49323
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+        "fired_at": "2026-10-21T09:06:47Z"
+      }
+    },
+    {
+      "phase": "verify",
+      "began": 240.3,
+      "took": 1.1,
+      "at_utc": "2026-10-21T09:09:14Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.318,
+            "share": 0.018
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 28,
+              "matches_provider": 29
+            },
+            "money_off_cents": 153187
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (28 findings), matches_provider (29 findings). By its count, our ledger is $1,531.87 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (28 findings), matches_provider (29 findings). By its count, our ledger is $1,531.87 ahead of the provider's balance.",
+        "fired_at": "2026-10-21T09:09:14Z"
+      }
+    },
+    {
+      "phase": "verify",
+      "began": 256.5,
+      "took": 0.8,
+      "at_utc": "2026-10-21T09:09:30Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.238,
+            "share": 0.019
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 28,
+              "matches_provider": 29
+            },
+            "money_off_cents": 153187
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (28 findings), matches_provider (29 findings). By its count, our ledger is $1,531.87 ahead of the provider's balance.",
+          "in_a_row": 2,
+          "firing": true
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (28 findings), matches_provider (29 findings). By its count, our ledger is $1,531.87 ahead of the provider's balance.",
+        "fired_at": "2026-10-21T09:09:30Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 390.6,
+      "took": 0.8,
+      "at_utc": "2026-10-21T09:11:44Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 2.359,
+            "share": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 28,
+              "matches_provider": 29
+            },
+            "money_off_cents": 153187
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (28 findings), matches_provider (29 findings). By its count, our ledger is $1,531.87 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (28 findings), matches_provider (29 findings). By its count, our ledger is $1,531.87 ahead of the provider's balance.",
+        "fired_at": "2026-10-21T09:11:44Z"
+      }
+    }
+  ],
+  "injected": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "naive"
+  },
+  "cleared": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "idempotent",
+    "LEDGER_BAD_EVENTS": "dead_letter"
+  },
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+    "fired_at": "2026-10-21T09:06:47Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.85",
+    "steps": 6,
+    "tool_calls": 4,
+    "seconds": 45.822,
+    "diagnosis": {
+      "hypothesis": "At 09:06:30 ledger-consumer was redeployed with LEDGER_HANDLER=naive. This handler appears to book every Kafka record it reads without deduplicating by event_id. The provider resends webhooks until they are acknowledged, so one event can land on provider-events more than once, at different offsets. Each copy was booked as a new ledger transaction. That gives 7 events posted 2 or 3 times (posted_exactly_once failed). It also puts provider_clearing $493.23 ahead of the provider (matches_provider failed). Duplicate payment.succeeded events inflate the balance. The duplicate refund.succeeded for pay_000217 leaves that payment at 1 cent against the provider's 2456. The ledger stays balanced because each duplicate is a full double-entry transaction. Our payments and refunds still match the provider, so the damage is confined to the ledger. Still open: the handler that ran before this deploy, and whether it was idempotent, was not confirmed.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "money_check",
+          "arguments": {
+            "wait": true,
+            "timeout_seconds": 60
+          },
+          "shows": "Symptom reproduced. posted_exactly_once failed: 7 events posted 2 or 3 times, e.g. evt_000308 three times. matches_provider is off by +$493.23. ledger_balanced passed, and payments and refunds match the provider."
+        },
+        {
+          "call_id": "c2",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "ledger-consumer was redeployed at 09:06:30Z with LEDGER_HANDLER=naive, about 17 seconds before the alert. No other service changed after 09:04:46."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"ledger-consumer\"} | event_id = \"evt_000308\"",
+            "minutes": 15,
+            "limit": 20
+          },
+          "shows": "evt_000308 was posted 3 times between 09:06:44 and 09:06:46, from provider-events/0 offsets 100, 101 and 103. These are redelivered copies of one event, each booked again."
+        },
+        {
+          "call_id": "c4",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"ledger-consumer\"} | event_id = \"evt_000251\"",
+            "minutes": 15,
+            "limit": 20
+          },
+          "shows": "evt_000251 was posted twice at 09:06:31, just after the deploy, from provider-events/2 offsets 73 and 76. Same pattern: no dedupe by event_id."
+        }
+      ],
+      "confidence": 0.85,
+      "proposed_fix": {
+        "kind": "rollback",
+        "target": "ledger-consumer",
+        "summary": "Roll ledger-consumer back to the settings it ran before the 09:06:30 deploy, presumably an idempotent handler that dedupes by event_id. Then repair the ledger separately: reverse the extra transactions the money check lists (e.g. 255, 266, 272, 273, 297, plus the extras for evt_000298 and evt_000308). Then rerun money_check.",
+        "applied": false
+      },
+      "blast_radius": "Recreating ledger-consumer pauses ledger booking briefly. Events wait in Kafka and are booked after the restart, so lag rises for a short time. payment-confirmer is unaffected. Duplicate entries already booked stay until a separate data repair. The previous handler's name was not confirmed from the deploy log.",
+      "rollback_plan": "If the restored settings misbehave, stop ledger-consumer and let events queue in Kafka. Only as a last resort redeploy LEDGER_HANDLER=naive, since it keeps double-booking.",
+      "fix_action": {
+        "name": "rollback_deploy",
+        "arguments": {
+          "service": "ledger-consumer"
+        },
+        "applied": false
+      }
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading, rubric version 1, committed in 95a64ab before the first live runs on the faults): keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning.",
+    "rubric": {
+      "version": 1,
+      "sha256": "81fd17fd69a6c0cf5086e59455babf2d736b9cedb7c9191c9ce68894f3323dfb"
+    },
+    "fault": "duplicate-delivery",
+    "recorded_cause": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)",
+    "verdict": "names the cause",
+    "hypothesis": "At 09:06:30 ledger-consumer was redeployed with LEDGER_HANDLER=naive. This handler appears to book every Kafka record it reads without deduplicating by event_id. The provider resends webhooks until they are acknowledged, so one event can land on provider-events more than once, at different offsets. Each copy was booked as a new ledger transaction. That gives 7 events posted 2 or 3 times (posted_exactly_once failed). It also puts provider_clearing $493.23 ahead of the provider (matches_provider failed). Duplicate payment.succeeded events inflate the balance. The duplicate refund.succeeded for pay_000217 leaves that payment at 1 cent against the provider's 2456. The ledger stays balanced because each duplicate is a full double-entry transaction. Our payments and refunds still match the provider, so the damage is confined to the ledger. Still open: the handler that ran before this deploy, and whether it was idempotent, was not confirmed.",
+    "elements": [
+      {
+        "element": "where: the ledger consumer",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "what: its dedupe is gone",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "how: the provider sends some webhooks again",
+        "required": true,
+        "named": true
+      },
+      {
+        "element": "the deploy that brought it",
+        "required": false,
+        "named": true
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "rollback",
+        "config_change"
+      ],
+      "target_matches": "ledger"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 16,
+      "double_clicks.ran_first": 16,
+      "double_clicks.sent": 32,
+      "not_sent.refunds": 3,
+      "payments.arrived": 1118,
+      "payments.succeeded": 1118,
+      "refunds.succeeded": 112,
+      "retries": 41,
+      "retries.after_409": 16,
+      "retries.after_503": 25
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": true,
+  "gate": {
+    "result": "done",
+    "detail": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "request_id": "r-e16d",
+    "deploy": {
+      "seq": 2,
+      "at": "2026-10-21T09:09:13Z",
+      "service": "ledger-consumer",
+      "by": "Klaxon, approved request r-e16d",
+      "container": "36f5fee6179c006baf1699f64c37b79f0287740592964b002031c696f0760830",
+      "settings": {
+        "LEDGER_HANDLER": "idempotent",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      },
+      "replaced_container": "77e2ae702e7601a7ce6b92f3df1ef29ee538e422d103616c58e87a349002b672",
+      "replaced_settings": {
+        "LEDGER_HANDLER": "naive",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      }
+    },
+    "decided": {
+      "decision": "approved",
+      "how": "typed at a terminal",
+      "at": "2026-10-21T09:09:11Z",
+      "written_by_make_approve": true
+    }
+  },
+  "verification": {
+    "verdict": "passed",
+    "said": [
+      "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row.",
+      "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
+      "The money is not right: 28 events counted more than once, 28 payments whose books differ from the provider's; our books $1,531.87 ahead of the provider's balance. A rollback repairs nothing: this damage stays until a person repairs it."
+    ],
+    "health": {
+      "healthy": true,
+      "why": null,
+      "rounds": [
+        {
+          "at_utc": "2026-10-21T09:09:14Z",
+          "unwell": null
+        },
+        {
+          "at_utc": "2026-10-21T09:09:30Z",
+          "unwell": null
+        }
+      ]
+    },
+    "money": {
+      "cause_removed": true,
+      "right": false,
+      "judged": {
+        "before the action": [
+          "event evt_000251 posted 2 times",
+          "event evt_000261 posted 2 times",
+          "event evt_000267 posted 2 times",
+          "event evt_000268 posted 2 times",
+          "event evt_000288 posted 2 times",
+          "event evt_000298 posted 2 times",
+          "event evt_000308 posted 3 times",
+          "event evt_000352 posted 2 times",
+          "event evt_000373 posted 2 times",
+          "event evt_000437 posted 2 times",
+          "event evt_000447 posted 2 times",
+          "event evt_000460 posted 2 times",
+          "event evt_000486 posted 2 times",
+          "event evt_000494 posted 2 times",
+          "event evt_000525 posted 2 times",
+          "event evt_000545 posted 2 times",
+          "event evt_000550 posted 2 times",
+          "event evt_000576 posted 2 times",
+          "event evt_000581 posted 2 times",
+          "event evt_000626 posted 2 times",
+          "event evt_000666 posted 2 times",
+          "event evt_000670 posted 2 times",
+          "event evt_000675 posted 2 times",
+          "event evt_000678 posted 2 times",
+          "event evt_000743 posted 2 times",
+          "event evt_000792 posted 2 times",
+          "event evt_000794 posted 2 times",
+          "event evt_000804 posted 2 times",
+          "all payments: books off by 153187 cents",
+          "payment pay_000217: books off by -2455 cents",
+          "payment pay_000230: books off by 3709 cents",
+          "payment pay_000240: books off by 9533 cents",
+          "payment pay_000244: books off by 4444 cents",
+          "payment pay_000245: books off by 1827 cents",
+          "payment pay_000270: books off by 5879 cents",
+          "payment pay_000279: books off by 26386 cents",
+          "payment pay_000320: books off by 6638 cents",
+          "payment pay_000340: books off by 3183 cents",
+          "payment pay_000399: books off by 7022 cents",
+          "payment pay_000408: books off by 16556 cents",
+          "payment pay_000420: books off by 6460 cents",
+          "payment pay_000445: books off by 14295 cents",
+          "payment pay_000453: books off by 986 cents",
+          "payment pay_000481: books off by 5268 cents",
+          "payment pay_000497: books off by 10266 cents",
+          "payment pay_000502: books off by 619 cents",
+          "payment pay_000520: books off by -3603 cents",
+          "payment pay_000526: books off by 900 cents",
+          "payment pay_000531: books off by 3132 cents",
+          "payment pay_000606: books off by 3321 cents",
+          "payment pay_000610: books off by 2028 cents",
+          "payment pay_000614: books off by 12125 cents",
+          "payment pay_000617: books off by 5047 cents",
+          "payment pay_000679: books off by 10009 cents",
+          "payment pay_000698: books off by -3289 cents",
+          "payment pay_000723: books off by 1402 cents",
+          "payment pay_000732: books off by 1499 cents"
+        ],
+        "from before the action, found only by the later check": [],
+        "new": []
+      },
+      "why": null
+    },
+    "at_action": {
+      "at_utc": "2026-10-21T09:09:13Z",
+      "outcome": "failed",
+      "cutoff": 1792573753,
+      "findings": [
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000251 posted 2 times",
+          "created": 1792573591,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000261 posted 2 times",
+          "created": 1792573593,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000267 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000268 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000288 posted 2 times",
+          "created": 1792573601,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000298 posted 2 times",
+          "created": 1792573603,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000308 posted 3 times",
+          "created": 1792573604,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000352 posted 2 times",
+          "created": 1792573621,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000373 posted 2 times",
+          "created": 1792573628,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000437 posted 2 times",
+          "created": 1792573647,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000447 posted 2 times",
+          "created": 1792573649,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000460 posted 2 times",
+          "created": 1792573653,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000486 posted 2 times",
+          "created": 1792573662,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000494 posted 2 times",
+          "created": 1792573664,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000525 posted 2 times",
+          "created": 1792573673,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000545 posted 2 times",
+          "created": 1792573678,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000550 posted 2 times",
+          "created": 1792573679,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000576 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000581 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000626 posted 2 times",
+          "created": 1792573697,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000666 posted 2 times",
+          "created": 1792573711,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000670 posted 2 times",
+          "created": 1792573712,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000675 posted 2 times",
+          "created": 1792573714,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000678 posted 2 times",
+          "created": 1792573715,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000743 posted 2 times",
+          "created": 1792573730,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000792 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000794 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000804 posted 2 times",
+          "created": 1792573747,
+          "payment": "pay_000732"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "total differs",
+          "key": "all payments: books off by 153187 cents",
+          "created": null,
+          "payment": null
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000217: books off by -2455 cents",
+          "created": null,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000230: books off by 3709 cents",
+          "created": null,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000240: books off by 9533 cents",
+          "created": null,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000244: books off by 4444 cents",
+          "created": null,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000245: books off by 1827 cents",
+          "created": null,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000270: books off by 5879 cents",
+          "created": null,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000279: books off by 26386 cents",
+          "created": null,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000320: books off by 6638 cents",
+          "created": null,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000340: books off by 3183 cents",
+          "created": null,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000399: books off by 7022 cents",
+          "created": null,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000408: books off by 16556 cents",
+          "created": null,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000420: books off by 6460 cents",
+          "created": null,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000445: books off by 14295 cents",
+          "created": null,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000453: books off by 986 cents",
+          "created": null,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000481: books off by 5268 cents",
+          "created": null,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000497: books off by 10266 cents",
+          "created": null,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000502: books off by 619 cents",
+          "created": null,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000520: books off by -3603 cents",
+          "created": null,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000526: books off by 900 cents",
+          "created": null,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000531: books off by 3132 cents",
+          "created": null,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000606: books off by 3321 cents",
+          "created": null,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000610: books off by 2028 cents",
+          "created": null,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000614: books off by 12125 cents",
+          "created": null,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000617: books off by 5047 cents",
+          "created": null,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000679: books off by 10009 cents",
+          "created": null,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000698: books off by -3289 cents",
+          "created": null,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000723: books off by 1402 cents",
+          "created": null,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000732: books off by 1499 cents",
+          "created": null,
+          "payment": "pay_000732"
+        }
+      ],
+      "money_off_cents": 153187,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "counted more than once": 28,
+        "total differs": 1,
+        "books differ": 28
+      }
+    },
+    "after": {
+      "at_utc": "2026-10-21T09:10:13Z",
+      "outcome": "failed",
+      "cutoff": 1792573813,
+      "findings": [
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000251 posted 2 times",
+          "created": 1792573591,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000261 posted 2 times",
+          "created": 1792573593,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000267 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000268 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000288 posted 2 times",
+          "created": 1792573601,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000298 posted 2 times",
+          "created": 1792573603,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000308 posted 3 times",
+          "created": 1792573604,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000352 posted 2 times",
+          "created": 1792573621,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000373 posted 2 times",
+          "created": 1792573628,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000437 posted 2 times",
+          "created": 1792573647,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000447 posted 2 times",
+          "created": 1792573649,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000460 posted 2 times",
+          "created": 1792573653,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000486 posted 2 times",
+          "created": 1792573662,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000494 posted 2 times",
+          "created": 1792573664,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000525 posted 2 times",
+          "created": 1792573673,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000545 posted 2 times",
+          "created": 1792573678,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000550 posted 2 times",
+          "created": 1792573679,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000576 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000581 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000626 posted 2 times",
+          "created": 1792573697,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000666 posted 2 times",
+          "created": 1792573711,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000670 posted 2 times",
+          "created": 1792573712,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000675 posted 2 times",
+          "created": 1792573714,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000678 posted 2 times",
+          "created": 1792573715,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000743 posted 2 times",
+          "created": 1792573730,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000792 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000794 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000804 posted 2 times",
+          "created": 1792573747,
+          "payment": "pay_000732"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "total differs",
+          "key": "all payments: books off by 153187 cents",
+          "created": null,
+          "payment": null
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000217: books off by -2455 cents",
+          "created": null,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000230: books off by 3709 cents",
+          "created": null,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000240: books off by 9533 cents",
+          "created": null,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000244: books off by 4444 cents",
+          "created": null,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000245: books off by 1827 cents",
+          "created": null,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000270: books off by 5879 cents",
+          "created": null,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000279: books off by 26386 cents",
+          "created": null,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000320: books off by 6638 cents",
+          "created": null,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000340: books off by 3183 cents",
+          "created": null,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000399: books off by 7022 cents",
+          "created": null,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000408: books off by 16556 cents",
+          "created": null,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000420: books off by 6460 cents",
+          "created": null,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000445: books off by 14295 cents",
+          "created": null,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000453: books off by 986 cents",
+          "created": null,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000481: books off by 5268 cents",
+          "created": null,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000497: books off by 10266 cents",
+          "created": null,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000502: books off by 619 cents",
+          "created": null,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000520: books off by -3603 cents",
+          "created": null,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000526: books off by 900 cents",
+          "created": null,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000531: books off by 3132 cents",
+          "created": null,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000606: books off by 3321 cents",
+          "created": null,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000610: books off by 2028 cents",
+          "created": null,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000614: books off by 12125 cents",
+          "created": null,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000617: books off by 5047 cents",
+          "created": null,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000679: books off by 10009 cents",
+          "created": null,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000698: books off by -3289 cents",
+          "created": null,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000723: books off by 1402 cents",
+          "created": null,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000732: books off by 1499 cents",
+          "created": null,
+          "payment": "pay_000732"
+        }
+      ],
+      "money_off_cents": 153187,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "counted more than once": 28,
+        "total differs": 1,
+        "books differ": 28
+      }
+    }
+  },
+  "undo": null,
+  "damage": {
+    "at_alert": {
+      "source": "the alert's own evaluation of the rules",
+      "at_utc": "2026-10-21T09:06:47Z",
+      "began": 93.8,
+      "money_check": {
+        "outcome": "failed",
+        "invariants": 5,
+        "failed": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        },
+        "money_off_cents": 49323
+      },
+      "lag": {
+        "ledger": 0.0,
+        "payment-confirmer": 0.0
+      }
+    },
+    "at_request": {
+      "at_utc": "2026-10-21T09:07:34Z",
+      "outcome": "failed",
+      "cutoff": 1792573654,
+      "findings": [
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000251 posted 2 times",
+          "created": 1792573591,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000261 posted 2 times",
+          "created": 1792573593,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000267 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000268 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000288 posted 2 times",
+          "created": 1792573601,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000298 posted 2 times",
+          "created": 1792573603,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000308 posted 3 times",
+          "created": 1792573604,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000352 posted 2 times",
+          "created": 1792573621,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000373 posted 2 times",
+          "created": 1792573628,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000437 posted 2 times",
+          "created": 1792573647,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000447 posted 2 times",
+          "created": 1792573649,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000460 posted 2 times",
+          "created": 1792573653,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "total differs",
+          "key": "all payments: books off by 89182 cents",
+          "created": null,
+          "payment": null
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000217: books off by -2455 cents",
+          "created": null,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000230: books off by 3709 cents",
+          "created": null,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000240: books off by 9533 cents",
+          "created": null,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000244: books off by 4444 cents",
+          "created": null,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000245: books off by 1827 cents",
+          "created": null,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000270: books off by 5879 cents",
+          "created": null,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000279: books off by 26386 cents",
+          "created": null,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000320: books off by 6638 cents",
+          "created": null,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000340: books off by 3183 cents",
+          "created": null,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000399: books off by 7022 cents",
+          "created": null,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000408: books off by 16556 cents",
+          "created": null,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000420: books off by 6460 cents",
+          "created": null,
+          "payment": "pay_000420"
+        }
+      ],
+      "money_off_cents": 89182,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "counted more than once": 12,
+        "total differs": 1,
+        "books differ": 12
+      },
+      "began": 140.3,
+      "took": 1.1
+    },
+    "at_action": {
+      "at_utc": "2026-10-21T09:09:13Z",
+      "outcome": "failed",
+      "cutoff": 1792573753,
+      "findings": [
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000251 posted 2 times",
+          "created": 1792573591,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000261 posted 2 times",
+          "created": 1792573593,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000267 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000268 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000288 posted 2 times",
+          "created": 1792573601,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000298 posted 2 times",
+          "created": 1792573603,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000308 posted 3 times",
+          "created": 1792573604,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000352 posted 2 times",
+          "created": 1792573621,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000373 posted 2 times",
+          "created": 1792573628,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000437 posted 2 times",
+          "created": 1792573647,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000447 posted 2 times",
+          "created": 1792573649,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000460 posted 2 times",
+          "created": 1792573653,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000486 posted 2 times",
+          "created": 1792573662,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000494 posted 2 times",
+          "created": 1792573664,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000525 posted 2 times",
+          "created": 1792573673,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000545 posted 2 times",
+          "created": 1792573678,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000550 posted 2 times",
+          "created": 1792573679,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000576 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000581 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000626 posted 2 times",
+          "created": 1792573697,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000666 posted 2 times",
+          "created": 1792573711,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000670 posted 2 times",
+          "created": 1792573712,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000675 posted 2 times",
+          "created": 1792573714,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000678 posted 2 times",
+          "created": 1792573715,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000743 posted 2 times",
+          "created": 1792573730,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000792 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000794 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000804 posted 2 times",
+          "created": 1792573747,
+          "payment": "pay_000732"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "total differs",
+          "key": "all payments: books off by 153187 cents",
+          "created": null,
+          "payment": null
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000217: books off by -2455 cents",
+          "created": null,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000230: books off by 3709 cents",
+          "created": null,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000240: books off by 9533 cents",
+          "created": null,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000244: books off by 4444 cents",
+          "created": null,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000245: books off by 1827 cents",
+          "created": null,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000270: books off by 5879 cents",
+          "created": null,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000279: books off by 26386 cents",
+          "created": null,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000320: books off by 6638 cents",
+          "created": null,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000340: books off by 3183 cents",
+          "created": null,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000399: books off by 7022 cents",
+          "created": null,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000408: books off by 16556 cents",
+          "created": null,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000420: books off by 6460 cents",
+          "created": null,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000445: books off by 14295 cents",
+          "created": null,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000453: books off by 986 cents",
+          "created": null,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000481: books off by 5268 cents",
+          "created": null,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000497: books off by 10266 cents",
+          "created": null,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000502: books off by 619 cents",
+          "created": null,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000520: books off by -3603 cents",
+          "created": null,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000526: books off by 900 cents",
+          "created": null,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000531: books off by 3132 cents",
+          "created": null,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000606: books off by 3321 cents",
+          "created": null,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000610: books off by 2028 cents",
+          "created": null,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000614: books off by 12125 cents",
+          "created": null,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000617: books off by 5047 cents",
+          "created": null,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000679: books off by 10009 cents",
+          "created": null,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000698: books off by -3289 cents",
+          "created": null,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000723: books off by 1402 cents",
+          "created": null,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000732: books off by 1499 cents",
+          "created": null,
+          "payment": "pay_000732"
+        }
+      ],
+      "money_off_cents": 153187,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "counted more than once": 28,
+        "total differs": 1,
+        "books differ": 28
+      }
+    },
+    "after_action": {
+      "at_utc": "2026-10-21T09:10:13Z",
+      "outcome": "failed",
+      "cutoff": 1792573813,
+      "findings": [
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000251 posted 2 times",
+          "created": 1792573591,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000261 posted 2 times",
+          "created": 1792573593,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000267 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000268 posted 2 times",
+          "created": 1792573595,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000288 posted 2 times",
+          "created": 1792573601,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000298 posted 2 times",
+          "created": 1792573603,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000308 posted 3 times",
+          "created": 1792573604,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000352 posted 2 times",
+          "created": 1792573621,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000373 posted 2 times",
+          "created": 1792573628,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000437 posted 2 times",
+          "created": 1792573647,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000447 posted 2 times",
+          "created": 1792573649,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000460 posted 2 times",
+          "created": 1792573653,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000486 posted 2 times",
+          "created": 1792573662,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000494 posted 2 times",
+          "created": 1792573664,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000525 posted 2 times",
+          "created": 1792573673,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000545 posted 2 times",
+          "created": 1792573678,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000550 posted 2 times",
+          "created": 1792573679,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000576 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000581 posted 2 times",
+          "created": 1792573686,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000626 posted 2 times",
+          "created": 1792573697,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000666 posted 2 times",
+          "created": 1792573711,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000670 posted 2 times",
+          "created": 1792573712,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000675 posted 2 times",
+          "created": 1792573714,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000678 posted 2 times",
+          "created": 1792573715,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000743 posted 2 times",
+          "created": 1792573730,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000792 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000794 posted 2 times",
+          "created": 1792573744,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000804 posted 2 times",
+          "created": 1792573747,
+          "payment": "pay_000732"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "total differs",
+          "key": "all payments: books off by 153187 cents",
+          "created": null,
+          "payment": null
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000217: books off by -2455 cents",
+          "created": null,
+          "payment": "pay_000217"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000230: books off by 3709 cents",
+          "created": null,
+          "payment": "pay_000230"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000240: books off by 9533 cents",
+          "created": null,
+          "payment": "pay_000240"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000244: books off by 4444 cents",
+          "created": null,
+          "payment": "pay_000244"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000245: books off by 1827 cents",
+          "created": null,
+          "payment": "pay_000245"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000270: books off by 5879 cents",
+          "created": null,
+          "payment": "pay_000270"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000279: books off by 26386 cents",
+          "created": null,
+          "payment": "pay_000279"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000320: books off by 6638 cents",
+          "created": null,
+          "payment": "pay_000320"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000340: books off by 3183 cents",
+          "created": null,
+          "payment": "pay_000340"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000399: books off by 7022 cents",
+          "created": null,
+          "payment": "pay_000399"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000408: books off by 16556 cents",
+          "created": null,
+          "payment": "pay_000408"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000420: books off by 6460 cents",
+          "created": null,
+          "payment": "pay_000420"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000445: books off by 14295 cents",
+          "created": null,
+          "payment": "pay_000445"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000453: books off by 986 cents",
+          "created": null,
+          "payment": "pay_000453"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000481: books off by 5268 cents",
+          "created": null,
+          "payment": "pay_000481"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000497: books off by 10266 cents",
+          "created": null,
+          "payment": "pay_000497"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000502: books off by 619 cents",
+          "created": null,
+          "payment": "pay_000502"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000520: books off by -3603 cents",
+          "created": null,
+          "payment": "pay_000520"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000526: books off by 900 cents",
+          "created": null,
+          "payment": "pay_000526"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000531: books off by 3132 cents",
+          "created": null,
+          "payment": "pay_000531"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000606: books off by 3321 cents",
+          "created": null,
+          "payment": "pay_000606"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000610: books off by 2028 cents",
+          "created": null,
+          "payment": "pay_000610"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000614: books off by 12125 cents",
+          "created": null,
+          "payment": "pay_000614"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000617: books off by 5047 cents",
+          "created": null,
+          "payment": "pay_000617"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000679: books off by 10009 cents",
+          "created": null,
+          "payment": "pay_000679"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000698: books off by -3289 cents",
+          "created": null,
+          "payment": "pay_000698"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000723: books off by 1402 cents",
+          "created": null,
+          "payment": "pay_000723"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000732: books off by 1499 cents",
+          "created": null,
+          "payment": "pay_000732"
+        }
+      ],
+      "money_off_cents": 153187,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "counted more than once": 28,
+        "total differs": 1,
+        "books differ": 28
+      }
+    }
+  },
+  "deploys": [
+    {
+      "seq": 1,
+      "at": "2026-10-21T09:06:32Z",
+      "service": "ledger-consumer",
+      "by": "klaxon.faults",
+      "container": "77e2ae702e76",
+      "settings": {
+        "LEDGER_HANDLER": "naive",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      },
+      "replaced_settings": {
+        "LEDGER_HANDLER": "idempotent",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      }
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-21T09:09:13Z",
+      "service": "ledger-consumer",
+      "by": "Klaxon, approved request r-e16d",
+      "container": "36f5fee6179c",
+      "settings": {
+        "LEDGER_HANDLER": "idempotent",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      },
+      "replaced_settings": {
+        "LEDGER_HANDLER": "naive",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      }
+    }
+  ],
+  "removed_by": "Klaxon: its rollback (Klaxon, approved request r-e16d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing",
+  "printed_output": [
+    "Klaxon week 4: a gated run on a fault: duplicate-delivery",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, duplicate-delivery, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, offered one write action (rollback_deploy), which runs only if a person approves it at the gate, and stopped on diagnosed after 6 steps; any reply it got is a recorded response, not a simulation. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Klaxon asked at the approval gate to act on its diagnosis; the request was approved with make approve (the request's id typed at a terminal), and the action ran: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged). Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is not right. The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-e16d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+    "",
+    "The fault: Payments counted twice in the books",
+    "  recorded cause: a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.024 s; 5xx share 0.012; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  75.4 s  p95 0.024 s; 5xx share 0.013; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  93.8 s  p95 0.025 s; 5xx share 0.03; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  verify t= 240.3 s  p95 0.024 s; 5xx share 0.018; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  verify t= 256.5 s  p95 0.024 s; 5xx share 0.019; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  after  t= 390.6 s  p95 0.024 s; 5xx share 0.025; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  the fault was injected at t=76.3 s: {\"redeployed\": \"ledger-consumer\", \"LEDGER_HANDLER\": \"naive\"}",
+    "",
+    "Alert MoneyCheckFailed, fired at 2026-10-21T09:06:47Z: The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+    "",
+    "The loop stopped on diagnosed after 6 steps, 4 tool calls and 45.8 s.",
+    "  hypothesis: At 09:06:30 ledger-consumer was redeployed with LEDGER_HANDLER=naive. This handler appears to book every Kafka record it reads without deduplicating by event_id. The provider resends webhooks until they are acknowledged, so one event can land on provider-events more than once, at different offsets. Each copy was booked as a new ledger transaction. That gives 7 events posted 2 or 3 times (posted_exactly_once failed). It also puts provider_clearing $493.23 ahead of the provider (matches_provider failed). Duplicate payment.succeeded events inflate the balance. The duplicate refund.succeeded for pay_000217 leaves that payment at 1 cent against the provider's 2456. The ledger stays balanced because each duplicate is a full double-entry transaction. Our payments and refunds still match the provider, so the damage is confined to the ledger. Still open: the handler that ran before this deploy, and whether it was idempotent, was not confirmed.",
+    "  confidence: 0.85",
+    "  proposed fix (the model's words): rollback ledger-consumer: Roll ledger-consumer back to the settings it ran before the 09:06:30 deploy, presumably an idempotent handler that dedupes by event_id. Then repair the ledger separately: reverse the extra transactions the money check lists (e.g. 255, 266, 272, 273, 297, plus the extras for evt_000298 and evt_000308). Then rerun money_check.",
+    "  action it names: rollback_deploy {\"service\": \"ledger-consumer\"} (it runs only through the gate)",
+    "",
+    "Compared by a rule (klaxon.grading, rubric version 1, committed in 95a64ab before the first live runs on the faults): keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "  hypothesis: At 09:06:30 ledger-consumer was redeployed with LEDGER_HANDLER=naive. This handler appears to book every Kafka record it reads without deduplicating by event_id. The provider resends webhooks until they are acknowledged, so one event can land on provider-events more than once, at different offsets. Each copy was booked as a new ledger transaction. That gives 7 events posted 2 or 3 times (posted_exactly_once failed). It also puts provider_clearing $493.23 ahead of the provider (matches_provider failed). Duplicate payment.succeeded events inflate the balance. The duplicate refund.succeeded for pay_000217 leaves that payment at 1 cent against the provider's 2456. The ledger stays balanced because each duplicate is a full double-entry transaction. Our payments and refunds still match the provider, so the damage is confined to the ledger. Still open: the handler that ran before this deploy, and whether it was idempotent, was not confirmed.",
+    "  named    (required) where: the ledger consumer",
+    "  named    (required) what: its dedupe is gone",
+    "  named    (required) how: the provider sends some webhooks again",
+    "  named    (optional) the deploy that brought it",
+    "  proposed fix: rollback on ledger-consumer; fits the remedy: True",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "The gate: done: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "  request r-e16d: the gate began at t=140.2 s and was done at t=239.8 s",
+    "  decision: approved at 2026-10-21T09:09:11Z, typed at a terminal; make approve wrote it",
+    "",
+    "Verification, by code and not by the model: passed",
+    "  Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row.",
+    "  The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
+    "  The money is not right: 28 events counted more than once, 28 payments whose books differ from the provider's; our books $1,531.87 ahead of the provider's balance. A rollback repairs nothing: this damage stays until a person repairs it.",
+    "",
+    "The damage, by the money check:",
+    "  at the alert    2026-10-21T09:06:47Z  money check failed: posted_exactly_once 7, matches_provider 8; our books $493.23 ahead of the provider's; lag ledger 0, payment-confirmer 0",
+    "  at the request  2026-10-21T09:07:34Z  12 events counted more than once, 12 payments whose books differ from the provider's; our books $891.82 ahead of the provider's balance",
+    "  at the action   2026-10-21T09:09:13Z  28 events counted more than once, 28 payments whose books differ from the provider's; our books $1,531.87 ahead of the provider's balance",
+    "  after it        2026-10-21T09:10:13Z  28 events counted more than once, 28 payments whose books differ from the provider's; our books $1,531.87 ahead of the provider's balance",
+    "",
+    "Deploys during the run (the deploy log):",
+    "  1 2026-10-21T09:06:32Z ledger-consumer by klaxon.faults: LEDGER_HANDLER=naive, LEDGER_BAD_EVENTS=dead_letter",
+    "  2 2026-10-21T09:09:13Z ledger-consumer by Klaxon, approved request r-e16d: LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter",
+    "",
+    "The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-e16d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+    "",
+    "Cleared at t=300.6 s: {\"redeployed\": \"ledger-consumer\", \"LEDGER_HANDLER\": \"idempotent\", \"LEDGER_BAD_EVENTS\": \"dead_letter\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}
