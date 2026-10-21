@@ -11,11 +11,14 @@ API's worker threads fill up. The breaker fails fast after repeated failures,
 and tries again later:
 
     closed     every attempt goes to the provider. A call fails when none of its
-               attempts got an answer from it: each timed out, could not
-               connect, or got 502, 503 or 504 (the provider unreachable or
-               overloaded). Any other answer counts as one, a 500 included:
-               the provider is there. It sets the count of failed calls in a
-               row back to 0. At 5 failed calls in a row, the breaker opens.
+               attempts got an answer from it: each timed out or could not
+               connect; got a 5xx other than 500 and 501 (the provider, or a
+               gateway in front of it, cannot serve: 502, 503, 504, a CDN's
+               52x); or got a 500 or 501 only after more than half the
+               timeout (it held a worker thread as long as a hang). Any other
+               answer counts as one, a quick 500 included: the provider is
+               there. It sets the count of failed calls in a row back to 0.
+               At 5 failed calls in a row, the breaker opens.
     open       no attempt goes out: each call fails at once (CircuitOpen, a
                ProviderUnavailable, so the API leaves the payment pending as
                before), for 10 s.
@@ -25,14 +28,16 @@ and tries again later:
 
 The breaker asks one question: is the provider there? Whether a call worked
 is the client's question, and its answer is unchanged: a 500 still means the
-outcome is unknown, so the payment stays pending. But a 500 comes back at
-once and ties up no worker thread, and the traffic's noise (a charge whose
-answer the provider loses on purpose) is a 500 at every attempt with its key,
-and again at each retry of the client. Counted as failures, such requests can
-open the breaker while the provider is up: with 20% of answers lost at 5
-payments per second and the known-bad confirmer, it was not closed about half
-the time, by the review's simulation. The limit: a provider that answers 500,
-or 409 or 429, to every call never opens it; its calls fail fast anyway.
+outcome is unknown, so the payment stays pending. But a quick 500 holds no
+worker thread, and the traffic's noise (a charge whose answer the provider
+loses on purpose) is a quick 500 at every attempt with its key, and again at
+each retry of the client. Counted as failures, such requests can open the
+breaker while the provider is up: with 20% of answers lost at 5 payments per
+second and the known-bad confirmer, it was not closed about half the time, by
+the review's simulation. The limits: a provider that answers quick 500s, or
+409s or 429s, to every call never opens it (its calls fail fast anyway); and
+in a partial outage, where some calls hang and others get quick 500s, each
+500 starts the count again.
 
 Only the trial decides: a result counts only while the breaker is in the
 state that let its attempt go, so an attempt sent before the breaker opened,
@@ -64,7 +69,8 @@ from klaxon.patient.services.common import log
 logger = logging.getLogger("klaxon.provider_client")
 
 RETRYABLE_STATUSES = {409, 429}  # "a request with this key is still running" and "slow down"
-UNAVAILABLE = {502, 503, 504}  # for the breaker, the provider unreachable or overloaded: no answer from it
+OWN_ERRORS = {500, 501}  # 5xx that are the provider's own answer about one request; any other 5xx is no answer
+SLOW_SHARE = 0.5  # of the timeout: a 500 or 501 that took longer held a thread as long as a hang, so it is no answer
 BREAKER_FAILURES = 5  # failed calls in a row that open the breaker
 BREAKER_OPEN_SECONDS = 10.0  # how long it stays open before a trial attempt
 CLOSED, OPEN, HALF_OPEN = "closed", "open", "half-open"
@@ -127,8 +133,8 @@ class CircuitBreaker:
             return self._period if self.state == CLOSED else None
 
     def attempted(self, period: int, answered: bool) -> None:
-        """What came of one attempt admit() let go: answered (any answer but 502, 503 or 504), or not. Closed, an
-        answer sets the count of failed calls back to 0; half-open, the trial's result decides."""
+        """What came of one attempt admit() let go: answered by the provider (the module docstring says what counts),
+        or not. Closed, an answer sets the count of failed calls back to 0; half-open, the trial's result decides."""
         with self._lock:
             if period != self._period:
                 return  # it began in a state that has changed since
@@ -190,6 +196,7 @@ class ProviderClient:
         http: httpx.Client | None = None,
         sleep: Callable[[float], None] = time.sleep,
         breaker: CircuitBreaker | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if attempts < 1:
             raise ValueError("a provider client makes at least one attempt per call")
@@ -198,6 +205,8 @@ class ProviderClient:
         self.backoff_seconds = backoff_seconds
         self.sleep = sleep
         self.breaker = breaker  # None: no breaker (PROVIDER_BREAKER=off)
+        self.slow_seconds = timeout_seconds * SLOW_SHARE
+        self.clock = clock  # times each attempt, for the breaker
 
     def create_payment(
         self, customer: str, amount_cents: int, currency: str, idempotency_key: str, metadata: dict[str, str]
@@ -221,13 +230,15 @@ class ProviderClient:
                 before = f"; before it, {attempt - 1} attempt(s) failed: {problem}" if attempt > 1 else ""
                 raise CircuitOpen(f"{path} not sent: {self.breaker.why()}{before}")
             answered = False
+            started = self.clock()
             try:
                 response = self.http.post(path, json=body, headers={"Idempotency-Key": idempotency_key})
             except httpx.TransportError as exc:
                 problem = f"{type(exc).__name__}: {exc}"
                 ATTEMPTS.add(1, {"path": path, "result": "no_answer", "error": type(exc).__name__})
             else:
-                answered = response.status_code not in UNAVAILABLE
+                status, took = response.status_code, self.clock() - started
+                answered = status < 500 or (status in OWN_ERRORS and took <= self.slow_seconds)
                 heard = heard or answered
                 ATTEMPTS.add(1, {"path": path, "result": str(response.status_code)})
                 if response.status_code < 300:

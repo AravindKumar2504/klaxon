@@ -203,10 +203,12 @@ def test_each_change_of_state_is_logged_once(caplog):
 # The breaker in the provider client
 
 
-def client_with(handler, breaker):
+def client_with(handler, breaker, clock=None):
     sleeps: list[float] = []
     http = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://provider")
-    client = ProviderClient("http://provider", attempts=3, http=http, sleep=sleeps.append, breaker=breaker)
+    client = ProviderClient(
+        "http://provider", attempts=3, http=http, sleep=sleeps.append, breaker=breaker, clock=clock or Clock()
+    )
     return client, sleeps
 
 
@@ -271,7 +273,7 @@ def no_answer(kind):
     return handler
 
 
-@pytest.mark.parametrize("kind", [httpx.ReadTimeout, httpx.ConnectError, 502, 503, 504])
+@pytest.mark.parametrize("kind", [httpx.ReadTimeout, httpx.ConnectError, 502, 503, 504, 507, 520])
 def test_no_answer_or_an_unavailable_one_is_a_failure(kind):
     breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
     client, _ = client_with(no_answer(kind), breaker)
@@ -284,15 +286,16 @@ def test_no_answer_or_an_unavailable_one_is_a_failure(kind):
     assert breaker.state == OPEN
 
 
-def test_a_500_is_an_answer_it_never_opens_the_breaker_and_the_outcome_stays_unknown():
-    """The breaker asks only whether the provider is there. A 500 is the traffic's noise: the provider charged, then
-    lost its answer, at every attempt with that key. The call still fails, and its outcome is unknown."""
+@pytest.mark.parametrize("status", [500, 501])
+def test_a_quick_500_is_an_answer_it_never_opens_the_breaker_and_the_outcome_stays_unknown(status):
+    """The breaker asks only whether the provider is there. A quick 500 is the traffic's noise: the provider charged,
+    then lost its answer, at every attempt with that key. The call still fails, and its outcome is unknown."""
     breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
     seen = []
 
     def handler(request):
         seen.append(1)
-        return httpx.Response(500)
+        return httpx.Response(status)
 
     client, _ = client_with(handler, breaker)
     for n in range(40):  # and each asked again 3 times with its key, as the traffic does
@@ -303,10 +306,37 @@ def test_a_500_is_an_answer_it_never_opens_the_breaker_and_the_outcome_stays_unk
     assert breaker.state == CLOSED and len(seen) == 480
 
 
-def test_a_call_that_got_any_answer_did_not_fail():
+def test_a_slow_500_held_a_thread_as_long_as_a_hang_so_it_is_no_answer():
+    """The re-check's finding: a 500 that comes just before our timeout ties up a worker thread like a hang. With the
+    timeout at 3 s, a 500 after more than 1.5 s counts as no answer; one at 1.5 s is still an answer."""
+    clock = Clock()
+    breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=clock)
+    took = [1.5]
+
+    def handler(request):
+        clock.now += took[0]
+        return httpx.Response(500)
+
+    client, _ = client_with(handler, breaker, clock)
+    for n in range(5):
+        with pytest.raises(ProviderUnavailable):
+            client.create_payment("cus", 100, "usd", f"pmt_00000{n}", {})
+    assert breaker.state == CLOSED
+    took[0] = 2.0
+    for n in range(5):
+        with pytest.raises(ProviderUnavailable):
+            client.create_payment("cus", 100, "usd", f"pmt_00001{n}", {})
+    assert breaker.state == OPEN
+
+
+@pytest.mark.parametrize(
+    "first, then",
+    [(httpx.Response(500), httpx.ReadTimeout("x")), (httpx.Response(500), httpx.Response(503))],
+)
+def test_a_call_that_got_any_answer_did_not_fail(first, then):
     breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=Clock())
     failed_calls(breaker, 4)
-    answers = [httpx.Response(500), httpx.ReadTimeout("x"), httpx.ReadTimeout("x")]
+    answers = [first, then, then]
 
     def handler(request):
         answer = answers.pop(0)
