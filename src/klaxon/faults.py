@@ -10,7 +10,11 @@ with reversals (week 4, with a human's approval).
 
     duplicate-delivery  a deploy of the ledger consumer without its dedupe
     poison-message      a deploy that retries unreadable messages forever, then one such message
-    provider-outage     the provider's charge API hangs, and our payments API has no circuit breaker
+    provider-outage     the provider's charge API hangs, and our payments API's circuit breaker fails fast
+
+Fault 3's recorded cause has a version 2 (week 4, item 3): the payments API has had a circuit breaker since, on by
+default, so the outage no longer makes payments wait. Each fault keeps what it recorded for an earlier version of the
+grading rule (klaxon.grading), so a comparison made then can be made again the same way.
 
 The first two are bad deploys: one container is recreated with a known-bad setting, the way the
 week 1 demos use HANDLER=naive. They need traffic to show (make traffic): fault 1 needs the duplicate
@@ -31,6 +35,7 @@ import httpx
 
 from klaxon.checks.live import PROVIDER_URL
 from klaxon.patient import deploys, stack
+from klaxon.patient.services.provider_client import BREAKER_FAILURES, BREAKER_OPEN_SECONDS
 from klaxon.traffic import require_local
 
 LEDGER = "ledger-consumer"
@@ -74,6 +79,14 @@ class LocalStack:
 
 
 @dataclass(frozen=True)
+class Recorded:
+    """A cause and a remedy, as a fault recorded them for one version of the grading rule."""
+
+    cause: str
+    remedy: str
+
+
+@dataclass(frozen=True)
 class Fault:
     name: str
     title: str
@@ -85,6 +98,12 @@ class Fault:
     expected_money: dict[str, str]
     inject: Callable[[LocalStack], dict] = field(repr=False)
     clear: Callable[[LocalStack], dict] = field(repr=False)
+    # What it recorded for earlier versions of the grading rule, where they differ from today's: by rubric version.
+    earlier: dict[int, Recorded] = field(default_factory=dict, repr=False)
+
+    def recorded(self, rubric_version: int) -> Recorded:
+        """The cause and the remedy a comparison by this version of the grading rule reads."""
+        return self.earlier.get(rubric_version, Recorded(self.cause, self.remedy))
 
     def describe(self) -> dict:
         return {
@@ -176,28 +195,48 @@ FAULTS = {
         ),
         Fault(
             name="provider-outage",
-            title="Payments time out: the provider hangs, and nothing fails fast",
+            title="Payments fail: the provider hangs, and our circuit breaker fails fast",
             cause=(
-                f"the provider's charge and refund API hangs ({OUTAGE_DELAY_SECONDS:g} s, then 503), and our payments"
-                " API has no circuit breaker: every payment waits through 3 timed-out attempts, the API's worker"
-                " threads fill up, and even its health checks slow down"
+                f"the provider's charge and refund API hangs ({OUTAGE_DELAY_SECONDS:g} s, then 503): our payments API's"
+                " calls to it time out, each after 3 attempts, until its circuit breaker opens, after"
+                f" {BREAKER_FAILURES} failed calls in a row; from then on it fails fast, answering 503 'outcome"
+                " unknown' at once without calling the provider, and lets one trial call through every"
+                f" {BREAKER_OPEN_SECONDS:g} s"
             ),
             symptoms=(
-                "the payments API's p95 latency climbs to about 10 s (the top of its buckets), and clients get 503"
-                " 'outcome unknown'",
-                "provider calls end with no answer (timeouts): klaxon.provider.attempts, result no_answer",
-                "the payments API's health check fails while its worker threads all wait",
+                "clients get 503 'outcome unknown', most of them at once: the 5xx share of POST /payments climbs",
+                "the first calls still wait out their 3 timed-out attempts (about 10 s) until the breaker opens; after"
+                f" that only one trial call every {BREAKER_OPEN_SECONDS:g} s waits: the p95 latency may climb for about"
+                " a minute, then drops",
+                "provider calls end with no answer (timeouts) at first, klaxon.provider.attempts result no_answer;"
+                " then the breaker refuses them, klaxon.provider.refused",
+                "the payments API logs 'circuit breaker open' and stays healthy: its worker threads do not fill up",
                 "the money check passes: nothing was charged, so no money is wrong",
-                "after it ends, payments whose outcome stayed unknown stay pending, with no charge: they need a"
-                " decision (retry them, or mark them failed)",
+                "after it ends, the next trial call gets an answer and the breaker closes; payments whose outcome"
+                " stayed unknown stay pending, with no charge: they need a decision (retry them, or mark them failed)",
             ),
             remedy=(
-                "it ends when the provider recovers; a circuit breaker would fail fast meanwhile and keep the API"
-                " answering (planned for week 4)"
+                "nothing to change on our side: the provider must recover (escalate to it). Meanwhile the circuit"
+                " breaker keeps the API answering at once, and closes again when a trial call gets an answer. After"
+                " it recovers, the payments left pending with no charge need a decision (retry them, or mark them"
+                " failed)"
             ),
             expected_money={"during": "passed", "after": "passed", "quiet": "passed"},  # nothing was charged
             inject=_start_outage,
             clear=_end_outage,
+            earlier={  # version 1, from before the circuit breaker: the week 3 runs were graded against it
+                1: Recorded(
+                    cause=(
+                        f"the provider's charge and refund API hangs ({OUTAGE_DELAY_SECONDS:g} s, then 503), and our"
+                        " payments API has no circuit breaker: every payment waits through 3 timed-out attempts, the"
+                        " API's worker threads fill up, and even its health checks slow down"
+                    ),
+                    remedy=(
+                        "it ends when the provider recovers; a circuit breaker would fail fast meanwhile and keep the"
+                        " API answering (planned for week 4)"
+                    ),
+                )
+            },
         ),
     )
 }

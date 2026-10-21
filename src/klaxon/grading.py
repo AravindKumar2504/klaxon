@@ -24,9 +24,15 @@ own log lines match elements. tests/test_grading.py keeps those sentences as kno
 
 Version 1, below, is the rubric committed in 95a64ab, before the first live runs on the faults (2026-10-19 UTC), and
 it graded them. It stays as it was: changing it after seeing results would undo that. Every comparison records the
-rubric's version and the fingerprint of its patterns. A test pins that fingerprint, and the tests of its verdicts pin
-how it counts (the hypothesis only, case ignored, all elements for "names", half for "partly"), each with a mutant. So
-a change to either fails a test: a later rubric (week 5's evaluation) must then come as a new version.
+rubric's version and the fingerprint of its patterns. A test pins each version's fingerprint, and the tests of its
+verdicts pin how it counts (the hypothesis only, case ignored, all elements for "names", half for "partly"), each with
+a mutant. So a change to either fails a test: a later rubric must then come as a new version.
+
+Version 2 (week 4, item 3), committed before any live run on fault 3 with the circuit breaker: the payments API now
+fails fast when the provider keeps failing, on by default, so fault 3 records a new cause (klaxon.faults keeps version
+1's). Its third element becomes the breaker failing fast, and the fixes that fit are none and other (escalate to the
+provider): there is nothing to change on our side. Faults 1 and 2 are graded as in version 1. New comparisons use the
+latest version; a saved run is graded again with the version that graded it (klaxon.fault_runs grade).
 """
 
 from __future__ import annotations
@@ -40,11 +46,18 @@ from dataclasses import asdict, dataclass
 from klaxon import faults
 from klaxon.agent.tools import clean_text
 
-RUBRIC_VERSION = 1
-BY = (
-    "a rule (klaxon.grading, rubric version 1, committed in 95a64ab before the first live runs on the faults): keyword"
-    " patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning."
-)
+RUBRIC_VERSION = 2  # the version new comparisons use; each comparison records its own
+HOW = "keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning."
+BY = {
+    1: (
+        "a rule (klaxon.grading, rubric version 1, committed in 95a64ab before the first live runs on the faults):"
+        f" {HOW}"
+    ),
+    2: (
+        "a rule (klaxon.grading, rubric version 2, committed before any live run on fault 3 with the circuit breaker):"
+        f" {HOW}"
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -63,7 +76,24 @@ class Rubric:
 
 LEDGER = Element("where: the ledger consumer", (r"\bledger\b",))
 DEPLOY = (r"deploy", r"roll(ed)?[ -]?out", r"setting", r"config")
-RUBRICS = {
+# The provider, not the topic named after it (provider-events).
+PROVIDER = Element("where: the payment provider", (r"provider(?![-_ ]events)", r"upstream", r"third[ -]party"))
+NO_ANSWER = Element(
+    "what: it hangs or does not answer",
+    (
+        r"tim(e|es|ed|ing)[ -]?outs?",  # a timeout, times out, timed out, timing out
+        r"\bhang",
+        r"slow",
+        r"unavailable",
+        r"\b503\b",
+        r"outage",
+        r"no answer",
+        r"not answer",
+        r"unresponsive",
+        r"\bdown\b",
+    ),
+)
+RUBRICS_V1 = {
     "duplicate-delivery": Rubric(
         elements=(
             LEDGER,
@@ -120,23 +150,8 @@ RUBRICS = {
     ),
     "provider-outage": Rubric(
         elements=(
-            # The provider, not the topic named after it (provider-events).
-            Element("where: the payment provider", (r"provider(?![-_ ]events)", r"upstream", r"third[ -]party")),
-            Element(
-                "what: it hangs or does not answer",
-                (
-                    r"tim(e|es|ed|ing)[ -]?outs?",  # a timeout, times out, timed out, timing out
-                    r"\bhang",
-                    r"slow",
-                    r"unavailable",
-                    r"\b503\b",
-                    r"outage",
-                    r"no answer",
-                    r"not answer",
-                    r"unresponsive",
-                    r"\bdown\b",
-                ),
-            ),
+            PROVIDER,
+            NO_ANSWER,
             Element(
                 "how: our API waits on it, and nothing fails fast",
                 (
@@ -156,27 +171,66 @@ RUBRICS = {
         fix_target=r"payments|provider",
     ),
 }
+RUBRICS_V2 = RUBRICS_V1 | {
+    "provider-outage": Rubric(
+        elements=(
+            PROVIDER,
+            NO_ANSWER,
+            Element(
+                "how: our API fails fast, its circuit breaker open",
+                (
+                    r"circuit[ -]?breaker",
+                    r"\bbreaker\b",
+                    r"fail(s|ed|ing)?[ -]fast",
+                    r"short[ -]?circuit",
+                    r"circuit (is |was )?(now )?open",
+                ),
+            ),
+        ),
+        fix_kinds=("none", "other"),  # nothing to change on our side; escalate to the provider
+        fix_target=r"provider|payments",
+    ),
+}
+VERSIONS = {1: RUBRICS_V1, 2: RUBRICS_V2}
+RUBRICS = VERSIONS[RUBRIC_VERSION]
 
 
-def fingerprint() -> str:
-    """The SHA-256 of the rubric itself: every element, pattern, and fitting fix, for every fault."""
-    rubric = {name: asdict(rubric) for name, rubric in sorted(RUBRICS.items())}
+def fingerprint(version: int = RUBRIC_VERSION) -> str:
+    """The SHA-256 of one version of the rubric: every element, pattern, and fitting fix, for every fault."""
+    rubric = {name: asdict(rubric) for name, rubric in sorted(VERSIONS[version].items())}
     return hashlib.sha256(json.dumps(rubric, sort_keys=True).encode()).hexdigest()
+
+
+def version_of(saved: Mapping | None) -> int:
+    """The rubric version a saved comparison was made with, so a run can be graded again the same way. One saved
+    before comparisons recorded their version (the week 3 fault runs, 2026-10-19 UTC) was made with the rubric that
+    became version 1: its patterns did not change, and their replay tests grade them again with it. A run that saved
+    no comparison gets the latest."""
+    if saved is None:
+        return RUBRIC_VERSION
+    rubric = saved.get("rubric")
+    if rubric is None:
+        return 1
+    if not isinstance(rubric, Mapping) or rubric.get("version") not in VERSIONS:
+        raise ValueError("the saved comparison names a rubric version this code does not have")
+    return rubric["version"]
 
 
 def names(element: Element, text: str) -> bool:
     return any(re.search(pattern, text, re.IGNORECASE) for pattern in element.patterns)
 
 
-def compare(fault_name: str, diagnosis: Mapping | None) -> dict:
-    """The rule's comparison of a diagnosis (as the trace's stop record keeps it) with the fault's recorded cause."""
-    fault, rubric = faults.get(fault_name), RUBRICS[fault_name]
+def compare(fault_name: str, diagnosis: Mapping | None, version: int = RUBRIC_VERSION) -> dict:
+    """The rule's comparison of a diagnosis (as the trace's stop record keeps it) with the cause the fault records,
+    both as one version of the rubric has them: the latest, unless told."""
+    fault, rubric = faults.get(fault_name), VERSIONS[version][fault_name]
+    recorded = fault.recorded(version)
     out: dict = {
-        "by": BY,
-        "rubric": {"version": RUBRIC_VERSION, "sha256": fingerprint()},
+        "by": BY[version],
+        "rubric": {"version": version, "sha256": fingerprint(version)},
         "fault": fault_name,
-        "recorded_cause": fault.cause,
-        "remedy": fault.remedy,
+        "recorded_cause": recorded.cause,
+        "remedy": recorded.remedy,
     }
     if diagnosis is None:
         return out | {"verdict": "no diagnosis"}

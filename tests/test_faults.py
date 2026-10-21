@@ -179,6 +179,41 @@ def test_the_stack_comes_up_with_dead_lettering_whatever_this_shells_variables_s
     )
 
 
+def test_the_stack_comes_up_with_its_circuit_breaker_whatever_this_shells_variables_say(monkeypatch):
+    """Week 4, item 3: the payments API without its breaker, the known-bad old behavior, only ever comes from a
+    deploy, never from a stray variable."""
+    from klaxon.patient import stack
+
+    seen = []
+    monkeypatch.setenv("PROVIDER_BREAKER", "off")
+    monkeypatch.setattr(stack, "ensure_local", lambda: None)
+    monkeypatch.setattr(stack, "compose", lambda *args, env: seen.append(env))
+    stack.up("idempotent")
+    assert seen[0]["PROVIDER_BREAKER"] == "on"
+    assert "export PROVIDER_BREAKER := on" in (stack.REPO / "Makefile").read_text()
+
+
+def test_fault_3_version_2_names_the_breaker_and_keeps_what_version_1_recorded():
+    """Week 4, item 3. Version 1's cause and remedy are the ones the week 3 run on fault 3 was compared with."""
+    from klaxon.patient.services.provider_client import BREAKER_FAILURES, BREAKER_OPEN_SECONDS
+    from klaxon.patient.stack import REPO
+
+    outage = FAULTS["provider-outage"]
+    assert f"after {BREAKER_FAILURES} failed calls in a row" in outage.cause
+    assert f"one trial call through every {BREAKER_OPEN_SECONDS:g} s" in outage.cause
+    assert outage.remedy.startswith("nothing to change on our side") and outage.describe()["cause"] == outage.cause
+    saved = json.loads((REPO / "evidence/week3/2026-10-19T024001Z_fault-run_provider-outage/run.json").read_text())
+    then = outage.recorded(1)
+    assert (then.cause, then.remedy) == (saved["comparison"]["recorded_cause"], saved["comparison"]["remedy"])
+    assert outage.recorded(2) == faults.Recorded(outage.cause, outage.remedy)
+    for name in ("duplicate-delivery", "poison-message"):  # unchanged
+        assert (
+            FAULTS[name].recorded(1)
+            == FAULTS[name].recorded(2)
+            == faults.Recorded(FAULTS[name].cause, FAULTS[name].remedy)
+        )
+
+
 def test_clearing_a_fault_starts_a_stopped_ledger_with_its_good_settings():
     """The harness clears every fault in a finally: that must work even when the bad deploy left nothing running."""
     docker = FakeDocker()

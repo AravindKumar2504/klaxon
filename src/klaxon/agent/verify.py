@@ -57,7 +57,7 @@ from dataclasses import asdict, dataclass
 from klaxon import alerts
 from klaxon.agent.tools import ONE_SHOT, clean_text
 from klaxon.checks import live
-from klaxon.checks.money import MoneyReport, format_cents
+from klaxon.checks.money import OVER_REFUNDED, MoneyReport, format_cents
 from klaxon.patient import stack
 from klaxon.patient.deploys import utc_now
 
@@ -224,6 +224,12 @@ def _finding(name: str, item: Mapping, events: Mapping, charges: Mapping, refund
         return Finding(name, PAYMENT, _key(text), _newest(found, charges))
     if name == "refunds_match_provider":
         found = [refund.get("id") for refund in item.get("provider_refunds") or []]
+        if item.get("problem") == OVER_REFUNDED:  # about a charge and all its refunds, not one refund of ours
+            text = (
+                f"charge {item.get('provider_payment_id')} ({', '.join(map(str, found))}): refunded"
+                f" {item.get('refunded_cents')} cents of {item.get('charged_cents')}"
+            )
+            return Finding(name, REFUND, _key(text), _newest(found, refunds))
         text = f"refund {item.get('refund_id')} ({', '.join(map(str, found)) or 'no refund'}): {item.get('problem')}"
         return Finding(name, REFUND, _key(text), _newest(found, refunds))
     return Finding(name, OTHER, _key(f"{name}: {json.dumps(item, sort_keys=True, default=str)}"))

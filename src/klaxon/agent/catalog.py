@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from klaxon.agent.contract import ActionSpec
 
-# The services whose settings the deploy log knows (klaxon.patient.deploys.SERVICES; a test checks they agree).
+# Services whose settings the deploy log knows (klaxon.patient.deploys.SERVICES; a test checks it). Not the
+# payments API yet (week 4, item 3): offering it would change the gated runs' system prompt, so the week 4 runs
+# would no longer replay. Item 4 decides, with fault 4.
 ROLLBACK_SERVICES = ("ledger-consumer", "payment-confirmer")
 
 ROLLBACK_DEPLOY = ActionSpec(

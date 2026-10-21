@@ -446,8 +446,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Provider calls per second (each attempt)",
-      "description": "Every attempt the payments API made. Timeouts show as error types; a provider outage shows here first.",
+      "title": "Provider calls per second (each attempt, and those the breaker refused)",
+      "description": "Every attempt the payments API made, and the calls its circuit breaker refused without sending them. Timeouts show as error types; a provider outage shows here first.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -498,6 +498,15 @@
           "refId": "B",
           "legendFormat": "no answer: {{error}}",
           "expr": "sum by (error) (rate(klaxon_provider_attempts_total{result=\"no_answer\"}[1m]))"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "refId": "C",
+          "legendFormat": "refused by the circuit breaker (not sent)",
+          "expr": "sum(rate(klaxon_provider_refused_total[1m]))"
         }
       ],
       "id": 12

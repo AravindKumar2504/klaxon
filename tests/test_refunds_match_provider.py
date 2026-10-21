@@ -5,7 +5,9 @@ provider sent correctly, plus payments and refunds tables with the live schema's
 PostgreSQL in tests/integration.
 """
 
-from klaxon.checks.money import MONEY_EFFECT, ProviderPayment, ProviderRefund, check_money
+import pytest
+
+from klaxon.checks.money import MONEY_EFFECT, OVER_REFUNDED, ProviderPayment, ProviderRefund, check_money
 from klaxon.patient.ledger import Ledger, posting_lines
 from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED, Event
 
@@ -113,7 +115,8 @@ def test_refunds_that_agree_with_the_provider_pass():
         FIFTH,
     ]
     assert report.invariant(FIFTH).summary == (
-        "all 3 of our refunds agree with the provider (1 refunded once, 2 never refunded)"
+        "all 3 of our refunds agree with the provider (1 refunded once, 2 never refunded),"
+        " and no payment was refunded more than it was charged"
     )
 
 
@@ -316,8 +319,8 @@ def test_a_refund_after_the_cutoff_is_left_for_the_next_check():
     assert report.passed, report
     assert report.left_for_next_check == {"provider_events": 2, "provider_charges": 0, "provider_refunds": 2}
     assert report.invariant(FIFTH).summary == (
-        "all 1 of our refunds agree with the provider (1 refunded once, 0 never refunded);"
-        " 2 refunds newer than the cutoff left for the next check"
+        "all 1 of our refunds agree with the provider (1 refunded once, 0 never refunded),"
+        " and no payment was refunded more than it was charged; 2 refunds newer than the cutoff left for the next check"
     )
 
 
@@ -346,3 +349,139 @@ def test_with_nothing_after_the_cutoff_the_fifth_invariant_reads_as_without_one(
     with_cutoff, without = world.check(cutoff=CUTOFF), world.check()
     assert with_cutoff.invariant(FIFTH) == without.invariant(FIFTH)
     assert with_cutoff.left_for_next_check["provider_refunds"] == 0
+
+
+# Week 4, item 3: per payment, the provider never refunded more than it charged (known gap 1, decided 2026-10-14)
+
+
+def test_two_refunds_that_each_agree_can_still_refund_more_than_was_charged_and_only_the_fifth_sees_it():
+    """Before week 4 every invariant passed here. Each refund is ours, made once, for its amount, on its payment; the
+    ledger books both as the provider sent them. Together they give back $30.00 of a $25.00 payment."""
+    world = World()
+    charge = world.paid()  # $25.00
+    world.ours("rfd_000001", "succeeded", 1_500, world.refund(charge, 1_500, "rfd_000001"))
+    world.ours("rfd_000002", "succeeded", 1_500, world.refund(charge, 1_500, "rfd_000002"))
+    report = world.check()
+    assert only_the_fifth_fails(report)
+    assert report.invariant(FIFTH).evidence == [
+        {
+            "refund_id": None,
+            "payment_id": "pmt_000001",
+            "provider_payment_id": "pay_000001",
+            "charged_cents": 2_500,
+            "refunded_cents": 3_000,
+            "provider_refunds": [
+                {"id": "re_000001", "provider_payment_id": "pay_000001", "amount_cents": 1_500},
+                {"id": "re_000002", "provider_payment_id": "pay_000001", "amount_cents": 1_500},
+            ],
+            "problem": OVER_REFUNDED,
+        }
+    ]
+    assert report.invariant(FIFTH).summary == (
+        "pmt_000001's charge pay_000001 ($25.00) was refunded $30.00 at the provider (re_000001, re_000002),"
+        " more than it charged"
+    )
+
+
+def test_refunds_that_add_up_to_exactly_the_charge_pass():
+    world = World()
+    charge = world.paid()
+    world.ours("rfd_000001", "succeeded", 1_000, world.refund(charge, 1_000, "rfd_000001"))
+    world.ours("rfd_000002", "succeeded", 1_500, world.refund(charge, 1_500, "rfd_000002"))
+    assert world.check().passed
+
+
+def test_each_charge_is_judged_on_its_own_refunds():
+    world = World()
+    first, second = world.paid(), world.paid("pmt_000002", 1_000)
+    world.ours("rfd_000001", "succeeded", 2_500, world.refund(first, 2_500, "rfd_000001"))
+    world.ours("rfd_000002", "succeeded", 1_000, world.refund(second, 1_000, "rfd_000002"), payment_id="pmt_000002")
+    world.ours("rfd_000003", "succeeded", 1, world.refund(second, 1, "rfd_000003"), payment_id="pmt_000002")
+    [problem] = world.check().invariant(FIFTH).evidence
+    assert (problem["provider_payment_id"], problem["charged_cents"], problem["refunded_cents"]) == (
+        "pay_000002",
+        1_000,
+        1_001,
+    )
+
+
+def test_an_over_refund_is_judged_whatever_the_cutoff():
+    """A charge's amount never changes and its refunds only add up: no timing explains a total over it. The refund
+    that tips it over is newer than the cutoff, and is still left for the next check as a refund of ours."""
+    world = World()
+    charge = world.paid(at=CUTOFF - 5)
+    world.ours("rfd_000001", "succeeded", 2_000, world.refund(charge, 2_000, "rfd_000001", at=CUTOFF))
+    world.ours("rfd_000002", "pending", 1_000)
+    world.refund(charge, 1_000, "rfd_000002", at=CUTOFF + 1, booked=False)
+    report = world.check(cutoff=CUTOFF)
+    assert [problem["problem"] for problem in report.invariant(FIFTH).evidence] == [OVER_REFUNDED]
+    assert report.left_for_next_check["provider_refunds"] == 1
+
+
+def test_a_refund_of_a_charge_the_provider_does_not_have_is_caught():
+    world = World()
+    world.paid()
+    world.refund("pay_000404", 700, None)
+    report = world.check()
+    over = [item for item in report.invariant(FIFTH).evidence if item["problem"] == OVER_REFUNDED]
+    assert [(item["provider_payment_id"], item["charged_cents"], item["payment_id"]) for item in over] == [
+        ("pay_000404", None, None)
+    ]
+    assert report.invariant(FIFTH).summary.endswith(
+        "the provider refunded $7.00 (re_000001) of pay_000404, a charge it does not have"
+    )
+
+
+def test_refunds_of_a_charge_not_read_yet_are_left_for_the_next_check_when_all_are_newer_than_the_cutoff():
+    """Their charge may be newer than the provider's payments the check read. One up to the cutoff cannot be."""
+    newer_only = World()
+    newer_only.paid(at=CUTOFF - 5)
+    newer_only.refund("pay_000404", 700, None, at=CUTOFF + 1, booked=False)
+    assert newer_only.check(cutoff=CUTOFF).passed
+    up_to_it = World()
+    up_to_it.paid(at=CUTOFF - 5)
+    up_to_it.refund("pay_000404", 700, None, at=CUTOFF, booked=False)
+    up_to_it.refund("pay_000404", 300, None, at=CUTOFF + 1, booked=False)
+    over = [i for i in up_to_it.check(cutoff=CUTOFF).invariant(FIFTH).evidence if i["problem"] == OVER_REFUNDED]
+    assert [item["refunded_cents"] for item in over] == [1_000]
+
+
+def test_a_charge_that_names_none_of_ours_is_tied_to_our_payment_through_our_refunds():
+    world = World()
+    world.paid()
+    charge = ProviderPayment("pay_000002", 1_000, None, 1)  # its metadata names no payment of ours
+    world.provider.payments.append(charge)
+    world.ledger.conn.execute("INSERT INTO payments VALUES ('pmt_000002', 'succeeded', 1000, 'pay_000002')")
+    world.ours("rfd_000001", "succeeded", 1_000, world.refund(charge.id, 1_000, "rfd_000001"), payment_id="pmt_000002")
+    world.ours("rfd_000002", "succeeded", 500, world.refund(charge.id, 500, "rfd_000002"), payment_id="pmt_000002")
+    over = [i for i in world.check().invariant(FIFTH).evidence if i["problem"] == OVER_REFUNDED]
+    assert [item["payment_id"] for item in over] == ["pmt_000002"]
+
+
+def test_a_charge_no_payment_of_ours_names_is_said_as_the_providers():
+    world = World()
+    world.paid()
+    world.provider.payments.append(ProviderPayment("pay_000002", 1_000, None, 1))
+    world.refund("pay_000002", 600, None)
+    world.refund("pay_000002", 600, None)
+    assert "the provider's charge pay_000002 ($10.00) was refunded $12.00 at the provider" in (
+        world.check().invariant(FIFTH).summary
+    )
+
+
+def test_a_refund_that_names_no_payment_is_never_tied_to_one_of_ours_that_has_no_provider_id():
+    world = World()
+    world.paid()
+    world.ours("rfd_000001", "pending", 500, payment_id="pmt_000404")  # its payment is not in our records
+    world.provider.refunds.append(ProviderRefund("re_000009", None, 500, None, 1))  # it names no payment
+    over = [i for i in world.check().invariant(FIFTH).evidence if i["problem"] == OVER_REFUNDED]
+    assert [(item["provider_payment_id"], item["payment_id"]) for item in over] == [(None, None)]
+    assert "the provider refunded $5.00 (re_000009) of no payment, a charge it does not have" in (
+        world.check().invariant(FIFTH).summary
+    )
+
+
+def test_the_fifth_invariant_will_not_run_without_the_providers_payments():
+    world = World()
+    with pytest.raises(ValueError, match="needs the provider's payments too"):
+        check_money(world.provider, world.ledger.conn, None, provider_refunds=world.provider.refunds)

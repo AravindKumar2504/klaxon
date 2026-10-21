@@ -841,7 +841,8 @@ def _grade(folder: Path) -> int:
     try:
         saved = json.loads((folder / RUN_FILE).read_text())
         stop = read_trace(folder / loop.TRACE)[-1]
-        comparison = grading.compare(saved["fault"]["name"], stop.get("diagnosis"))
+        version = grading.version_of(saved.get("comparison"))  # the version that graded it, so the verdict is the same
+        comparison = grading.compare(saved["fault"]["name"], stop.get("diagnosis"), version)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(
             f"Cannot grade {clean_text(str(folder))}: {type(exc).__name__}: {clean_text(str(exc), 300)}",

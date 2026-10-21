@@ -17,6 +17,7 @@ PASSWORD = "made-up-password-not-real"
 GOOD = {
     "ledger-consumer": {"LEDGER_HANDLER": "idempotent", "LEDGER_BAD_EVENTS": "dead_letter"},
     "payment-confirmer": {"CONFIRMER_HANDLER": "by_our_id", "CONFIRMER_BAD_EVENTS": "dead_letter"},
+    "payments-api": {"PROVIDER_BREAKER": "on"},
 }
 NAIVE = GOOD["ledger-consumer"] | {"LEDGER_HANDLER": "naive"}
 RETRYING = GOOD["ledger-consumer"] | {"LEDGER_BAD_EVENTS": "retry"}

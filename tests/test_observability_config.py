@@ -38,3 +38,11 @@ def test_the_dashboard_shows_provider_calls_that_got_no_answer_from_our_own_coun
     ]
     assert 'sum by (error) (rate(klaxon_provider_attempts_total{result="no_answer"}[1m]))' in exprs
     assert not any('http_response_status_code=""' in expr for expr in exprs)
+    assert "sum(rate(klaxon_provider_refused_total[1m]))" in exprs  # week 4: the calls the breaker never sent
+
+
+def test_the_payments_api_runs_its_circuit_breaker_by_default():
+    """Week 4, item 3: off, the known-bad old behavior, only ever comes from a deploy (klaxon.patient.deploys)."""
+    compose = (ROOT / "compose.yaml").read_text()
+    api = compose.split("  payments-api:")[1].split("\n  ledger-consumer:")[0]
+    assert "PROVIDER_BREAKER: ${PROVIDER_BREAKER:-on}" in api

@@ -10,6 +10,7 @@ from klaxon.agent import actions, catalog
 from klaxon.agent.actions import ActionRefused
 from klaxon.agent.contract import ANNOTATIONS, KEYWORDS
 from klaxon.agent.tools import HOME
+from klaxon.patient import deploys
 from klaxon.patient.deploys import SERVICES, DeployLog
 from klaxon.patient.stack import StackError
 from tests.fake_docker import GOOD, NAIVE, RETRYING, FakeDocker
@@ -29,10 +30,25 @@ def test_the_catalog_holds_one_action_and_each_has_a_planner():
     assert set(actions.PLANNERS) == set(catalog.CATALOG)
 
 
-def test_the_services_a_rollback_may_name_are_those_the_deploy_log_knows():
-    assert set(catalog.ROLLBACK_SERVICES) == set(SERVICES)
+def test_the_services_a_rollback_may_name_are_those_the_deploy_log_knows_but_the_payments_api():
+    # Week 4, item 3: the payments API's breaker setting is logged, and not offered yet (catalog.py says why).
+    assert set(catalog.ROLLBACK_SERVICES) == set(SERVICES) - {"payments-api"}
     schema = catalog.ROLLBACK_DEPLOY.input_schema
     assert schema["properties"]["service"]["enum"] == list(catalog.ROLLBACK_SERVICES)
+
+
+def test_the_payments_apis_breaker_is_logged_but_no_rollback_of_it_is_planned():
+    """Week 4, item 3: the breaker's setting is a deploy setting, so its deploys are logged and off is known-bad. The
+    payments API is not offered to rollback_deploy yet (catalog.py says why): the action's own schema refuses it."""
+    docker = FakeDocker()
+    deployer = docker.deployer()
+    record = deployer.deploy("payments-api", {"PROVIDER_BREAKER": "off"}, by="a test")
+    assert (record.settings, record.replaced_settings) == ({"PROVIDER_BREAKER": "off"}, {"PROVIDER_BREAKER": "on"})
+    assert deploys.known_bad(record.settings) == ["PROVIDER_BREAKER=off"]
+    ups = len(docker.ups())
+    with pytest.raises(actions.ActionRefused, match="must be one of"):
+        actions.plan("rollback_deploy", {"service": "payments-api"}, deployer)
+    assert len(docker.ups()) == ups
 
 
 def test_the_catalog_is_data_its_schemas_use_only_what_the_validator_reads():

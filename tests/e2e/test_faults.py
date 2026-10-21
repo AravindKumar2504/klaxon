@@ -1,7 +1,9 @@
 """End to end: each fault of klaxon.faults, injected on purpose into the live stack while traffic flows.
 
 These reset the stack (its data is synthetic) and take a few minutes: make e2e. They run in order on one
-stack: the two faults whose damage clears with them first, the one that leaves money booked twice last.
+stack: the two faults whose damage clears with them first, the one that leaves money booked twice last. The outage
+runs twice (week 4, item 3): without the payments API's circuit breaker (the known-bad old behavior, deployed and
+then rolled back), and with it, the default.
 """
 
 import time
@@ -103,33 +105,83 @@ def test_a_poison_message_stops_the_retrying_ledger_and_the_rollback_drains_it(f
     assert check_live(timeout_seconds=60).report.passed
 
 
-def counted_no_answers() -> float:
-    query = 'sum(klaxon_provider_attempts_total{result="no_answer"})'
+def counted(query: str) -> float:
     response = httpx.get(f"{PROMETHEUS}/api/v1/query", params={"query": query}, timeout=10, trust_env=False)
     data = response.json()["data"]["result"]
     return float(data[0]["value"][1]) if data else 0.0
 
 
-def test_a_provider_outage_makes_payments_wait_through_their_timeouts_and_moves_no_money(fault_stack):
-    with Traffic(rate=3.0, seed=4), httpx.Client(base_url=live.API_URL, timeout=30.0, trust_env=False) as api:
+def counted_no_answers() -> float:
+    return counted('sum(klaxon_provider_attempts_total{result="no_answer"})')
 
-        def pay(amount: int) -> httpx.Response:
-            body = {"customer": "cus_e2e", "amount_cents": amount}
-            return api.post("/payments", json=body, headers={"Idempotency-Key": f"e2e-outage-{uuid.uuid4().hex[:8]}"})
 
+def counted_refusals() -> float:
+    return counted("sum(klaxon_provider_refused_total)")
+
+
+def timed(call) -> tuple[httpx.Response, float]:
+    started = time.monotonic()
+    response = call()
+    return response, time.monotonic() - started
+
+
+def payer(api: httpx.Client):
+    def pay(amount: int) -> httpx.Response:
+        body = {"customer": "cus_e2e", "amount_cents": amount}
+        return api.post("/payments", json=body, headers={"Idempotency-Key": f"e2e-outage-{uuid.uuid4().hex[:8]}"})
+
+    return pay
+
+
+def test_without_its_breaker_a_provider_outage_makes_payments_wait_through_their_timeouts(fault_stack):
+    """The old behavior, kept as a known-bad setting (week 4, item 3): PROVIDER_BREAKER=off, deployed and logged."""
+    fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "off"})
+    try:
+        assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "off"
+        with Traffic(rate=3.0, seed=4), httpx.Client(base_url=live.API_URL, timeout=30.0, trust_env=False) as api:
+            pay = payer(api)
+            time.sleep(3)
+            faults.get("provider-outage").inject(fault_stack)
+            try:
+                held, waited = timed(lambda: pay(4_200))
+                assert held.status_code == 503 and held.json()["error"]["code"] == "provider_unavailable"
+                assert waited >= 9  # three attempts, each waiting out its 3 s timeout: no circuit breaker
+                assert check_live(timeout_seconds=60).report.passed  # nothing was charged, so no money is wrong
+                until(lambda: counted_no_answers() >= 3, timeout=60, every=2)  # and the timeouts show in the metrics
+            finally:
+                faults.get("provider-outage").clear(fault_stack)
+            until(lambda: pay(4_201).status_code == 201, timeout=60)
+        assert check_live(timeout_seconds=60).report.passed
+    finally:
+        fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "on"})  # never leave the known-bad setting behind
+    assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "on"
+
+
+def test_with_its_breaker_a_provider_outage_fails_fast_keeps_the_api_healthy_and_moves_no_money(fault_stack):
+    """Week 4, item 3: the default. The traffic's own calls fail first and open the breaker; from then on a payment
+    is answered 503 at once, the provider is not called, and the API stays healthy. Once the outage ends, a trial
+    call gets an answer and payments go through again."""
+    assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "on"
+    with Traffic(rate=3.0, seed=6), httpx.Client(base_url=live.API_URL, timeout=30.0, trust_env=False) as api:
+        pay = payer(api)
         time.sleep(3)
+        refused_before = counted_refusals()
         faults.get("provider-outage").inject(fault_stack)
         try:
-            started = time.monotonic()
-            held = pay(4_200)
-            waited = time.monotonic() - started
-            assert held.status_code == 503 and held.json()["error"]["code"] == "provider_unavailable"
-            assert waited >= 9  # three attempts, each waiting out its 3 s timeout: no circuit breaker
+            fast, seconds = until(lambda: (found := timed(lambda: pay(4_300)))[1] < 1.0 and found, timeout=90)
+            assert fast.status_code == 503 and fast.json()["error"]["code"] == "provider_unavailable"
+            assert fast.json()["payment"]["status"] == "pending"  # its outcome is unknown, as before: no money moved
+            health, health_seconds = timed(lambda: api.get("/healthz"))
+            assert health.status_code == 200 and health_seconds < 2  # its worker threads are free
+            until(lambda: counted_refusals() > refused_before, timeout=60, every=2)  # refused calls, never sent
+            logs = stack.compose("logs", "--no-log-prefix", "--since", "10m", "payments-api")
+            assert "circuit breaker open: 5 provider calls failed in a row" in logs
             assert check_live(timeout_seconds=60).report.passed  # nothing was charged, so no money is wrong
-            until(lambda: counted_no_answers() >= 3, timeout=60, every=2)  # and the timeouts show in the metrics
         finally:
             faults.get("provider-outage").clear(fault_stack)
-        until(lambda: pay(4_201).status_code == 201, timeout=60)
+        until(lambda: pay(4_301).status_code == 201, timeout=60)  # a trial call got an answer: the breaker closed
+    logs = stack.compose("logs", "--no-log-prefix", "--since", "10m", "payments-api")
+    assert "circuit breaker closed: the provider answered the trial call" in logs
     assert check_live(timeout_seconds=60).report.passed
 
 

@@ -14,11 +14,13 @@ again, as a new request.
   succeeded, our API refuses the second request itself (nothing is left to
   refund), and all five invariants pass.
 - With the known-bad confirmer (by_provider_id), the refund stays pending.
-  Our API counts only succeeded refunds, so it sends the second request on to
-  the provider, and only the provider's own limit refuses it. The webhook
-  endpoint stays green, and the ledger balances and matches the provider,
-  because it booked the refund from the webhook. Only the fifth invariant
-  fails.
+  Since week 4 our API counts a pending refund against its payment too, so
+  it refuses the second request itself, before the provider. (Until then it
+  counted only succeeded refunds, and sent the second request on: only the
+  provider's own limit refused it, as the week 2 evidence of this demo
+  shows.) The webhook endpoint stays green, and the ledger balances and
+  matches the provider, because it booked the refund from the webhook. Only
+  the fifth invariant fails.
 
 Like the lost-answer demo, it first waits until the stack has settled and the
 money check passes. `make demo-lost-refund` starts from a fresh stack.

@@ -22,6 +22,16 @@ provider never charged, it stays pending: no money moved, and the money
 check accepts that. Refunds work the same way (week 2): our refund id goes to
 the provider as metadata, and the refund's webhook confirms it.
 
+When the provider keeps failing, the provider client's circuit breaker fails
+fast (week 4, see provider_client): the call is refused at once instead of
+waiting out its timeouts, and the payment or refund stays pending the same way.
+
+A refund is refused when it, with every other refund of the payment that may
+have gone through, adds up to more than the payment (week 4, known gap 1): a
+succeeded refund counts, and so does a pending one, whose outcome is unknown.
+So a refund stuck pending blocks a second one until it settles (a retry with
+its key, or its webhook). Only a failed refund does not count.
+
 The ledger is not written here. Money is booked only from the provider's
 webhooks, one path for every payment (see ledger_consumer).
 
@@ -68,7 +78,12 @@ from klaxon.patient.services.common import (
 from klaxon.patient.services.events import ID, MAX_AMOUNT_CENTS
 from klaxon.patient.services.idempotency import RedisIdempotency
 from klaxon.patient.services.payments_store import PaymentRow, PaymentsStore, PgPaymentsStore, RefundRow
-from klaxon.patient.services.provider_client import ProviderClient, ProviderRejected, ProviderUnavailable
+from klaxon.patient.services.provider_client import (
+    ProviderClient,
+    ProviderRejected,
+    ProviderUnavailable,
+    breaker_setting,
+)
 
 logger = logging.getLogger("klaxon.payments_api")
 
@@ -76,6 +91,10 @@ REPLAYED_HEADER = "Idempotent-Replayed"
 KEY_REUSED = "this Idempotency-Key was used for a different request"
 OUTCOME_UNKNOWN = "the outcome is unknown; retry with the same Idempotency-Key"
 STUCK_AFTER_SECONDS = 60  # a payment pending longer than this is reported as stuck
+# The refunds of a payment that count against it: those that may have gone through. A pending one's outcome is
+# unknown, so it counts until it settles (known gap 1, decided 2026-10-14). Only a failed one does not.
+COUNTED_REFUNDS = ("pending", "succeeded")
+EXCEEDS = "more than what is left to refund, counting the refunds whose outcome is not known yet"
 
 
 class PaymentIn(BaseModel):
@@ -267,11 +286,21 @@ def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: Pr
             if not created and row.status == "failed":
                 return refused(422, "refund_failed", "this refund was refused", True, True, refund=refund_view(row))
             if created:
-                refunded = sum(r.amount_cents for r in store.refunds_for(payment_id) if r.status == "succeeded")
-                if refunded + row.amount_cents > payment.amount_cents:
+                others = [r for r in store.refunds_for(payment_id) if r.id != row.id]
+                counted = sum(r.amount_cents for r in others if r.status in COUNTED_REFUNDS)
+                if counted + row.amount_cents > payment.amount_cents:
                     row = store.mark_refund(row.id, "failed", None)
-                    message = "more than what is left to refund"
-                    return refused(422, "refund_exceeds_payment", message, final=True, refund=refund_view(row))
+                    log(
+                        logger,
+                        logging.WARNING,
+                        "refund refused: more than what is left to refund",
+                        refund_id=row.id,
+                        payment_id=payment_id,
+                        amount_cents=row.amount_cents,
+                        counted_cents=counted,
+                        pending_cents=sum(r.amount_cents for r in others if r.status == "pending"),
+                    )
+                    return refused(422, "refund_exceeds_payment", EXCEEDS, final=True, refund=refund_view(row))
             try:
                 result = provider.create_refund(
                     payment.provider_payment_id, row.amount_cents, row.id, metadata={"klaxon_refund_id": row.id}
@@ -345,6 +374,15 @@ def observe_pending_payments(store: PaymentsStore) -> None:
     )
 
 
+def provider_from_env() -> ProviderClient:
+    """The provider client, from this service's settings: its circuit breaker on unless PROVIDER_BREAKER=off."""
+    return ProviderClient(
+        env_str("PROVIDER_URL", "http://fake-provider:8000"),
+        timeout_seconds=env_float("PROVIDER_TIMEOUT_SECONDS", 3.0),
+        breaker=breaker_setting(env_str("PROVIDER_BREAKER", "on")),
+    )
+
+
 def main() -> None:
     configure_logging("payments-api")
     telemetry.setup("payments-api")
@@ -361,10 +399,7 @@ def main() -> None:
     redis_client = redis.Redis.from_url(
         env_str("REDIS_URL", "redis://redis:6379/0"), socket_timeout=0.5, socket_connect_timeout=0.5
     )
-    provider = ProviderClient(
-        env_str("PROVIDER_URL", "http://fake-provider:8000"),
-        timeout_seconds=env_float("PROVIDER_TIMEOUT_SECONDS", 3.0),
-    )
+    provider = provider_from_env()
     store = PgPaymentsStore(pool)
     observe_pending_payments(store)
     app = create_app(store, RedisIdempotency(redis_client), provider)

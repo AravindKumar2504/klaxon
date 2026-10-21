@@ -169,6 +169,8 @@ services:
       DATABASE_URL: postgresql://payments_api:payments-api-dev-only@postgres:5432/klaxon
       REDIS_URL: redis://redis:6379/0
       PROVIDER_URL: http://fake-provider:8000
+      # on (default): the circuit breaker fails fast when the provider keeps failing; off, the known-bad old behavior
+      PROVIDER_BREAKER: ${PROVIDER_BREAKER:-on}
     depends_on:
       postgres:
         condition: service_healthy

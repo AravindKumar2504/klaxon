@@ -506,6 +506,8 @@ def test_the_naive_confirmer_leaves_a_refund_pending_and_only_the_fifth_invarian
         "pending but refunded",
         "pending",
     )
-    # Our API counts only succeeded refunds, so it sent the second request on; only the provider's limit refused it.
-    assert run.asked_again["body"]["error"]["code"] == "refund_failed"
+    # Since week 4 (known gap 1) our API counts the pending refund too, so it refused the second request itself,
+    # before the provider. Until then it counted only succeeded refunds, and only the provider's limit refused it
+    # (refund_failed: the week 2 evidence of this demo shows it).
+    assert run.asked_again["body"]["error"]["code"] == "refund_exceeds_payment"
     assert (run.dashboard.status, run.dashboard.error_rate) == ("GREEN", 0.0)

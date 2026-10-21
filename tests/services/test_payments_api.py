@@ -10,6 +10,7 @@ from klaxon.patient.services.events import MAX_AMOUNT_CENTS
 from klaxon.patient.services.idempotency import LOCK_TTL_SECONDS, RedisIdempotency
 from klaxon.patient.services.payments_api import PaymentIn, create_app, fingerprint
 from klaxon.patient.services.provider_client import (
+    CircuitBreaker,
     ProviderClient,
     ProviderRejected,
     ProviderUnavailable,
@@ -162,6 +163,107 @@ def test_refunds(api, parts):
         ("rfd_000001", "succeeded"),
         ("rfd_000002", "failed"),
     ]
+
+
+def refund(api, payment_id, amount, key):
+    return api.post(f"/payments/{payment_id}/refunds", json={"amount_cents": amount}, headers={"Idempotency-Key": key})
+
+
+def test_a_refund_whose_outcome_is_unknown_still_counts_so_a_second_one_never_reaches_the_provider(
+    api, parts, telemetry
+):
+    """Known gap 1 (decided 2026-10-14, built in week 4): a refund stuck pending blocks a second one until it settles."""
+    store, _, provider = parts
+    payment_id = pay(api).json()["id"]  # $25.00
+    provider.unavailable = True
+    stuck = refund(api, payment_id, 2_500, "first")
+    assert stuck.status_code == 503 and stuck.json()["refund"]["status"] == "pending"
+    provider.unavailable = False
+    again = refund(api, payment_id, 2_500, "asked-again")  # a support agent asks again, with a new key
+    assert (again.status_code, again.json()["error"]["code"]) == (422, "refund_exceeds_payment")
+    assert again.json()["error"]["message"].endswith("counting the refunds whose outcome is not known yet")
+    assert [call for call, _, _ in provider.calls].count("create_refund") == 1  # only the stuck one was ever sent
+    assert [r.status for r in store.refunds_for(payment_id)] == ["pending", "failed"]
+    [line] = [r for r in telemetry.log_records() if r.body == "refund refused: more than what is left to refund"]
+    assert (line.attributes["counted_cents"], line.attributes["pending_cents"]) == (2_500, 2_500)
+
+
+def test_a_failed_refund_does_not_count(api, parts):
+    _, _, provider = parts
+    payment_id = pay(api).json()["id"]
+    provider.reject = (400, "refund_declined", "declined")
+    assert refund(api, payment_id, 2_500, "declined").status_code == 422
+    provider.reject = None
+    assert refund(api, payment_id, 2_500, "again").status_code == 201
+
+
+def test_what_a_pending_refund_leaves_can_still_be_refunded(api, parts):
+    _, _, provider = parts
+    payment_id = pay(api).json()["id"]  # $25.00
+    provider.unavailable = True
+    assert refund(api, payment_id, 1_000, "part").status_code == 503  # pending: $10.00 may have gone back
+    provider.unavailable = False
+    assert refund(api, payment_id, 1_500, "rest").status_code == 201  # exactly what is left
+    assert refund(api, payment_id, 1, "one-cent-more").status_code == 422
+
+
+def test_a_stuck_refund_retried_with_its_own_key_is_not_blocked_by_itself(api, parts):
+    _, _, provider = parts
+    payment_id = pay(api).json()["id"]
+    provider.unavailable = True
+    first = refund(api, payment_id, 2_500, "key")
+    provider.unavailable = False
+    again = refund(api, payment_id, 2_500, "key")  # the same request: to the provider again, with the same key
+    assert again.status_code == 201 and again.json()["id"] == first.json()["refund"]["id"]
+    assert [key for call, key, _ in provider.calls if call == "create_refund"] == ["rfd_000001", "rfd_000001"]
+
+
+def test_once_a_stuck_refund_is_refused_the_payment_can_be_refunded(api, parts):
+    store, _, provider = parts
+    payment_id = pay(api).json()["id"]
+    provider.unavailable = True
+    refund(api, payment_id, 2_500, "key")
+    provider.unavailable, provider.reject = False, (400, "refund_declined", "declined")
+    assert refund(api, payment_id, 2_500, "key").status_code == 422  # its retry settles it: failed
+    provider.reject = None
+    assert refund(api, payment_id, 2_500, "new-key").status_code == 201
+    assert [r.status for r in store.refunds_for(payment_id)] == ["failed", "succeeded"]
+
+
+def test_with_the_breaker_open_a_payment_fails_at_once_and_stays_pending(parts, telemetry):
+    """Week 4: once 5 calls to the provider have failed in a row, the API answers 503 at once, without calling it."""
+    store, redis, _ = parts
+    seen = []
+
+    def hanging(request):
+        seen.append(request.url.path)
+        raise httpx.ReadTimeout("timed out")
+
+    http = httpx.Client(transport=httpx.MockTransport(hanging), base_url="http://provider")
+    breaker = CircuitBreaker(failures=5, open_seconds=10.0, clock=lambda: 0.0)
+    provider = ProviderClient("http://provider", http=http, sleep=lambda seconds: None, breaker=breaker)
+    api = TestClient(create_app(store, RedisIdempotency(redis), provider))
+    assert [pay(api, key=f"k{n}").status_code for n in range(5)] == [503] * 5  # 3 attempts each: then it opens
+    assert len(seen) == 15
+    sixth = pay(api, key="c")
+    assert (sixth.status_code, sixth.json()["error"]["code"]) == (503, "provider_unavailable")
+    assert sixth.json()["payment"]["status"] == "pending" and len(seen) == 15  # the provider was not called
+    assert redis.record("idem:payments:c") is None  # released: a retry with the same key can run later
+    errors = [r.attributes["error"] for r in telemetry.log_records() if r.body.startswith("provider unavailable")]
+    assert errors[-1].startswith("/v1/payments not sent: the circuit breaker is open")
+
+
+def test_the_api_runs_its_breaker_unless_told_off(monkeypatch):
+    """Week 4, item 3: the setting compose.yaml passes, on by default; off is the known-bad old behavior."""
+    from klaxon.patient.services import payments_api
+
+    monkeypatch.delenv("PROVIDER_BREAKER", raising=False)
+    breaker = payments_api.provider_from_env().breaker
+    assert isinstance(breaker, CircuitBreaker) and (breaker.failures, breaker.open_seconds) == (5, 10.0)
+    monkeypatch.setenv("PROVIDER_BREAKER", "on")
+    assert isinstance(payments_api.provider_from_env().breaker, CircuitBreaker)
+    monkeypatch.setenv("PROVIDER_BREAKER", "off")
+    assert payments_api.provider_from_env().breaker is None
 
 
 def test_only_a_settled_payment_can_be_refunded(api, parts):

@@ -21,7 +21,11 @@ Five invariants, each with evidence:
    succeeded, for the same amount and the same payment, linked to that
    refund, and made exactly once; one we call succeeded was made; and the
    provider refunded nothing that is not ours. A pending or failed refund
-   the provider never made is fine: no money moved back.
+   the provider never made is fine: no money moved back. And per payment
+   (week 4, known gap 1): the provider never refunded more than it charged.
+   Every refund can agree with ours and the total still be too much: two
+   refunds of one payment, each ours and each made once, can add up to more
+   than its charge.
 
 Invariant 2 alone is not enough: a double posting is itself balanced. And
 invariants 1-3 compare the ledger with the provider, so they pass whenever
@@ -33,11 +37,13 @@ With a cutoff (week 2, for a check while traffic flows; see klaxon.checks.live):
 only what the provider did up to the end of the cutoff's second is judged.
 A provider record stamped later, and anything our side made from it, may
 still be on its way, so it is left for the next check. Everything up to the
-cutoff is judged exactly as without one. Four things are judged whatever the
+cutoff is judged exactly as without one. Five things are judged whatever the
 cutoff, because no timing explains them: a posting the provider never sent,
 a payment charged twice (or a refund made twice), a payment we call
-succeeded with no charge at all (or a refund with no refund), and one linked
-to a charge (or a refund) the provider gives to another of ours.
+succeeded with no charge at all (or a refund with no refund), one linked
+to a charge (or a refund) the provider gives to another of ours, and a
+charge refunded more than its amount (a charge's amount never changes, and
+its refunds only add up).
 (The live check reads our books before the provider's records, so whatever
 our books hold from the provider is already in those records.)
 
@@ -54,6 +60,7 @@ which only the live stack has (week 2).
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
@@ -63,6 +70,7 @@ from klaxon.patient.provider import PAYMENT_SUCCEEDED, REFUND_SUCCEEDED, Event
 # event types move no money: the ledger does not book them and this check
 # ignores them.
 MONEY_EFFECT = {PAYMENT_SUCCEEDED: +1, REFUND_SUCCEEDED: -1}
+OVER_REFUNDED = "refunded more than charged"  # invariant 5's finding about a whole charge, not one refund
 
 
 class ProviderRecords(Protocol):
@@ -175,7 +183,9 @@ def check_money(
         if cutoff is not None:
             left["provider_charges"] = newer_charges
     if provider_refunds is not None:
-        fifth, newer_refunds = _refunds_match_provider(provider_refunds, ledger, cutoff)
+        if provider_payments is None:  # never a pass it cannot back: each refund's charge must be known
+            raise ValueError("invariant 5 needs the provider's payments too: it checks no charge was refunded more")
+        fifth, newer_refunds = _refunds_match_provider(provider_refunds, ledger, cutoff, provider_payments)
         invariants.append(fifth)
         if cutoff is not None:
             left["provider_refunds"] = newer_refunds
@@ -471,10 +481,14 @@ def _describe_payment(item: dict, named: dict[str, str | None]) -> str:
 
 
 def _refunds_match_provider(
-    provider_refunds: list[ProviderRefund], db: SqlConnection, cutoff: int | None = None
+    provider_refunds: list[ProviderRefund],
+    db: SqlConnection,
+    cutoff: int | None = None,
+    provider_payments: list[ProviderPayment] | None = None,
 ) -> tuple[InvariantResult, int]:
     """Invariant 5, invariant 4's twin for refunds, and how many of the provider's refunds it left for the next
-    check. One more thing can be wrong with a refund: the provider refunded another payment than ours."""
+    check. One more thing can be wrong with a refund: the provider refunded another payment than ours. And one
+    more with a payment: the provider refunded more than it charged."""
 
     def newer(refund: ProviderRefund) -> bool:
         return cutoff is not None and refund.created is not None and refund.created > cutoff
@@ -562,13 +576,15 @@ def _refunds_match_provider(
                 "problem": "refunded but not ours",
             }
         )
+    evidence += _refunded_more_than_charged(provider_refunds, provider_payments or [], ours, newer)
 
     left = left_ours + left_strangers
     if not evidence:
         judged = len(ours) - left_ours
         summary = (
             f"all {judged} of our refunds agree with the provider"
-            f" ({judged - never_made} refunded once, {never_made} never refunded)"
+            f" ({judged - never_made} refunded once, {never_made} never refunded),"
+            " and no payment was refunded more than it was charged"
             if ours or left
             else "no refunds yet, ours or the provider's"
         )
@@ -579,6 +595,50 @@ def _refunds_match_provider(
     return InvariantResult("refunds_match_provider", False, summary, evidence), left
 
 
+def _refunded_more_than_charged(
+    provider_refunds: list[ProviderRefund],
+    provider_payments: list[ProviderPayment],
+    ours: dict[str, tuple],
+    newer: Callable[[ProviderRefund], bool],
+) -> list[dict]:
+    """Per charge: the provider's refunds of it, when they add up to more than it charged (known gap 1, decided
+    2026-10-14). Judged whatever the cutoff (the module docstring says why). Except the refunds of a charge the
+    check did not read, when all of them are newer than the cutoff: their charge may be newer than the provider's
+    payments the check read, so the next check judges them. Every refund is still counted, each in its own way,
+    by the rest of this invariant."""
+    charges = {charge.id: charge for charge in provider_payments}
+    # Our payment for a charge, from the charge's metadata, else from our refunds of it.
+    our_payment = {
+        provider_payment_id: payment_id
+        for payment_id, _, _, _, provider_payment_id in ours.values()
+        if provider_payment_id is not None
+    }
+    by_charge: dict[str | None, list[ProviderRefund]] = defaultdict(list)
+    for refund in provider_refunds:
+        by_charge[refund.payment_id].append(refund)
+    evidence = []
+    for charge_id, refunds in by_charge.items():
+        charge = charges.get(charge_id) if charge_id is not None else None
+        if charge is None and all(newer(refund) for refund in refunds):
+            continue
+        charged = None if charge is None else charge.amount_cents  # None: the provider has no such charge
+        refunded = sum(refund.amount_cents for refund in refunds)
+        if refunded > (charged or 0):
+            evidence.append(
+                {
+                    "refund_id": None,
+                    "payment_id": (charge.klaxon_payment_id if charge is not None else None)
+                    or our_payment.get(charge_id),
+                    "provider_payment_id": charge_id,
+                    "charged_cents": charged,
+                    "refunded_cents": refunded,
+                    "provider_refunds": [_refund_item(refund) for refund in refunds],
+                    "problem": OVER_REFUNDED,
+                }
+            )
+    return evidence
+
+
 def _refund_item(refund: ProviderRefund) -> dict:
     return {"id": refund.id, "provider_payment_id": refund.payment_id, "amount_cents": refund.amount_cents}
 
@@ -586,6 +646,15 @@ def _refund_item(refund: ProviderRefund) -> dict:
 def _describe_refund(item: dict, named: dict[str, str | None]) -> str:
     """One evidence item of invariant 5, as a sentence."""
     found, refund_id, problem = item["provider_refunds"], item["refund_id"], item["problem"]
+    if problem == OVER_REFUNDED:
+        ids, charge = ", ".join(r["id"] for r in found), item["provider_payment_id"] or "no payment"
+        if item["charged_cents"] is None:
+            return f"the provider refunded {format_cents(item['refunded_cents'])} ({ids}) of {charge}, a charge it does not have"
+        whose = f"{item['payment_id']}'s charge" if item["payment_id"] else "the provider's charge"
+        return (
+            f"{whose} {charge} ({format_cents(item['charged_cents'])}) was refunded"
+            f" {format_cents(item['refunded_cents'])} at the provider ({ids}), more than it charged"
+        )
     if item["status"] is None:
         refunded = f"the provider refunded {found[0]['id']} ({format_cents(found[0]['amount_cents'])})"
         if refund_id is None:

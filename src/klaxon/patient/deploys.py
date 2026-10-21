@@ -49,15 +49,18 @@ SERVICES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
         "CONFIRMER_HANDLER": ("CONFIRMER_HANDLER", ("by_our_id", "by_provider_id")),
         "CONFIRMER_BAD_EVENTS": ("BAD_EVENTS", ("dead_letter", "retry")),
     },
+    "payments-api": {"PROVIDER_BREAKER": ("PROVIDER_BREAKER", ("on", "off"))},  # its circuit breaker (week 4)
 }
 CONTAINER = re.compile(r"[0-9a-f]{64}")  # a container's full id, as `docker inspect` gives it
 SHORT_ID = re.compile(r"[0-9a-f]{12,64}")  # as `docker compose ps --quiet` prints one
-# The values known to be bad: the faults deploy them, and the demos use them as their known-bad baselines.
+# The values known to be bad: the faults deploy them, and the demos use them as their known-bad baselines. The
+# payments API without its circuit breaker is the old behavior, kept to show what the breaker changes (week 4).
 KNOWN_BAD = {
     "LEDGER_HANDLER": ("naive",),
     "LEDGER_BAD_EVENTS": ("retry",),
     "CONFIRMER_HANDLER": ("by_provider_id",),
     "CONFIRMER_BAD_EVENTS": ("retry",),
+    "PROVIDER_BREAKER": ("off",),
 }
 MAX_BY = 200  # characters of who or what made a deploy
 

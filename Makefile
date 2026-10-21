@@ -11,6 +11,8 @@ export CONFIRMER_HANDLER := $(or $(CONFIRMER),by_our_id)
 # The known-bad "retry forever" setting only ever comes from a fault (make fault-inject), never from a stray variable.
 export LEDGER_BAD_EVENTS := dead_letter
 export CONFIRMER_BAD_EVENTS := dead_letter
+# The same for the payments API's circuit breaker: off, the known-bad old behavior, only ever comes from a deploy.
+export PROVIDER_BREAKER := on
 
 # Only ever this repo's own project on this Mac: ignore variables that could point docker somewhere else.
 unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES

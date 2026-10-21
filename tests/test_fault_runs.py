@@ -117,10 +117,10 @@ class World:
 
 
 DIAGNOSIS = Diagnosis(
-    "The payment provider is timing out, and with no circuit breaker every payment waits through three attempts.",
+    "The payment provider is timing out, so the circuit breaker opened and every payment fails fast with a 503.",
     (Evidence("c1", "query_metrics", {"query": "x"}, "made up"),),
     0.7,
-    ProposedFix("none", "fake-provider", "Wait for the provider; add a circuit breaker."),
+    ProposedFix("none", "fake-provider", "Wait for the provider; nothing to change on our side."),
     "none",
     "none",
 )
@@ -195,7 +195,8 @@ def test_the_diagnosis_is_compared_with_the_faults_recorded_cause_by_the_rule():
     world = World()
     record = run(world)
     assert record.comparison == grading.compare("provider-outage", DIAGNOSIS.as_dict())
-    assert record.comparison["verdict"] == "names the cause" and record.comparison["by"] == grading.BY
+    assert record.comparison["verdict"] == "names the cause" and record.comparison["by"] == grading.BY[2]
+    assert record.comparison["rubric"]["version"] == 2 and record.comparison["fix_fits_the_remedy"] is True
     assert record.loop == {
         "reason": "diagnosed",
         "detail": "confidence 0.7",
@@ -447,10 +448,10 @@ DIAGNOSE_OUTAGE = json.dumps(
         "action": "diagnose",
         "why": "made up for the test",
         "diagnosis": {
-            "hypothesis": "The payment provider times out; with no circuit breaker each payment waits through retries.",
+            "hypothesis": "The payment provider times out; the circuit breaker opened, and payments-api fails fast.",
             "evidence": [{"call_id": "c1", "shows": "made up"}],
             "confidence": 0.7,
-            "proposed_fix": {"kind": "code_change", "target": "payments-api", "summary": "Add a circuit breaker."},
+            "proposed_fix": {"kind": "none", "target": "fake-provider", "summary": "Nothing to change on our side."},
             "blast_radius": "made up",
             "rollback_plan": "made up",
         },
@@ -477,14 +478,14 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     assert "what" not in saved  # the loop's own files say what a loop run is; run.json says what this run did
     assert saved["fault"]["cause"] == faults.FAULTS["provider-outage"].cause
     assert saved["alert"]["name"] == "PaymentsLatencyHigh" and saved["stopped"] == "the loop stopped: diagnosed"
-    assert saved["comparison"]["by"] == grading.BY and saved["comparison"]["verdict"] == "names the cause"
+    assert saved["comparison"]["by"] == grading.BY[2] and saved["comparison"]["verdict"] == "names the cause"
     assert saved["rerun_command"].startswith("python -m klaxon.fault_runs run provider-outage")
     [(alert, header, model_id)] = given
     assert model_id == "claude-opus-5-5" and header["alert"]["summary"] == alert.summary
     assert header["fault_name"] == "provider-outage" and header["budgets"]["steps"] == 12
     assert read_trace(folder / loop.TRACE)[-1]["reason"] == "diagnosed"
     out = capsys.readouterr().out
-    assert "Compared by a rule (klaxon.grading, rubric version 1" in out and "verdict: NAMES THE CAUSE" in out
+    assert "Compared by a rule (klaxon.grading, rubric version 2" in out and "verdict: NAMES THE CAUSE" in out
     assert fault_runs.main(["grade", str(folder)]) == 0
     assert "verdict: NAMES THE CAUSE" in capsys.readouterr().out
 
@@ -760,11 +761,25 @@ def test_each_live_fault_run_replays_exactly_and_grades_the_same(fault, tmp_path
     fired = [e for e in saved["evaluations"] if e["phase"] == "during" and e["alert"] is not None]
     assert recorded[0]["extra"]["alert"] == saved["alert"] == fired[0]["alert"]
     # The rule, run again on the diagnosis the trace kept, says what the run recorded: the same rubric, version 1.
-    again = grading.compare(fault, recorded[-1]["diagnosis"])
+    # Saved before comparisons recorded their version, so graded again with version 1 (week 4, item 3).
+    assert grading.version_of(saved["comparison"]) == 1
+    again = grading.compare(fault, recorded[-1]["diagnosis"], version=1)
     kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy", "hypothesis", "recorded_cause")
     assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
     assert again["rubric"]["version"] == 1 and "before the live runs" in saved["comparison"]["by"]
     assert saved["fault"]["name"] == fault and saved["cleared"] is not None
+
+
+def test_grading_a_saved_run_again_uses_the_version_that_graded_it(capsys):
+    """make grade-run on the week 3 run of fault 3 (week 4, item 3): version 1 graded it, and grades it again the same
+    way. Version 2 reads the same diagnosis as only partly right: with the breaker, it misses how the API fails."""
+    folder = loop.REPO / "evidence" / "week3" / FAULT_RUNS["provider-outage"]
+    assert fault_runs.main(["grade", str(folder)]) == 0
+    out = capsys.readouterr().out
+    assert "rubric version 1, committed in 95a64ab" in out and out.rstrip().endswith("verdict: NAMES THE CAUSE")
+    assert "has no circuit breaker" in out  # the cause version 1 recorded
+    diagnosis = read_trace(folder / loop.TRACE)[-1]["diagnosis"]
+    assert grading.compare("provider-outage", diagnosis)["verdict"] == "partly"
 
 
 # Week 4, item 2: gated runs. Klaxon acts on its diagnosis through the gate before the harness clears the fault.
@@ -1527,7 +1542,8 @@ def test_each_gated_live_run_replays_and_its_gate_and_verification_hold(name, tm
     # The loop got exactly the alert the rules raised, and the rule grades the kept diagnosis as the run did.
     fired = [e for e in saved["evaluations"] if e["phase"] == "during" and e["alert"] is not None]
     assert recorded[0]["extra"]["alert"] == saved["alert"] == fired[0]["alert"]
-    again = grading.compare(saved["fault"]["name"], recorded[-1]["diagnosis"])
+    assert saved["comparison"]["rubric"]["version"] == 1  # graded again with it: the version that graded it
+    again = grading.compare(saved["fault"]["name"], recorded[-1]["diagnosis"], grading.version_of(saved["comparison"]))
     kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy")
     assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
     # The gate: the request as sealed, a decision naming it whole, and what the run took.

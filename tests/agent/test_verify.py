@@ -125,6 +125,25 @@ def test_charges_and_refunds_are_dated_by_the_providers_records_and_one_without_
     ]
 
 
+def test_a_charge_refunded_more_than_it_charged_is_one_finding_dated_by_its_newest_refund():
+    """Week 4, item 3: the money check's new finding, from the real check on the first piece's ledger, is about a
+    charge and all its refunds. One more refund after the action is new damage: a new key, made after the line."""
+    from tests.test_refunds_match_provider import World
+
+    world = World()
+    charge = world.paid(at=EARLY)
+    world.ours("rfd_000001", "succeeded", 1_500, world.refund(charge, 1_500, "rfd_000001", at=EARLY))
+    world.ours("rfd_000002", "succeeded", 1_500, world.refund(charge, 1_500, "rfd_000002", at=EARLY + 1))
+    [found] = verify.findings_of(world.check(), world.provider)
+    key = "charge pay_000001 (re_000001, re_000002): refunded 3000 cents of 2500"
+    assert found == Finding("refunds_match_provider", verify.REFUND, key, EARLY + 1)
+    world.ours("rfd_000003", "succeeded", 100, world.refund(charge, 100, "rfd_000003", at=LATE))
+    [later] = verify.findings_of(world.check(), world.provider)
+    assert later.created == LATE
+    money = verify.judge(Reading("x", "failed", BOUNDARY, (found,)), Reading("y", "failed", LATE + 60, (later,)))
+    assert money.judged[NEW] == [later.key] and money.cause_removed is False
+
+
 def test_a_finding_about_several_records_is_dated_only_when_each_has_a_stamp():
     made = {"ch_1": EARLY, "ch_2": None, "ch_3": LATE}
     assert verify._newest(["ch_1", "ch_3"], made) == LATE  # the newest of them
