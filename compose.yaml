@@ -153,7 +153,11 @@ services:
     environment:
       <<: *telemetry
       KAFKA_BOOTSTRAP: kafka:9092
-      WEBHOOK_SECRETS: klaxon-dev-webhook-secret-not-real # comma-separated: two secrets during a rotation
+      # Its secrets, by version. The provider signs with v1. v1 (default), or v2 alone, the known-bad setting: a
+      # rotation done on our side only (week 4). Comma-separated during a rotation: v1,v2.
+      WEBHOOK_SECRET_V1: klaxon-dev-webhook-secret-not-real
+      WEBHOOK_SECRET_V2: klaxon-dev-webhook-secret-v2-not-real
+      WEBHOOK_SECRET_VERSION: ${WEBHOOK_SECRET_VERSION:-v1}
     depends_on:
       kafka-init:
         condition: service_completed_successfully
@@ -171,6 +175,10 @@ services:
       PROVIDER_URL: http://fake-provider:8000
       # on (default): the circuit breaker fails fast when the provider keeps failing; off, the known-bad old behavior
       PROVIDER_BREAKER: ${PROVIDER_BREAKER:-on}
+      # cents (default), or dollars, the known-bad money-unit bug: every charge 100 times the amount (week 4)
+      CHARGE_AMOUNT_UNIT: ${CHARGE_AMOUNT_UNIT:-cents}
+      # returned (default), or kept, the known-bad connection leak: the pool runs dry (week 4)
+      REFUND_CONNECTION: ${REFUND_CONNECTION:-returned}
     depends_on:
       postgres:
         condition: service_healthy

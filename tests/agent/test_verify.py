@@ -457,6 +457,25 @@ def test_the_metric_rules_are_not_quiet_when_one_holds_or_cannot_be_read(series,
     assert found is not None and why in found
 
 
+@pytest.mark.parametrize(
+    "money, why",
+    [
+        (
+            {"outcome": "could not settle", "webhooks_not_acknowledged": 52},
+            "a rule's condition holds: BooksBehindProvider (the books)",
+        ),
+        ({"outcome": "could not run", "error": "ConnectError"}, "no data for BooksBehindProvider (the books)"),
+    ],
+    ids=["books behind", "no money check"],
+)
+def test_health_needs_the_books_caught_up_with_the_provider(money, why):
+    """Week 4, item 4: a backlog the action freed must have drained, whatever the money says: the books rule is part
+    of health, the money rule is not."""
+    found = verify.metrics_unwell(evaluation_of(Readings(money=money)))
+    assert found is not None and why in found
+    assert verify.BOOKS == ("BooksBehindProvider", "the books", "settled")
+
+
 def row(service, state="running", health="healthy", code=0):
     return {"Service": service, "State": state, "Health": health, "ExitCode": code}
 

@@ -11,14 +11,18 @@ with reversals (week 4, with a human's approval).
     duplicate-delivery  a deploy of the ledger consumer without its dedupe
     poison-message      a deploy that retries unreadable messages forever, then one such message
     provider-outage     the provider's charge API hangs, and our payments API's circuit breaker fails fast
+    money-unit          a deploy of the payments API that charges 100 times the amount (week 4)
+    secret-rotation     a deploy of the webhook receiver with a secret the provider does not sign with (week 4)
+    pool-exhaustion     a deploy of the payments API that never gives its database connections back (week 4)
 
 Fault 3's recorded cause has a version 2 (week 4, item 3): the payments API has had a circuit breaker since, on by
 default, so after its first seconds the outage no longer makes payments wait. Each fault keeps what it recorded for an
 earlier version of the grading rule (klaxon.grading), so a comparison made then can be made again the same way.
 
-The first two are bad deploys: one container is recreated with a known-bad setting, the way the
-week 1 demos use HANDLER=naive. They need traffic to show (make traffic): fault 1 needs the duplicate
-webhooks that lost acknowledgements cause, which the traffic generator's noise provides.
+All but the outage are bad deploys: one container is recreated with a known-bad setting, the way the
+week 1 demos use HANDLER=naive (klaxon.patient.deploys lists them). They need traffic to show (make
+traffic): fault 1 needs the duplicate webhooks that lost acknowledgements cause, which the traffic
+generator's noise provides, and fault 6 needs refunds.
 
 Run: python -m klaxon.faults list | inject NAME | clear NAME
 """
@@ -41,6 +45,10 @@ from klaxon.traffic import require_local
 LEDGER = "ledger-consumer"
 GOOD_LEDGER = {"LEDGER_HANDLER": "idempotent", "LEDGER_BAD_EVENTS": "dead_letter"}
 OUTAGE_DELAY_SECONDS = 5.0  # longer than the payments API's 3 s timeout to the provider
+API = "payments-api"
+GOOD_API = {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned"}
+RECEIVER = "webhook-receiver"
+GOOD_RECEIVER = {"WEBHOOK_SECRET_VERSION": "v1"}
 
 
 class LocalStack:
@@ -146,6 +154,31 @@ def _end_outage(s: LocalStack) -> dict:
     return {"provider": "answering again"}
 
 
+def _deploy_api(**bad: str) -> Callable[[LocalStack], dict]:
+    """A bad deploy of the payments API: its good settings, but for these."""
+
+    def inject(s: LocalStack) -> dict:
+        s.redeploy(API, GOOD_API | bad)
+        return {"redeployed": API} | bad
+
+    return inject
+
+
+def _roll_api_back(s: LocalStack) -> dict:
+    s.redeploy(API, GOOD_API)
+    return {"redeployed": API} | GOOD_API
+
+
+def _deploy_rotated_secret(s: LocalStack) -> dict:
+    s.redeploy(RECEIVER, GOOD_RECEIVER | {"WEBHOOK_SECRET_VERSION": "v2"})
+    return {"redeployed": RECEIVER, "WEBHOOK_SECRET_VERSION": "v2"}
+
+
+def _roll_receiver_back(s: LocalStack) -> dict:
+    s.redeploy(RECEIVER, GOOD_RECEIVER)
+    return {"redeployed": RECEIVER} | GOOD_RECEIVER
+
+
 FAULTS = {
     fault.name: fault
     for fault in (
@@ -241,6 +274,78 @@ FAULTS = {
                     ),
                 )
             },
+        ),
+        Fault(
+            name="money-unit",
+            title="Customers charged 100 times the amount: a money-unit bug",
+            cause=(
+                "a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each"
+                " payment's amount, already in cents, as dollars and converts it to cents again, so the provider"
+                " charges every customer 100 times the amount, while our own records keep the right one"
+            ),
+            symptoms=(
+                "the money check fails on payments_match_provider: for each payment since the deploy, the provider"
+                " charged 100 times our amount",
+                "the ledger books what the provider charged, so it agrees with the provider, and the other invariants"
+                " pass",
+                "the payment confirmer logs a conflict for each such payment: the provider charged a different amount"
+                " than our payment's",
+                "the API stays fast and healthy, and its answers show the right amount",
+                "refunds send the right amount: a full refund gives back 1% of what was charged",
+            ),
+            remedy=(
+                "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the"
+                " deploy what was charged above the amount (a write, so it needs approval)"
+            ),
+            expected_money={"during": "failed", "after": "failed", "quiet": "failed"},  # the overcharges stay
+            inject=_deploy_api(CHARGE_AMOUNT_UNIT="dollars"),
+            clear=_roll_api_back,
+        ),
+        Fault(
+            name="secret-rotation",
+            title="The books stop catching up: our webhook receiver refuses every webhook",
+            cause=(
+                "a deploy of the webhook receiver with a rotated secret the provider does not sign with"
+                " (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature"
+                " check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them"
+                " again, with backoff"
+            ),
+            symptoms=(
+                "the books cannot catch up with the provider: the money check cannot settle, its webhooks not"
+                " acknowledged",
+                "the receiver counts every webhook as bad_signature, and logs 'webhook refused: bad signature'",
+                "nothing new is booked or confirmed, and both consumers' lag stays at 0: nothing reaches Kafka",
+                "payments whose answer was lost stay pending, so the payments pending over a minute climb",
+                "payments and refunds still succeed, and the API stays fast and healthy",
+            ),
+            remedy=(
+                "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the"
+                " provider sends every refused webhook again within a minute, and the books catch up"
+            ),
+            expected_money={"during": "could not run", "after": "passed", "quiet": "passed"},
+            inject=_deploy_rotated_secret,
+            clear=_roll_receiver_back,
+        ),
+        Fault(
+            name="pool-exhaustion",
+            title="Payments fail: the payments API's database pool runs dry",
+            cause=(
+                "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's"
+                " refunds takes a connection from its database pool of 10 and never gives it back, so after about"
+                " ten refunds the pool is empty, and every request waits 5 s for a connection, then fails with a 500"
+            ),
+            symptoms=(
+                "POST /payments takes about 5 s and fails with a 500: the 5xx share and the p95 latency climb",
+                "the payments API logs 'unhandled error' with PoolTimeout: no connection within 5 s",
+                "its health check fails: it cannot get a connection either, while PostgreSQL itself is up",
+                "the money check passes: a payment that never got a connection was never charged",
+            ),
+            remedy=(
+                "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool"
+            ),
+            expected_money={"during": "passed", "after": "passed", "quiet": "passed"},
+            inject=_deploy_api(REFUND_CONNECTION="kept"),
+            clear=_roll_api_back,
         ),
     )
 }

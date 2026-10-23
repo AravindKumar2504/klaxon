@@ -1,6 +1,7 @@
 """The webhook receiver: signature first, then Kafka, then 200. Never 200 without the write."""
 
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,7 +11,7 @@ from klaxon.patient import signatures
 from klaxon.patient.services.kafka_io import EVENTS_TOPIC, PublishError
 from klaxon.patient.services.provider_delivery import WebhookSender
 from klaxon.patient.services.provider_store import ProviderStore
-from klaxon.patient.services.receiver_app import MAX_BODY_BYTES, create_app
+from klaxon.patient.services.receiver_app import MAX_BODY_BYTES, create_app, secrets_from_env
 from tests.services.fakes import FakePublisher
 
 SECRET = b"test-secret-not-real"
@@ -76,6 +77,81 @@ def test_during_a_secret_rotation_both_secrets_are_accepted():
     assert post(client, secret=b"new-secret").status_code == 200
     assert post(client, secret=b"retired-secret").status_code == 400
     assert len(publisher.messages) == 2
+
+
+# Week 4, item 4: the secrets by version (fault 5 in klaxon.faults deploys v2 alone; the provider signs with v1)
+
+V1, V2 = b"v1-secret-not-real", b"v2-secret-not-real"
+ENV = {"WEBHOOK_SECRET_V1": V1.decode(), "WEBHOOK_SECRET_V2": V2.decode()}
+
+
+@pytest.mark.parametrize(
+    "version, secrets",
+    [(None, [V1]), ("", [V1]), ("v1", [V1]), ("v2", [V2]), ("v1,v2", [V1, V2]), (" v2 , v1 ", [V2, V1])],
+)
+def test_the_receiver_takes_the_secrets_of_the_versions_it_is_told_v1_by_default(version, secrets):
+    environ = ENV if version is None else ENV | {"WEBHOOK_SECRET_VERSION": version}
+    assert secrets_from_env(environ) == secrets
+
+
+@pytest.mark.parametrize(
+    "environ, why",
+    [
+        (ENV | {"WEBHOOK_SECRET_VERSION": "v3"}, "WEBHOOK_SECRET_VERSION names 'v3'"),
+        (ENV | {"WEBHOOK_SECRET_VERSION": "v1,V2"}, "WEBHOOK_SECRET_VERSION names 'V2'"),
+        (
+            {"WEBHOOK_SECRET_V1": V1.decode(), "WEBHOOK_SECRET_VERSION": "v2"},
+            "missing required setting WEBHOOK_SECRET_V2",
+        ),
+        ({"WEBHOOK_SECRET_V1": "", "WEBHOOK_SECRET_VERSION": "v1"}, "missing required setting WEBHOOK_SECRET_V1"),
+        (ENV | {"WEBHOOK_SECRET_VERSION": ","}, "names no version"),
+    ],
+)
+def test_a_version_it_does_not_know_or_a_missing_secret_stops_the_receiver(environ, why):
+    with pytest.raises(RuntimeError, match=why):
+        secrets_from_env(environ)
+
+
+def test_with_the_rotated_secret_alone_every_webhook_the_provider_signs_is_refused():
+    """The fault's cause: the receiver accepts only v2, and the provider signs with v1."""
+    publisher, client = receiver(secrets=secrets_from_env(ENV | {"WEBHOOK_SECRET_VERSION": "v2"}))
+    response = post(client, secret=V1)
+    assert (response.status_code, response.json()) == (400, {"error": "bad_signature"})
+    assert publisher.messages == []
+    _, good = receiver(secrets=secrets_from_env(ENV))
+    assert post(good, secret=V1).status_code == 200
+
+
+def test_the_service_takes_its_secrets_by_the_version_its_settings_name(monkeypatch):
+    """main(), with every outside part made up (no Kafka, no server)."""
+    from klaxon.patient.services import receiver_app
+
+    made = {}
+    monkeypatch.setattr(receiver_app, "configure_logging", lambda name: None)
+    monkeypatch.setattr(receiver_app.telemetry, "setup", lambda name: None)
+    monkeypatch.setattr(receiver_app, "KafkaPublisher", lambda bootstrap, client_id: FakePublisher())
+    monkeypatch.setattr(receiver_app, "observe_consumer_lag", lambda bootstrap: None)
+    monkeypatch.setattr(receiver_app, "create_app", lambda publisher, secrets, **kwargs: made.update(secrets=secrets))
+    monkeypatch.setattr(receiver_app.uvicorn, "run", lambda app, **kwargs: None)
+    for name, value in ENV.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("WEBHOOK_SECRET_VERSION", "v2")
+    receiver_app.main()
+    assert made["secrets"] == [V2]
+    monkeypatch.delenv("WEBHOOK_SECRET_VERSION")
+    receiver_app.main()
+    assert made["secrets"] == [V1]
+
+
+def test_the_provider_signs_with_the_receivers_v1_secret_and_v2_is_another():
+    """compose.yaml: the rotated secret is one the provider does not sign with, so fault 5 refuses every webhook."""
+    from klaxon.patient.stack import REPO
+
+    compose = (REPO / "compose.yaml").read_text()
+    signs = re.search(r"\n      WEBHOOK_SECRET: (\S+)\n", compose).group(1)
+    v1 = re.search(r"\n      WEBHOOK_SECRET_V1: (\S+)\n", compose).group(1)
+    v2 = re.search(r"\n      WEBHOOK_SECRET_V2: (\S+)\n", compose).group(1)
+    assert signs == v1 != v2 and "WEBHOOK_SECRETS:" not in compose
 
 
 def test_with_no_secret_configured_nothing_is_accepted():

@@ -20,6 +20,13 @@ bad_signature, bad_payload, too_large, queue_unavailable), which tells a
 rotated secret apart from a broken payload. This service also measures every
 consumer group's lag (see kafka_io.observe_consumer_lag).
 
+Its secrets, by version (week 4): WEBHOOK_SECRET_VERSION names the versions it
+accepts (comma-separated during a rotation: v1,v2), and WEBHOOK_SECRET_V1 and
+WEBHOOK_SECRET_V2 hold them. The provider signs with v1. A deploy that sets v2
+alone is known to be bad (klaxon.patient.deploys; fault 5 in klaxon.faults): a
+rotation done on our side only, so every signature check fails. A deploy and
+its log name only the version, never a secret.
+
     POST /webhooks/provider
     GET  /healthz
 
@@ -30,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
@@ -49,7 +57,6 @@ from klaxon.patient.services.common import (
     add_trusted_hosts,
     configure_logging,
     env_int,
-    env_list,
     env_str,
     log,
 )
@@ -63,6 +70,26 @@ WEBHOOKS = metrics.get_meter("klaxon.receiver").create_counter(
 )
 
 MAX_BODY_BYTES = 64 * 1024
+SECRET_VERSIONS = ("v1", "v2")  # each held in WEBHOOK_SECRET_<VERSION>
+
+
+def secrets_from_env(environ: Mapping[str, str] = os.environ) -> list[bytes]:
+    """The secrets of the versions WEBHOOK_SECRET_VERSION names (v1 by default), each from WEBHOOK_SECRET_<VERSION>. A
+    version it does not know, or one whose secret is missing, stops the service: it never runs with no secret."""
+    versions = [item.strip() for item in (environ.get("WEBHOOK_SECRET_VERSION") or "v1").split(",") if item.strip()]
+    secrets = []
+    for version in versions:
+        if version not in SECRET_VERSIONS:
+            raise RuntimeError(
+                f"WEBHOOK_SECRET_VERSION names {version!r}; the versions are {', '.join(SECRET_VERSIONS)}"
+            )
+        secret = environ.get(f"WEBHOOK_SECRET_{version.upper()}")
+        if not secret:
+            raise RuntimeError(f"missing required setting WEBHOOK_SECRET_{version.upper()}")
+        secrets.append(secret.encode())
+    if not secrets:
+        raise RuntimeError("WEBHOOK_SECRET_VERSION names no version")
+    return secrets
 
 
 class Publisher(Protocol):
@@ -197,7 +224,7 @@ def main() -> None:
     observe_consumer_lag(bootstrap)
     app = create_app(
         publisher,
-        secrets=[secret.encode() for secret in env_list("WEBHOOK_SECRETS")],
+        secrets=secrets_from_env(),
         topic=env_str("KAFKA_TOPIC", EVENTS_TOPIC),
         tolerance_seconds=env_int("SIGNATURE_TOLERANCE_SECONDS", signatures.DEFAULT_TOLERANCE_SECONDS),
     )

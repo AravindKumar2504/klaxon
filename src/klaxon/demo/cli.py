@@ -3,7 +3,7 @@ python -m klaxon.demo live-duplicate-webhook --handler naive|idempotent
 python -m klaxon.demo live-lost-answer --confirmer by_our_id|by_provider_id
 python -m klaxon.demo live-lost-refund --confirmer by_our_id|by_provider_id
 python -m klaxon.demo live-check-under-traffic --checks 20 --rate 5
-python -m klaxon.demo live-fault --fault duplicate-delivery|poison-message|provider-outage
+python -m klaxon.demo live-fault --fault NAME     (python -m klaxon.faults list names them)
 
 Exit status: 0 when the money check passes, 1 when it fails, 2 for bad arguments
 (or, for the live demos, when they could not run as designed). For live-fault: 0 when
@@ -19,6 +19,16 @@ from pathlib import Path
 
 from klaxon.demo import duplicate_webhook
 from klaxon.patient.ledger import MODES
+
+# klaxon.faults' names, written out: importing it would load the live stack's clients for the first piece's demo too.
+FAULT_NAMES = (
+    "duplicate-delivery",
+    "poison-message",
+    "provider-outage",
+    "money-unit",
+    "secret-rotation",
+    "pool-exhaustion",
+)
 
 
 def _positive_int(text: str) -> int:
@@ -80,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     fault = scenarios.add_parser(
         "live-fault", help="inject one fault while traffic flows, and record what it looks like"
     )
-    fault.add_argument("--fault", required=True, choices=("duplicate-delivery", "poison-message", "provider-outage"))
+    fault.add_argument("--fault", required=True, choices=FAULT_NAMES)
     fault.add_argument("--rate", type=float, default=3.0, help="new payments per second, on average")
     fault.add_argument("--seed", type=int, default=7)
     fault.add_argument("--during", type=float, default=60.0, help="seconds to watch with the fault in place")

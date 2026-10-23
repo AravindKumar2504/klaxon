@@ -522,6 +522,35 @@ def test_recent_deploys_lists_newest_first_with_only_behavior_settings():
     assert fake.local_checks == 1
 
 
+def test_recent_deploys_shows_the_payments_apis_and_the_receivers_settings_and_never_a_secret():
+    """Week 4, item 4: the deploy settings of faults 4 to 6, and the breaker's. The receiver's names a version."""
+    rows = [
+        {"ID": "ccc333ccc333", "Service": "payments-api", "State": "running", "Health": "healthy", "ExitCode": 0},
+        {"ID": "ddd444ddd444", "Service": "webhook-receiver", "State": "running", "Health": "healthy", "ExitCode": 0},
+    ]
+    api_env = ["PROVIDER_BREAKER=on", "CHARGE_AMOUNT_UNIT=dollars", "REFUND_CONNECTION=returned"]
+    receiver_env = [f"WEBHOOK_SECRET_V1={PASSWORD}", f"WEBHOOK_SECRET_V2={PASSWORD}2", "WEBHOOK_SECRET_VERSION=v2"]
+    details = [
+        {
+            "Id": row["ID"] + "0" * 52,
+            "Created": created,
+            "Config": {"Image": "klaxon-patient:dev", "Env": [*env, f"DATABASE_URL=postgresql://x:{PASSWORD}@db/k"]},
+        }
+        for row, created, env in zip(
+            rows, ["2026-10-14T17:00:00Z", "2026-10-14T17:30:00Z"], [api_env, receiver_env], strict=True
+        )
+    ]
+    out = Fake(rows=rows, details=details).tools()["recent_deploys"].call({})
+    by_name = {d["service"]: d["settings"] for d in out["deploys"]}
+    assert by_name == {
+        "payments-api": {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "dollars", "REFUND_CONNECTION": "returned"},
+        "webhook-receiver": {"WEBHOOK_SECRET_VERSION": "v2"},
+    }
+    assert PASSWORD not in json.dumps(out) and "WEBHOOK_SECRET_V1" not in json.dumps(out)
+    description = Fake(rows=rows, details=details).tools()["recent_deploys"].description
+    assert all(name in description for name in t.DEPLOY_SETTINGS) and "WEBHOOK_SECRET_V1" not in description
+
+
 def test_service_health_shows_state_restarts_and_why_a_check_fails():
     out = Fake(rows=ROWS, details=DETAILS).tools()["service_health"].call({})
     by_name = {s["service"]: s for s in out["services"]}

@@ -4,6 +4,8 @@ import threading
 
 import psycopg
 import pytest
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool, PoolTimeout
 
 from klaxon.checks.live import read_ledger_and_check
 from klaxon.checks.money import MONEY_EFFECT, check_money
@@ -156,6 +158,24 @@ def test_the_payments_api_can_change_a_status_but_never_an_amount(pool_as, conne
         api.execute("SELECT * FROM ledger.entries")
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         api.execute("DELETE FROM payments")
+
+
+def test_the_known_bad_leak_empties_a_real_pool_and_the_good_setting_never_does(database):
+    """Week 4, item 4 (fault 6): with REFUND_CONNECTION=kept, each read of a payment's refunds keeps a connection of
+    the real pool; once none is left, the next request waits for the pool's timeout and fails, as the API's do."""
+    kwargs = {"autocommit": True, "row_factory": dict_row}
+    small = ConnectionPool(dsn("payments_api", database), min_size=1, max_size=2, timeout=0.5, kwargs=kwargs, open=True)
+    try:
+        store = PgPaymentsStore(small)
+        payment, _ = store.insert_or_get_payment("key-1", "fp", "cus_001", 2_500, "usd")
+        for _ in range(5):
+            assert store.refunds_for(payment.id) == []
+        leaky = PgPaymentsStore(small, keep_refund_connections=True)
+        assert leaky.refunds_for(payment.id) == [] and leaky.refunds_for(payment.id) == []
+        with pytest.raises(PoolTimeout):
+            store.get_payment(payment.id)  # any request now: the pool has no connection left
+    finally:
+        small.close(timeout=1.0)
 
 
 def test_a_repeated_idempotency_key_finds_the_same_payment(pool_as):

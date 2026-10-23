@@ -66,6 +66,16 @@ def test_a_deploy_of_the_settings_a_service_already_runs_does_nothing_and_logs_n
         ),
         ("ledger-consumer", GOOD["payment-confirmer"], "sets exactly"),
         ("ledger-consumer", ["LEDGER_HANDLER"], "sets exactly"),
+        # Week 4, item 4: the payments API's three settings, and the receiver's secret version (never a secret).
+        (
+            "payments-api",
+            {"PROVIDER_BREAKER": "on"},
+            "sets exactly CHARGE_AMOUNT_UNIT, PROVIDER_BREAKER, REFUND_CONNECTION",
+        ),
+        ("payments-api", GOOD["payments-api"] | {"CHARGE_AMOUNT_UNIT": "euros"}, "must be one of cents, dollars"),
+        ("payments-api", GOOD["payments-api"] | {"REFUND_CONNECTION": "leaky"}, "must be one of returned, kept"),
+        ("webhook-receiver", {"WEBHOOK_SECRET_VERSION": "v1,v2"}, "must be one of v1, v2"),
+        ("webhook-receiver", {"WEBHOOK_SECRET_V1": "a-secret"}, "sets exactly WEBHOOK_SECRET_VERSION"),
     ],
 )
 def test_a_deploy_sets_exactly_its_services_settings_each_to_a_value_it_may_take(service, settings, problem):
@@ -246,6 +256,29 @@ def test_the_known_bad_values_are_the_faults_and_the_demos_and_each_is_a_value_a
     assert deploys.known_bad(NAIVE) == ["LEDGER_HANDLER=naive"] and deploys.known_bad(GOOD["ledger-consumer"]) == []
     bad_deploys = faults.GOOD_LEDGER | {"LEDGER_HANDLER": "naive"}, faults.GOOD_LEDGER | {"LEDGER_BAD_EVENTS": "retry"}
     assert all(deploys.known_bad(settings) for settings in bad_deploys)
+    # Week 4, item 4: the bad deploys of faults 4 to 6, each one value of the payments API's or the receiver's.
+    assert deploys.known_bad(GOOD["payments-api"]) == deploys.known_bad(GOOD["webhook-receiver"]) == []
+    assert deploys.known_bad(GOOD["payments-api"] | {"CHARGE_AMOUNT_UNIT": "dollars"}) == ["CHARGE_AMOUNT_UNIT=dollars"]
+    assert deploys.known_bad(GOOD["payments-api"] | {"REFUND_CONNECTION": "kept"}) == ["REFUND_CONNECTION=kept"]
+    assert deploys.known_bad({"WEBHOOK_SECRET_VERSION": "v2"}) == ["WEBHOOK_SECRET_VERSION=v2"]
+    assert set(deploys.KNOWN_BAD) == {name for variables in SERVICES.values() for name in variables}  # each has one
+
+
+def test_the_new_services_settings_are_read_back_from_their_containers_and_never_a_secret():
+    environment = {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "dollars",
+        "REFUND_CONNECTION": "returned",
+        "DATABASE_URL": "postgresql://payments_api:a-password@postgres:5432/klaxon",
+    }
+    assert settings_of("payments-api", environment) == {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "dollars",
+        "REFUND_CONNECTION": "returned",
+    }
+    receiver = {"WEBHOOK_SECRET_VERSION": "v2", "WEBHOOK_SECRET_V1": "s1", "WEBHOOK_SECRET_V2": "s2"}
+    assert settings_of("webhook-receiver", receiver) == {"WEBHOOK_SECRET_VERSION": "v2"}
+    assert settings_of("webhook-receiver", receiver | {"WEBHOOK_SECRET_VERSION": "v1,v2"}) is None  # not a known value
 
 
 def test_a_deploy_that_expects_what_runs_is_not_made_when_something_else_runs():

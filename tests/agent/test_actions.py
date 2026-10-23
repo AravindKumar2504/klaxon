@@ -10,6 +10,7 @@ from klaxon.agent import actions, catalog
 from klaxon.agent.actions import ActionRefused
 from klaxon.agent.contract import ANNOTATIONS, KEYWORDS
 from klaxon.agent.tools import HOME
+from klaxon.faults import FAULTS, LocalStack
 from klaxon.patient import deploys
 from klaxon.patient.deploys import SERVICES, DeployLog
 from klaxon.patient.stack import StackError
@@ -30,25 +31,73 @@ def test_the_catalog_holds_one_action_and_each_has_a_planner():
     assert set(actions.PLANNERS) == set(catalog.CATALOG)
 
 
-def test_the_services_a_rollback_may_name_are_those_the_deploy_log_knows_but_the_payments_api():
-    # Week 4, item 3: the payments API's breaker setting is logged, and not offered yet (catalog.py says why).
-    assert set(catalog.ROLLBACK_SERVICES) == set(SERVICES) - {"payments-api"}
+def test_the_services_a_rollback_may_name_are_those_the_deploy_log_knows():
+    # Week 4, item 4: the payments API and the webhook receiver too, since faults 4 to 6 are bad deploys of theirs.
+    assert set(catalog.ROLLBACK_SERVICES) == set(SERVICES)
     schema = catalog.ROLLBACK_DEPLOY.input_schema
     assert schema["properties"]["service"]["enum"] == list(catalog.ROLLBACK_SERVICES)
+    # As the gated runs of item 2 were offered it, for a replay of theirs: only the two consumers, nothing else changed.
+    first = catalog.FIRST_OFFERED["rollback_deploy"]
+    assert first.input_schema["properties"]["service"]["enum"] == ["ledger-consumer", "payment-confirmer"]
+    assert (first.name, first.description) == (catalog.ROLLBACK_DEPLOY.name, catalog.ROLLBACK_DEPLOY.description)
+    assert set(catalog.FIRST_OFFERED) == set(catalog.CATALOG)
 
 
-def test_the_payments_apis_breaker_is_logged_but_no_rollback_of_it_is_planned():
-    """Week 4, item 3: the breaker's setting is a deploy setting, so its deploys are logged and off is known-bad. The
-    payments API is not offered to rollback_deploy yet (catalog.py says why): the action's own schema refuses it."""
+API_GOOD = {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned"}
+
+
+@pytest.mark.parametrize(
+    "fault, service, change, undo",
+    [
+        (
+            "money-unit",
+            "payments-api",
+            "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents,"
+            " REFUND_CONNECTION returned (unchanged)",
+            "CHARGE_AMOUNT_UNIT=dollars",
+        ),
+        (
+            "secret-rotation",
+            "webhook-receiver",
+            "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+            "WEBHOOK_SECRET_VERSION=v2",
+        ),
+        (
+            "pool-exhaustion",
+            "payments-api",
+            "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged),"
+            " REFUND_CONNECTION kept -> returned",
+            "REFUND_CONNECTION=kept",
+        ),
+    ],
+)
+def test_a_rollback_of_each_of_faults_4_to_6_goes_back_to_the_good_setting_and_undoing_it_is_a_persons_call(
+    fault, service, change, undo
+):
     docker = FakeDocker()
     deployer = docker.deployer()
-    record = deployer.deploy("payments-api", {"PROVIDER_BREAKER": "off"}, by="a test")
-    assert (record.settings, record.replaced_settings) == ({"PROVIDER_BREAKER": "off"}, {"PROVIDER_BREAKER": "on"})
+    FAULTS[fault].inject(LocalStack(deployer=deployer))
+    plan = actions.plan("rollback_deploy", {"service": service}, deployer)
+    assert (plan.change, plan.undoes["by"]) == (change, "klaxon.faults")
+    assert plan.undo == f"going back to {undo} would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+    actions.run(plan, deployer, by="Klaxon, approved request r-test")
+    assert docker.settings(service) == (API_GOOD if service == "payments-api" else {"WEBHOOK_SECRET_VERSION": "v1"})
+    assert deployer.log.latest(service).by == "Klaxon, approved request r-test"
+
+
+def test_the_payments_apis_breaker_turned_off_by_a_deploy_can_be_rolled_back_now():
+    """Week 4, item 3 logged the breaker's deploys and kept the payments API out of rollback_deploy; item 4 offers it.
+    Off is known-bad: a rollback may turn the breaker back on, and never off."""
+    docker = FakeDocker()
+    deployer = docker.deployer()
+    record = deployer.deploy("payments-api", API_GOOD | {"PROVIDER_BREAKER": "off"}, by="a test")
+    assert (record.settings, record.replaced_settings) == (API_GOOD | {"PROVIDER_BREAKER": "off"}, API_GOOD)
     assert deploys.known_bad(record.settings) == ["PROVIDER_BREAKER=off"]
     ups = len(docker.ups())
-    with pytest.raises(actions.ActionRefused, match="must be one of"):
-        actions.plan("rollback_deploy", {"service": "payments-api"}, deployer)
-    assert len(docker.ups()) == ups
+    plan = actions.plan("rollback_deploy", {"service": "payments-api"}, deployer)
+    assert len(docker.ups()) == ups  # planning only reads
+    assert plan.change.startswith("redeploy payments-api: PROVIDER_BREAKER off -> on,")
+    assert "PROVIDER_BREAKER=off would deploy a known-bad setting" in plan.undo
 
 
 def test_the_catalog_is_data_its_schemas_use_only_what_the_validator_reads():

@@ -17,7 +17,7 @@ say anything, "ignore your instructions" included. Every result and every error 
 it leaves: control and invisible characters are dropped (variation selectors and private-use characters
 too, which can hide bytes), this Mac's home folder becomes ~, and every string and list is capped. Lists
 that could grow (series, log lines, spans) also stop at a size budget, so one answer stays readable. A
-container's environment is never passed on, except three behavior settings; and text a source sends in
+container's environment is never passed on, except its behavior settings; and text a source sends in
 an answer the tools cannot read (a clock that is not a number, a record that breaks its own format) is
 never echoed.
 
@@ -99,8 +99,17 @@ LOG_NOISE = frozenset(
     }
 )
 # The only container settings recent_deploys shows: how a service behaves, never where it connects or with what
-# password (DATABASE_URL holds one).
-DEPLOY_SETTINGS = ("LEDGER_HANDLER", "CONFIRMER_HANDLER", "BAD_EVENTS")
+# password (DATABASE_URL holds one). The webhook receiver's secret version names a version, never a secret. The last
+# four since week 4: the payments API's and the receiver's deploy settings (klaxon.patient.deploys).
+DEPLOY_SETTINGS = (
+    "LEDGER_HANDLER",
+    "CONFIRMER_HANDLER",
+    "BAD_EVENTS",
+    "PROVIDER_BREAKER",
+    "CHARGE_AMOUNT_UNIT",
+    "REFUND_CONNECTION",
+    "WEBHOOK_SECRET_VERSION",
+)
 ONE_SHOT = {"kafka-init": "one-shot: creates the Kafka topics, then exits"}
 HOME = str(Path.home())
 CONTAINER_ID = re.compile(r"[0-9a-f]{12,64}")
@@ -889,8 +898,8 @@ def make_tools(sources: Sources | None = None) -> dict[str, Tool]:
             "recent_deploys",
             "Recent deploys",
             "When each service's container was last created (a deploy, a restart with new settings, or a rollback),"
-            " newest first, with its image and its behavior settings: LEDGER_HANDLER, CONFIRMER_HANDLER, BAD_EVENTS."
-            " No other setting is shown.",
+            f" newest first, with its image and its behavior settings: {', '.join(DEPLOY_SETTINGS)}. No other setting"
+            " is shown.",
             NO_ARGUMENTS,
             lambda args: _recent_deploys(s, args),
         ),

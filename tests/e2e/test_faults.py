@@ -1,9 +1,10 @@
 """End to end: each fault of klaxon.faults, injected on purpose into the live stack while traffic flows.
 
 These reset the stack (its data is synthetic) and take a few minutes: make e2e. They run in order on one
-stack: the two faults whose damage clears with them first, the one that leaves money booked twice last. The outage
-runs twice (week 4, item 3): without the payments API's circuit breaker (the known-bad old behavior, deployed and
-then rolled back), and with it, the default.
+stack: the faults whose damage clears with them first, the two that leave damage last: money booked twice, then
+customers charged 100 times the amount. The outage runs twice (week 4, item 3): without the payments API's circuit
+breaker (the known-bad old behavior, deployed and then rolled back), and with it, the default. Faults 4 to 6 came in
+week 4, item 4.
 """
 
 import time
@@ -13,8 +14,8 @@ import httpx
 import pytest
 from confluent_kafka import Consumer
 
-from klaxon import faults, traffic
-from klaxon.checks.live import NotSettled, check_live
+from klaxon import alerts, faults, traffic
+from klaxon.checks.live import PROVIDER_URL, NotSettled, check_live
 from klaxon.demo import live
 from klaxon.patient import stack
 from klaxon.patient.services.kafka_io import CONFIRMER_GROUP, DLQ_TOPIC, EVENTS_TOPIC, LEDGER_GROUP, consumer_lag
@@ -147,7 +148,7 @@ def test_without_its_breaker_a_provider_outage_makes_payments_wait_through_their
     """The old behavior, kept as a known-bad setting (week 4, item 3): PROVIDER_BREAKER=off, deployed and logged,
     then rolled back. A breaker would have opened about 11 s in; without one, a payment 15 s in still waits."""
     try:
-        fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "off"})
+        fault_stack.redeploy("payments-api", faults.GOOD_API | {"PROVIDER_BREAKER": "off"})
         assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "off"
         with Traffic(rate=3.0, seed=4), httpx.Client(base_url=live.API_URL, timeout=60.0, trust_env=False) as api:
             pay = payer(api)
@@ -169,7 +170,7 @@ def test_without_its_breaker_a_provider_outage_makes_payments_wait_through_their
         assert check_live(timeout_seconds=60).report.passed
         assert "circuit breaker" not in payments_api_logs()
     finally:
-        fault_stack.redeploy("payments-api", {"PROVIDER_BREAKER": "on"})  # never leave the known-bad setting behind
+        fault_stack.redeploy("payments-api", faults.GOOD_API)  # never leave the known-bad setting behind
     assert stack.container_env("payments-api")["PROVIDER_BREAKER"] == "on"
 
 
@@ -201,6 +202,64 @@ def test_with_its_breaker_a_provider_outage_fails_fast_keeps_the_api_healthy_and
     assert check_live(timeout_seconds=60).report.passed
 
 
+def receiver_logs() -> str:
+    return stack.compose("logs", "--no-log-prefix", "webhook-receiver")
+
+
+def counted_bad_signatures() -> float:
+    return counted('sum(klaxon_webhooks_received_total{result="bad_signature"})')
+
+
+def test_a_receiver_on_a_secret_the_provider_does_not_sign_with_stops_the_books_until_it_is_rolled_back(fault_stack):
+    """Week 4, item 4, fault 5: every webhook is refused, nothing reaches Kafka, and the books cannot catch up, which
+    only the books rule sees. Once rolled back, the provider sends every refused webhook again, and the books catch
+    up by themselves."""
+    with Traffic(rate=3.0, seed=8):
+        time.sleep(3)
+        assert check_live().report.passed
+        refused_before = counted_bad_signatures()
+        faults.get("secret-rotation").inject(fault_stack)
+        try:
+            assert stack.container_env("webhook-receiver")["WEBHOOK_SECRET_VERSION"] == "v2"
+            with pytest.raises(NotSettled) as stuck:
+                check_live(timeout_seconds=10)
+            assert stuck.value.settling.behind is None and stuck.value.settling.pending_deliveries > 0
+            until(lambda: counted_bad_signatures() > refused_before, timeout=60, every=2)
+            assert "webhook refused: bad signature" in receiver_logs()
+            rules = alerts.Alerting()
+            first, second = rules.evaluate(), rules.evaluate()
+            assert first.alert is None and second.alert is not None and second.alert.name == "BooksBehindProvider"
+            assert "of the provider's webhooks up to it had not been acknowledged yet" in second.alert.summary
+            assert [check.rule for check in second.checks if check.breached] == ["BooksBehindProvider"]
+        finally:
+            faults.get("secret-rotation").clear(fault_stack)
+        result = check_live(timeout_seconds=90)  # each refused webhook is sent again within a minute of its last try
+    assert result.report.passed, result.report
+    assert stack.container_env("webhook-receiver")["WEBHOOK_SECRET_VERSION"] == "v1"
+
+
+def test_a_deploy_that_keeps_its_refund_connections_runs_the_api_out_of_them_until_it_is_rolled_back(fault_stack):
+    """Week 4, item 4, fault 6: each refund keeps a connection of the payments API's pool of 10. Once none is left,
+    every request waits 5 s for one and fails, and the API's health check fails, while PostgreSQL is up. Nothing is
+    charged wrong. Rolled back, its new container has a full pool."""
+    with Traffic(rate=3.0, seed=9), httpx.Client(base_url=live.API_URL, timeout=60.0, trust_env=False) as api:
+        pay = payer(api)
+        time.sleep(3)
+        faults.get("pool-exhaustion").inject(fault_stack)
+        try:
+            assert stack.container_env("payments-api")["REFUND_CONNECTION"] == "kept"
+            failed, waited = until(lambda: (found := timed(lambda: pay(4_400)))[0].status_code == 500 and found, 120)
+            assert waited >= 4.5  # it waited out the pool's 5 s timeout
+            assert "PoolTimeout" in payments_api_logs()
+            until(lambda: payments_api_health() == "unhealthy", timeout=60, every=5)
+            assert check_live(timeout_seconds=60).report.passed  # a payment that got no connection was never charged
+        finally:
+            faults.get("pool-exhaustion").clear(fault_stack)
+        until(lambda: pay(4_401).status_code == 201, timeout=60)
+        assert payments_api_health() == "healthy"
+    assert check_live(timeout_seconds=60).report.passed
+
+
 def test_a_deploy_without_dedupe_counts_payments_twice_and_the_rollback_stops_new_damage(fault_stack):
     def counted_twice() -> set[str]:
         evidence = check_live(timeout_seconds=60).report.invariant("posted_exactly_once").evidence
@@ -224,3 +283,43 @@ def test_a_deploy_without_dedupe_counts_payments_twice_and_the_rollback_stops_ne
         after = counted_twice()
     assert damaged <= at_rollback
     assert after == at_rollback  # the rollback stops new damage; what was booked twice stays booked twice
+
+
+def provider_charge(provider_payment_id: str) -> dict:
+    response = httpx.get(f"{PROVIDER_URL}/v1/payments/{provider_payment_id}", timeout=10, trust_env=False)
+    return response.raise_for_status().json()
+
+
+def test_a_deploy_with_the_money_unit_bug_charges_100_times_the_amount_and_the_rollback_stops_new_damage(fault_stack):
+    """Week 4, item 4, fault 4, last: its overcharges stay. Our records and our answers keep the right amount, the
+    ledger books what the provider charged, and only the fourth invariant sees it. A rollback stops new damage; each
+    overcharge stays until a person refunds it."""
+
+    def overcharged() -> dict[str, dict]:
+        evidence = check_live(timeout_seconds=60).report.invariant("payments_match_provider").evidence
+        return {item["payment_id"]: item for item in evidence if "amount differs" in item["problem"]}
+
+    with Traffic(rate=3.0, seed=10), httpx.Client(base_url=live.API_URL, timeout=60.0, trust_env=False) as api:
+        pay = payer(api)
+        time.sleep(3)
+        assert overcharged() == {}  # the earlier tests' damage is in the books, not in our payments
+        faults.get("money-unit").inject(fault_stack)
+        try:
+            assert stack.container_env("payments-api")["CHARGE_AMOUNT_UNIT"] == "dollars"
+            payment = pay(4_500).json()
+            assert (payment["status"], payment["amount_cents"]) == ("succeeded", 4_500)
+            assert provider_charge(payment["provider_payment_id"])["amount_cents"] == 450_000
+            found = until(lambda: (seen := overcharged()) and payment["id"] in seen and seen, timeout=60, every=3)
+            for item in found.values():
+                assert [charge["amount_cents"] for charge in item["provider_charges"]] == [100 * item["amount_cents"]]
+            report = check_live(timeout_seconds=60).report
+            assert report.invariant("matches_provider").passed  # the ledger booked what the provider charged
+        finally:
+            faults.get("money-unit").clear(fault_stack)
+        at_rollback = set(overcharged())
+        after = pay(4_501).json()
+        assert provider_charge(after["provider_payment_id"])["amount_cents"] == 4_501
+        time.sleep(10)
+        still = set(overcharged())
+    assert still == at_rollback  # no new overcharge; the ones before the rollback stay
+    assert stack.container_env("payments-api")["CHARGE_AMOUNT_UNIT"] == "cents"

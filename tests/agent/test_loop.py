@@ -14,7 +14,7 @@ import stat
 import subprocess
 import sys
 import time
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
@@ -1182,6 +1182,55 @@ def test_a_run_that_offered_an_action_replays_exactly(tmp_path):
     recorded = offered_run(tmp_path / "run", [tool("recent_deploys"), tool(), naming(action)])
     result, whole, differences = loop.replay(tmp_path / "run", tmp_path / "replay.jsonl")
     assert (whole, differences) == (True, []) and result.diagnosis == recorded.diagnosis
+
+
+def test_a_run_records_the_actions_it_offered_as_it_offered_them_and_a_replay_offers_those(tmp_path):
+    """Week 4, item 4: a replay offers the actions as the run did, as it serves the tools the run listed, so a change to
+    the catalog after a run never changes its replay."""
+    action = {"name": "rollback_deploy", "arguments": {"service": "payments-api"}}
+    recorded = offered_run(tmp_path / "run", [tool("recent_deploys"), tool(), naming(action)])
+    assert recorded.diagnosis.fix_action.arguments == {"service": "payments-api"}
+    start = read_trace(tmp_path / "run" / loop.TRACE)[0]
+    assert start["extra"]["loop"]["offered_action_specs"] == [asdict(catalog.ROLLBACK_DEPLOY)]
+    assert loop.offered_actions(start["extra"]["loop"]) == [catalog.ROLLBACK_DEPLOY]
+    # Offered as the catalog first did, the payments API would not be an action's argument: the diagnosis would differ.
+    assert "payments-api" not in json.dumps(catalog.FIRST_OFFERED["rollback_deploy"].input_schema)
+    result, whole, differences = loop.replay(tmp_path / "run", tmp_path / "replay.jsonl")
+    assert (whole, differences) == (True, []) and result.diagnosis == recorded.diagnosis
+
+
+def test_a_run_recorded_before_the_actions_were_is_offered_them_as_the_catalog_first_did():
+    assert loop.offered_actions({"offered_actions": ["rollback_deploy"]}) == [catalog.FIRST_OFFERED["rollback_deploy"]]
+    assert loop.offered_actions({"offered_actions": []}) == [] and loop.offered_actions({}) == []
+
+
+@pytest.mark.parametrize(
+    "recorded, why",
+    [
+        ({"offered_actions": ["rollback_deploy"], "offered_action_specs": "x"}, "not a list of objects"),
+        ({"offered_actions": ["rollback_deploy"], "offered_action_specs": ["x"]}, "not a list of objects"),
+        ({"offered_actions": [], "offered_action_specs": [asdict(catalog.ROLLBACK_DEPLOY)]}, "do not match the names"),
+        (
+            {"offered_actions": ["restart_service"], "offered_action_specs": [asdict(catalog.ROLLBACK_DEPLOY)]},
+            "do not match the names",
+        ),
+    ],
+)
+def test_offered_actions_that_disagree_with_the_names_the_trace_records_are_refused(recorded, why):
+    with pytest.raises(ValueError, match=why):
+        loop.offered_actions(recorded)
+
+
+def test_a_replay_whose_trace_offers_actions_it_cannot_read_says_so_and_runs_nothing(tmp_path, capsys):
+    action = {"name": "rollback_deploy", "arguments": {"service": "ledger-consumer"}}
+    offered_run(tmp_path / "run", [tool("recent_deploys"), tool(), naming(action)])
+    path = tmp_path / "run" / loop.TRACE
+    lines = path.read_text().splitlines()
+    start = json.loads(lines[0])
+    start["extra"]["loop"]["offered_action_specs"] = [{"name": "rollback_deploy", "runs": "anything"}]
+    path.write_text("\n".join([json.dumps(start), *lines[1:]]) + "\n")
+    assert loop.main(["replay", str(tmp_path / "run")]) == 2
+    assert capsys.readouterr().err.startswith("Cannot replay")
 
 
 def test_a_run_that_offered_no_action_records_so_and_replays_with_none(tmp_path):

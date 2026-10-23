@@ -78,8 +78,10 @@ def up(handler: str = "idempotent", confirmer: str = "by_our_id") -> None:
     ensure_local()
     settings = {"LEDGER_HANDLER": handler, "CONFIRMER_HANDLER": confirmer}
     # The known-bad "retry forever" setting only ever comes from a fault (klaxon.faults), and the payments API without
-    # its circuit breaker only from a deploy (klaxon.patient.deploys): never from a stray variable.
+    # its circuit breaker only from a deploy (klaxon.patient.deploys): never from a stray variable. The same for the
+    # bad deploys of faults 4 to 6 (week 4).
     settings |= {"LEDGER_BAD_EVENTS": "dead_letter", "CONFIRMER_BAD_EVENTS": "dead_letter", "PROVIDER_BREAKER": "on"}
+    settings |= {"CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned", "WEBHOOK_SECRET_VERSION": "v1"}
     compose("up", "--detach", "--build", "--wait", env=settings)
 
 

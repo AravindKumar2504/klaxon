@@ -33,6 +33,9 @@ API now fails fast when the provider keeps failing, on by default, so fault 3 re
 version 1's). Its third element becomes the breaker failing fast, and the fixes that fit are none and other (escalate
 to the provider): there is nothing to change on our side. Faults 1 and 2 are graded as in version 1. New comparisons
 use the latest version; a saved run is graded again with the version that graded it (klaxon.fault_runs grade).
+
+Version 3 (week 4, item 4), committed before any live run on faults 4 to 6: version 2, and a rubric for each of them.
+Versions 1 and 2 have none for them: they came before those faults.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ from dataclasses import asdict, dataclass
 from klaxon import faults
 from klaxon.agent.tools import clean_text
 
-RUBRIC_VERSION = 2  # the version new comparisons use; each comparison records its own
+RUBRIC_VERSION = 3  # the version new comparisons use; each comparison records its own
 HOW = "keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning."
 BY = {
     1: (
@@ -57,6 +60,7 @@ BY = {
         "a rule (klaxon.grading, rubric version 2, committed in 8e58e7f before any live run on fault 3 with the circuit"
         f" breaker): {HOW}"
     ),
+    3: f"a rule (klaxon.grading, rubric version 3, committed before any live run on faults 4 to 6): {HOW}",
 }
 
 
@@ -191,7 +195,95 @@ RUBRICS_V2 = RUBRICS_V1 | {
         fix_target=r"provider|payments",
     ),
 }
-VERSIONS = {1: RUBRICS_V1, 2: RUBRICS_V2}
+# The payments API: by name, or as "our API" or "the API".
+API = r"payments[-_ ]?api|\b(our|the) api\b"
+RUBRICS_V3 = RUBRICS_V2 | {
+    "money-unit": Rubric(
+        elements=(
+            Element("where: the payments API", (API,)),
+            Element(
+                "what: our amount in the wrong unit, 100 times over",
+                (
+                    r"\b100 ?(x|×|times)",
+                    r"(x|×) ?100\b",
+                    r"hundred(fold| times)",
+                    r"\bunits?\b",
+                    r"CHARGE_AMOUNT_UNIT",
+                    r"multipl\w* (it |them |each amount |the amount )?by 100",
+                    r"cents?\W+(\w+\W+){0,6}dollars?|dollars?\W+(\w+\W+){0,6}cents?",
+                ),
+            ),
+            Element(
+                "how: the provider charges customers more than our records say",
+                (
+                    r"overcharg",
+                    r"charg\w* (the |each |every )?(customers?|them|cards?) (100|more|too much|a hundred)",
+                    r"provider('s)? charge\w* .{0,40}(more|100|hundred|different)",
+                    r"amounts? (differ|disagree|do not match|does not match|don't match|doesn't match|mismatch)",
+                    r"(differ|disagree|mismatch)\w* .{0,20}amounts?",
+                ),
+            ),
+            Element("the deploy that brought it", (*DEPLOY, r"CHARGE_AMOUNT_UNIT"), required=False),
+        ),
+        fix_kinds=("rollback", "config_change"),
+        fix_target=r"payments",
+    ),
+    "secret-rotation": Rubric(
+        elements=(
+            Element("where: the webhook receiver", (r"receiver", r"webhook (endpoint|handler|service)")),
+            Element(
+                "what: its secret is not the one the provider signs with",
+                (r"secret", r"\bhmac\b", r"rotat", r"signing key", r"\bv2\b"),
+            ),
+            Element(
+                "how: it refuses every webhook, so nothing reaches the books",
+                (
+                    r"refus",
+                    r"reject",
+                    r"\b400\b",
+                    r"bad[_ ]signature",
+                    r"signatures? (check |verification )?(fail|mismatch|invalid|do not match|don't match)",
+                    r"(invalid|wrong|mismatched) signature",
+                    r"(fail|fails|failing|failed) (its |the |their )?signature",
+                ),
+            ),
+            Element("the deploy that brought it", (*DEPLOY, r"WEBHOOK_SECRET_VERSION"), required=False),
+        ),
+        fix_kinds=("rollback", "config_change"),
+        fix_target=r"receiver",
+    ),
+    "pool-exhaustion": Rubric(
+        elements=(
+            Element("where: the payments API's database pool", (r"\bpool", r"psycopg_pool")),
+            Element(
+                "what: its connections are never given back",
+                (
+                    r"leak",
+                    r"never (\w+ ){0,2}(back|returned|released|freed)",
+                    r"never (returns?|releases?|frees?)\b",
+                    r"(not|n't) (\w+ ){0,2}(back|returned|released|freed)",
+                    r"REFUND_CONNECTION",
+                    r"(keeps?|kept|held|holds?|holding) (on to |onto )?(\w+ ){0,2}connections?",
+                ),
+            ),
+            Element(
+                "how: with none left, requests wait for a connection and fail",
+                (
+                    r"PoolTimeout",
+                    r"exhaust",
+                    r"(run|runs|ran|running) (dry|out)",
+                    r"(no|none) (free |available |idle )?connections?",
+                    r"(couldn't|could not|cannot|can't) get a connection",
+                    r"wait\w* (\w+ ){0,3}for (a |free |an available )?connection",
+                ),
+            ),
+            Element("the deploy that brought it", (*DEPLOY, r"REFUND_CONNECTION"), required=False),
+        ),
+        fix_kinds=("rollback", "config_change"),
+        fix_target=r"payments",
+    ),
+}
+VERSIONS = {1: RUBRICS_V1, 2: RUBRICS_V2, 3: RUBRICS_V3}
 RUBRICS = VERSIONS[RUBRIC_VERSION]
 
 
@@ -226,7 +318,10 @@ def names(element: Element, text: str) -> bool:
 def compare(fault_name: str, diagnosis: Mapping | None, version: int = RUBRIC_VERSION) -> dict:
     """The rule's comparison of a diagnosis (as the trace's stop record keeps it) with the cause the fault records,
     both as one version of the rubric has them: the latest, unless told."""
-    fault, rubric = faults.get(fault_name), VERSIONS[version][fault_name]
+    fault = faults.get(fault_name)
+    if fault_name not in VERSIONS[version]:  # a version that came before the fault: it has no rubric for it
+        raise ValueError(f"rubric version {version} has no rubric for {fault_name}")
+    rubric = VERSIONS[version][fault_name]
     recorded = fault.recorded(version)
     out: dict = {
         "by": BY[version],

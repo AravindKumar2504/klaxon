@@ -4,12 +4,13 @@ An action that ran (klaxon.agent.gate) does not end an incident. After it, code 
 model:
 
     health  every container is healthy (the one-shot kafka-init has exited 0), and the metric rules of klaxon.alerts
-            are quiet at 2 evaluations in a row: every signal read, no condition holding. Within 3 minutes of the
-            first evaluation, which comes once the first money check below is done.
+            and its books rule are quiet at 2 evaluations in a row: every signal read, no condition holding. Within
+            3 minutes of the first evaluation, which comes once the first money check below is done.
     money   the money check (klaxon.checks.live) right after the action, and again at least 60 s after it.
 
-The money rule is left out of health: the money is judged on its own, below, because a rollback can remove a cause
-and still leave the money wrong. So the money has two questions, said apart:
+The books rule (week 4) asks only whether the money check settled: whether our side caught up with the provider, so a
+backlog the action freed has drained. The money rule is left out of health: the money is judged on its own, below,
+because a rollback can remove a cause and still leave the money wrong. So the money has two questions, said apart:
 
     the cause is removed   no new damage after the action: nothing the provider made in the minute after it was
                            booked wrong
@@ -71,6 +72,7 @@ OBSERVE_SECONDS = 60.0  # the later money check comes no sooner than this after 
 SETTLE_SECONDS = 60.0  # how long each money check may wait to settle (a drained backlog takes a while)
 DOCKER_TIMEOUT = 30.0
 METRICS = (("PaymentsLatencyHigh", "payments-api", "p95_seconds"), ("PaymentsErrorsHigh", "payments-api", "share"))
+BOOKS = ("BooksBehindProvider", "the books", "settled")  # did the money check settle: did our side catch up?
 TOTAL = "provider_clearing, all payments"  # matches_provider's finding over every payment: their sum
 MAX_KEY = 300
 
@@ -302,11 +304,12 @@ def read_containers() -> list[dict]:
 
 
 def metrics_unwell(evaluation: alerts.Evaluation) -> str | None:
-    """Why the metric rules are not quiet at this evaluation, or None: each must have read its signal, with no
-    condition holding. The money rule is left out: the money is judged apart."""
+    """Why the metric rules and the books rule are not quiet at this evaluation, or None: each must have read its
+    signal, with no condition holding. The money rule is left out: the money is judged apart."""
     read = {(check.rule, check.subject): check for check in evaluation.checks}
     missing, held = [], []
-    wanted = [*METRICS, *(("ConsumerLagHigh", group, "messages_behind") for group in alerts.CONSUMER_GROUPS.values())]
+    lags = (("ConsumerLagHigh", group, "messages_behind") for group in alerts.CONSUMER_GROUPS.values())
+    wanted = [*METRICS, *lags, BOOKS]
     for rule, subject, number in wanted:
         check = read.get((rule, subject))
         if check is None or check.numbers.get(number) is None:

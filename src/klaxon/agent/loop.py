@@ -56,7 +56,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from klaxon.agent.catalog import CATALOG
+from klaxon.agent.catalog import FIRST_OFFERED
 from klaxon.agent.claude_code import DEFAULT_MODEL
 from klaxon.agent.contract import MAX_REPLY, ActionSpec, Diagnosis, Reading, read_reply, reply_schema
 from klaxon.agent.mcp_client import (
@@ -468,6 +468,7 @@ class Investigation:
                 "max_observation_characters": MAX_OBSERVATION,
                 "system_sha256": text_sha256(self.system),
                 "offered_actions": [action.name for action in self.actions],
+                "offered_action_specs": [asdict(action) for action in self.actions],  # as offered: a replay's too
             },
             tool_server=getattr(self.tools, "server_info", {}),
             **self.extra,
@@ -706,6 +707,22 @@ def compare(recorded: list[dict], replayed: list[dict], whole: bool = True) -> l
 NOT_REPLAYABLE = ("time_budget", "interrupted", "crashed")
 
 
+def offered_actions(recorded: Mapping) -> list[ActionSpec]:
+    """The actions a recorded run offered, as it offered them, so that a replay offers the same, as the tools it
+    serves are the ones the run listed. A run recorded before the specs were (week 4, item 4) names them only: they are
+    the actions as the catalog first offered them. Anything else is refused: ValueError."""
+    names = recorded.get("offered_actions", [])
+    specs = recorded.get("offered_action_specs")
+    if specs is None:
+        return [FIRST_OFFERED[name] for name in names]
+    if not isinstance(specs, list) or not all(isinstance(spec, dict) for spec in specs):
+        raise ValueError("the trace's offered actions are not a list of objects")
+    offered = [ActionSpec(**spec) for spec in specs]
+    if [action.name for action in offered] != names:
+        raise ValueError("the trace's offered actions do not match the names it records")
+    return offered
+
+
 def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[str]]:
     """Replay the run recorded in folder, writing the replay's trace to out. Returns the replay's result, whether
     the whole run could be compared, and how the two traces differ."""
@@ -714,8 +731,7 @@ def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[s
     start = recorded[0]
     alert = Alert(**start["extra"]["alert"])
     budgets = Budgets(**start["budgets"])
-    # The actions the run offered, from today's catalog: one that changed since makes the system prompt differ.
-    offered = [CATALOG[name] for name in start["extra"].get("loop", {}).get("offered_actions", [])]
+    offered = offered_actions(start["extra"].get("loop", {}))
     model, tools = ReplayModel(folder / RECORDING), ReplayTools(folder / TOOL_RESULTS)
     result = investigate(alert, model, tools, out, budgets, actions=offered)
     whole = recorded[-1].get("reason") not in NOT_REPLAYABLE

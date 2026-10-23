@@ -17,7 +17,8 @@ PASSWORD = "made-up-password-not-real"
 GOOD = {
     "ledger-consumer": {"LEDGER_HANDLER": "idempotent", "LEDGER_BAD_EVENTS": "dead_letter"},
     "payment-confirmer": {"CONFIRMER_HANDLER": "by_our_id", "CONFIRMER_BAD_EVENTS": "dead_letter"},
-    "payments-api": {"PROVIDER_BREAKER": "on"},
+    "payments-api": {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned"},
+    "webhook-receiver": {"WEBHOOK_SECRET_VERSION": "v1"},
 }
 NAIVE = GOOD["ledger-consumer"] | {"LEDGER_HANDLER": "naive"}
 RETRYING = GOOD["ledger-consumer"] | {"LEDGER_BAD_EVENTS": "retry"}

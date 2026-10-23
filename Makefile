@@ -13,6 +13,10 @@ export LEDGER_BAD_EVENTS := dead_letter
 export CONFIRMER_BAD_EVENTS := dead_letter
 # The same for the payments API's circuit breaker: off, the known-bad old behavior, only ever comes from a deploy.
 export PROVIDER_BREAKER := on
+# And for the bad deploys of faults 4 to 6 (week 4): the money-unit bug, the connection leak, the rotated secret.
+export CHARGE_AMOUNT_UNIT := cents
+export REFUND_CONNECTION := returned
+export WEBHOOK_SECRET_VERSION := v1
 
 # Only ever this repo's own project on this Mac: ignore variables that could point docker somewhere else.
 unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PROFILES
@@ -23,7 +27,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
-	approve gate-demo
+	approve gate-demo rehearse-fault
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -113,6 +117,9 @@ alerts-under-traffic: ## traffic and no fault: do the alert rules stay quiet? (M
 investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only)
 	$(PY) -m klaxon.fault_runs run "$$FAULT" $${STEPS:+--steps "$$STEPS"} $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} \
 		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions}
+
+rehearse-fault: ## a fault under traffic and the alert rules, no model: what they see, saved to evidence/week4/ (his OK first)
+	$(PY) -m klaxon.fault_runs rehearse "$$FAULT" $${RATE:+--rate "$$RATE"}
 
 grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline: make grade-run RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.fault_runs grade "$$RUN"

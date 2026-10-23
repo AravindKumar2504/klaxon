@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from klaxon import alerts, fault_runs, faults, grading
-from klaxon.agent import claude_code, gate, loop, verify
+from klaxon.agent import catalog, claude_code, gate, loop, verify
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.claude_code import find_claude
 from klaxon.agent.contract import Diagnosis, Evidence, FixAction, ProposedFix
@@ -195,8 +195,9 @@ def test_the_diagnosis_is_compared_with_the_faults_recorded_cause_by_the_rule():
     world = World()
     record = run(world)
     assert record.comparison == grading.compare("provider-outage", DIAGNOSIS.as_dict())
-    assert record.comparison["verdict"] == "names the cause" and record.comparison["by"] == grading.BY[2]
-    assert record.comparison["rubric"]["version"] == 2 and record.comparison["fix_fits_the_remedy"] is True
+    assert record.comparison["verdict"] == "names the cause"
+    assert record.comparison["by"] == grading.BY[grading.RUBRIC_VERSION]
+    assert record.comparison["rubric"]["version"] == 3 and record.comparison["fix_fits_the_remedy"] is True
     assert record.loop == {
         "reason": "diagnosed",
         "detail": "confidence 0.7",
@@ -216,7 +217,7 @@ def test_the_diagnosis_is_compared_with_the_faults_recorded_cause_by_the_rule():
     [
         (SLOW, PASSED, "a rule's condition already holds: PaymentsLatencyHigh"),
         ({}, FAILED, "a rule's condition already holds: MoneyCheckFailed"),
-        ({}, {"outcome": "could not settle"}, "the money check did not pass: could not settle"),
+        ({}, {"outcome": "could not settle"}, "a rule's condition already holds: BooksBehindProvider (the books)"),
         ({}, {"outcome": "could not run", "error": "ConnectError"}, "the money check could not run (ConnectError)"),
         ({"requests_per_second": httpx.ConnectError("x")}, PASSED, "Prometheus could not be read (ConnectError)"),
         ({"p95_seconds": [], "requests_per_second": []}, PASSED, "no data for the p95 latency, the share of 5xx"),
@@ -478,14 +479,14 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     assert "what" not in saved  # the loop's own files say what a loop run is; run.json says what this run did
     assert saved["fault"]["cause"] == faults.FAULTS["provider-outage"].cause
     assert saved["alert"]["name"] == "PaymentsLatencyHigh" and saved["stopped"] == "the loop stopped: diagnosed"
-    assert saved["comparison"]["by"] == grading.BY[2] and saved["comparison"]["verdict"] == "names the cause"
+    assert saved["comparison"]["by"] == grading.BY[3] and saved["comparison"]["verdict"] == "names the cause"
     assert saved["rerun_command"].startswith("python -m klaxon.fault_runs run provider-outage")
     [(alert, header, model_id)] = given
     assert model_id == "claude-opus-5-5" and header["alert"]["summary"] == alert.summary
     assert header["fault_name"] == "provider-outage" and header["budgets"]["steps"] == 12
     assert read_trace(folder / loop.TRACE)[-1]["reason"] == "diagnosed"
     out = capsys.readouterr().out
-    assert "Compared by a rule (klaxon.grading, rubric version 2" in out and "verdict: NAMES THE CAUSE" in out
+    assert "Compared by a rule (klaxon.grading, rubric version 3" in out and "verdict: NAMES THE CAUSE" in out
     assert fault_runs.main(["grade", str(folder)]) == 0
     assert "verdict: NAMES THE CAUSE" in capsys.readouterr().out
 
@@ -658,21 +659,96 @@ def test_after_clearing_the_rules_read_the_stack_afresh():
 
 
 @pytest.mark.parametrize(
-    "before, money_before",
-    [({"p95_seconds": [], "requests_per_second": []}, PASSED), ({}, {"outcome": "could not settle"})],
+    "before, money_before, fired",
+    [({"p95_seconds": [], "requests_per_second": []}, PASSED, 0), ({}, {"outcome": "could not settle"}, 4)],
     ids=["no data", "the money check never settles"],
 )
-def test_a_quiet_run_that_could_not_see_is_not_quiet(before, money_before, tmp_path, monkeypatch, capsys):
+def test_a_quiet_run_that_could_not_see_is_not_quiet(before, money_before, fired, tmp_path, monkeypatch, capsys):
     # Finding 3: alerts and problems were counted, but a rule with no data, or a check that never settled, was neither.
+    # Since week 4, item 4, a check that never settles also fires the books rule, from the second evaluation on.
     world = World(before=before, money_before=money_before)
     found = fault_runs.quiet(
         world.alerting(), Settings(run_id="r1"), 1.0, lambda s: FakeTraffic(world, s), world.sleep, world.clock
     )
-    assert found["alerts_fired"] == 0 and found["evaluations_blind"] == len(found["evaluations"]) == 5
+    assert found["alerts_fired"] == fired and found["evaluations_blind"] == len(found["evaluations"]) == 5
     assert all(e["blind"] for e in found["evaluations"])
     patch_quiet(monkeypatch, World(before=before, money_before=money_before))
     assert fault_runs.main(["quiet", "--minutes", "1", "--evidence-dir", str(tmp_path)]) == 1
     assert "5 blind" in capsys.readouterr().out
+
+
+# A rehearsal (week 4, item 4): the fault and the rules, and no model
+
+
+def test_a_rehearsal_waits_for_the_alert_clears_the_fault_reads_the_rules_again_and_calls_no_model():
+    world = World()
+    fault = world.fault()
+    record = record_for(fault)
+    out = fault_runs.run(fault, record, world.stack(), Settings(run_id="r1"), None)
+    assert out.rehearsal and out.stopped == fault_runs.REHEARSED
+    assert out.alert["name"] == "PaymentsLatencyHigh" and out.loop is None and out.comparison is None
+    assert [call for call in world.calls if not str(call).startswith("traffic")] == ["inject", "clear"]
+    assert [e["phase"] for e in out.evaluations] == ["before", "before", "during", "during", "after"]
+    assert "loop_started_at" not in out.timings and out.cleared == {"made_up": "cleared"}
+    said = fault_runs.label(out)
+    assert fault_runs.REHEARSAL in said and "loop" not in said and "Claude" not in said
+    assert fault_runs.render(out).startswith("Klaxon week 4: a rehearsal of a fault, with no model: provider-outage")
+
+
+def test_a_rehearsal_whose_alert_never_fires_says_so(monkeypatch, tmp_path):
+    world = World(sick={})
+    patch_command(monkeypatch, world)
+    monkeypatch.setattr(fault_runs, "preflight", lambda model: pytest.fail("a rehearsal needs no model"))
+    assert fault_runs.main(["rehearse", "provider-outage", "--evidence-dir", str(tmp_path)]) == 1
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["stopped"].startswith("no alert fired within") and saved["rehearsal"] is True
+
+
+def test_the_rehearse_command_saves_what_the_rules_saw_and_exits_0_when_the_alert_fired(monkeypatch, tmp_path, capsys):
+    world = World()
+    given = patch_command(monkeypatch, world)
+    monkeypatch.setattr(fault_runs, "preflight", lambda model: pytest.fail("a rehearsal needs no model"))
+    assert fault_runs.main(["rehearse", "provider-outage", "--evidence-dir", str(tmp_path)]) == 0
+    assert given == []  # the loop never ran
+    [folder] = tmp_path.iterdir()
+    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d{6}Z_rehearsal_provider-outage", folder.name)
+    assert sorted(path.name for path in folder.iterdir()) == [fault_runs.RUN_FILE]  # no trace, no recording
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["rehearsal"] is True and saved["gated"] is False and saved["loop"] is None
+    assert fault_runs.REHEARSAL in saved["label"] and saved["alert"]["name"] == "PaymentsLatencyHigh"
+    out = capsys.readouterr().out
+    assert out.startswith(f"The run's folder: {folder}") and "Stopped: a rehearsal: the alert fired" in out
+
+
+def test_a_stop_signal_during_a_rehearsal_clears_the_fault_as_ctrl_c_does(monkeypatch, tmp_path):
+    world = World()
+    patch_command(monkeypatch, world)
+    injected = world.inject
+
+    def inject(local):
+        done = injected(local)
+        os.kill(os.getpid(), signal.SIGTERM)
+        return done
+
+    world.inject = inject
+    inherited = signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    try:
+        assert fault_runs.main(["rehearse", "provider-outage", "--evidence-dir", str(tmp_path)]) == 130
+    finally:
+        signal.signal(signal.SIGTERM, inherited)
+    [folder] = tmp_path.iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["stopped"] == "interrupted (SIGTERM)" and saved["cleared"] == {"made_up": "cleared"}
+    assert calls(world)[-3:] == ["clear", "traffic closed", "traffic joined"]
+
+
+def test_a_rehearsal_whose_clearing_failed_says_the_fault_may_still_be_in_place(monkeypatch, tmp_path, capsys):
+    world = World()
+    world.clear_fails = True
+    patch_command(monkeypatch, world)
+    assert fault_runs.main(["rehearse", "provider-outage", "--evidence-dir", str(tmp_path)]) == 2
+    assert "THE FAULT MAY STILL BE IN PLACE: make fault-clear FAULT=provider-outage" in capsys.readouterr().err
 
 
 def test_the_make_targets_pass_their_values_through_the_environment():
@@ -683,6 +759,8 @@ def test_the_make_targets_pass_their_values_through_the_environment():
         ("grade-run", "RUN=x' ; echo pwned", '"$RUN"'),
         ("alerts", "WATCH=1' ; echo pwned", '"$WATCH"'),
         ("alerts-under-traffic", "MINUTES=1' ; echo pwned", '"$MINUTES"'),
+        ("rehearse-fault", "FAULT=x' ; echo pwned", '"$FAULT"'),  # week 4, item 4
+        ("rehearse-fault", "RATE=1' ; echo pwned", '"$RATE"'),
     ]:
         shown = subprocess.run(["make", "-n", target, value], cwd=loop.REPO, capture_output=True, text=True, check=True)
         assert "pwned" not in shown.stdout and name in shown.stdout, target
@@ -704,17 +782,28 @@ GIVEAWAYS = (
     "12.50",
     r"\bhangs?\b",
     "=retry",
+    # Faults 4 to 6 (week 4, item 4).
+    "money-unit",
+    "secret-rotation",
+    "pool-exhaustion",
+    "dollars",
+    "100 times",
+    "rotat",
+    "leak",
+    "=kept",
+    "=v2",
 )
 
 
 def test_nothing_the_model_is_given_names_a_fault_or_its_cause():
     specs = [mc.ToolSpec(t.name, t.title, t.description, t.input_schema, READ_ONLY) for t in make_tools().values()]
-    texts = [loop.system_prompt(specs)]
+    texts = [loop.system_prompt(specs), loop.system_prompt(specs, fault_runs.OFFERED)]
     for evaluation in (
         _fired(World(sick=SLOW)),
         _fired(World(sick={"errors_per_second": [({}, 2.0)], "requests_per_second": [({}, 2.5)]})),
         _fired(World(sick={"lag_by_group": [({"consumer": "ledger"}, 190.0)]})),
         _fired(World(sick={}, money_sick=FAILED)),
+        _fired(World(sick={}, money_sick={"outcome": "could not settle", "webhooks_not_acknowledged": 40})),
     ):
         texts.append(loop.first_turn(evaluation.alert, loop.Budgets()))
     for text in texts:
@@ -1418,7 +1507,9 @@ def test_the_gated_command_asks_waits_for_the_approval_acts_verifies_then_clears
     ):
         assert claim in saved["label"], claim
     assert list(saved["damage"]) == ["at_alert", "at_request", "at_action", "after_action"]
-    assert read_trace(folder / loop.TRACE)[0]["extra"]["loop"]["offered_actions"] == ["rollback_deploy"]
+    recorded_loop = read_trace(folder / loop.TRACE)[0]["extra"]["loop"]
+    assert recorded_loop["offered_actions"] == ["rollback_deploy"]
+    assert recorded_loop["offered_action_specs"] == [asdict(catalog.ROLLBACK_DEPLOY)]  # as offered, for its replay
     assert "Klaxon asks to act: request r-" in said[0]
     out = capsys.readouterr().out
     assert out.startswith(f"The run's folder: {folder}")
@@ -1548,10 +1639,12 @@ def test_each_gated_live_run_replays_and_its_gate_and_verification_hold(name, tm
     folder = loop.REPO / "evidence" / "week4" / GATED_RUNS[name]
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     recorded = read_trace(folder / loop.TRACE)
-    offered = recorded[0]["extra"]["loop"]["offered_actions"]
-    assert offered == ["rollback_deploy"] and recorded[0]["model"] == "claude-opus-5-5"
+    assert recorded[0]["extra"]["loop"]["offered_actions"] == ["rollback_deploy"]
+    assert recorded[0]["model"] == "claude-opus-5-5"
+    # Recorded before a trace kept the actions it offered (week 4, item 4): offered again as the catalog first did.
+    offered = loop.offered_actions(recorded[0]["extra"]["loop"])
     specs = loop.allowed_tools(mc.ReplayTools(folder / loop.TOOL_RESULTS).open())
-    if text_sha256(loop.system_prompt(specs, fault_runs.OFFERED)) != recorded[0]["system"]["sha256"]:
+    if text_sha256(loop.system_prompt(specs, offered)) != recorded[0]["system"]["sha256"]:
         pytest.skip("the system prompt changed since the gated runs: record new runs to replay")
     result, whole, differences = loop.replay(folder, tmp_path / "replay.jsonl")
     assert (whole, differences) == (True, [])
@@ -1592,6 +1685,21 @@ def test_each_gated_live_run_replays_and_its_gate_and_verification_hold(name, tm
     assert list(found.said) == kept_verification["said"] and found.verdict == "passed"
     assert saved["removed_by"].startswith(f"Klaxon: its rollback (Klaxon, approved request {request['id']})")
     assert [line["by"] for line in saved["deploys"]] == ["klaxon.faults", f"Klaxon, approved request {request['id']}"]
+
+
+@pytest.mark.parametrize("name", sorted(GATED_RUNS))
+def test_the_action_as_first_offered_gives_each_gated_live_run_its_prompt_byte_for_byte(name):
+    """A strict check, not a skip (week 4, item 4): the payments API and the webhook receiver joined rollback_deploy
+    after these runs, which recorded only the action's name. Offered as it was then, the prompt is the one they
+    answered; offered as it is now, it is not."""
+    folder = loop.REPO / "evidence" / "week4" / GATED_RUNS[name]
+    recorded = read_trace(folder / loop.TRACE)
+    assert "offered_action_specs" not in recorded[0]["extra"]["loop"]
+    offered = loop.offered_actions(recorded[0]["extra"]["loop"])
+    assert offered == [catalog.FIRST_OFFERED["rollback_deploy"]]
+    specs = loop.allowed_tools(mc.ReplayTools(folder / loop.TOOL_RESULTS).open())
+    assert text_sha256(loop.system_prompt(specs, offered)) == recorded[0]["system"]["sha256"]
+    assert text_sha256(loop.system_prompt(specs, fault_runs.OFFERED)) != recorded[0]["system"]["sha256"]
 
 
 def test_the_gated_live_runs_record_what_waiting_cost():

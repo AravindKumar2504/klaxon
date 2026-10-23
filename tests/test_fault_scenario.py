@@ -142,3 +142,12 @@ def test_dead_letters_are_shown_as_new_since_the_first_sample_not_as_lifetime_to
     assert "new dead letters: ledger 0," in out and "new dead letters: ledger 1," in out
     assert "events still in flight count as lost too" in out
     assert "Rates are over the last minute" in out and "injected (took 3.1 s)" in out
+
+
+def test_the_fault_demo_takes_every_fault_by_name():
+    """Week 4, item 4: the demo's list of names, written out so the first piece's demo loads no stack client, is
+    klaxon.faults' own."""
+    from klaxon import faults
+    from klaxon.demo import cli
+
+    assert cli.FAULT_NAMES == tuple(faults.FAULTS)

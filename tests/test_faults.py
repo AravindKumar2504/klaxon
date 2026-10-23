@@ -7,6 +7,7 @@ import pytest
 
 from klaxon import faults
 from klaxon.faults import FAULTS, LocalStack
+from klaxon.patient import deploys
 from klaxon.patient.deploys import DeployLog
 from tests.fake_docker import NAIVE, FakeDocker
 
@@ -143,6 +144,9 @@ def test_each_fault_says_what_the_money_check_should_show_in_each_phase():
         "duplicate-delivery": {"during": "failed", "after": "failed", "quiet": "failed"},  # the damage stays
         "poison-message": {"during": "could not run", "after": "passed", "quiet": "passed"},
         "provider-outage": {"during": "passed", "after": "passed", "quiet": "passed"},  # nothing was charged
+        "money-unit": {"during": "failed", "after": "failed", "quiet": "failed"},  # the overcharges stay
+        "secret-rotation": {"during": "could not run", "after": "passed", "quiet": "passed"},  # the books catch up
+        "pool-exhaustion": {"during": "passed", "after": "passed", "quiet": "passed"},  # nothing was charged wrong
     }
 
 
@@ -150,7 +154,14 @@ def test_every_fault_names_its_cause_its_symptoms_and_its_remedy():
     for fault in FAULTS.values():
         assert fault.cause and fault.symptoms and fault.remedy and fault.title
         assert fault.describe()["name"] == fault.name
-    assert set(FAULTS) == {"duplicate-delivery", "poison-message", "provider-outage"}
+    assert list(FAULTS) == [
+        "duplicate-delivery",
+        "poison-message",
+        "provider-outage",
+        "money-unit",
+        "secret-rotation",
+        "pool-exhaustion",
+    ]
     with pytest.raises(KeyError, match="the faults are"):
         faults.get("disk-full")
 
@@ -212,6 +223,70 @@ def test_fault_3_version_2_names_the_breaker_and_keeps_what_version_1_recorded()
             == FAULTS[name].recorded(2)
             == faults.Recorded(FAULTS[name].cause, FAULTS[name].remedy)
         )
+
+
+# Faults 4 to 6 (week 4, item 4): bad deploys of the payments API and of the webhook receiver
+
+API_GOOD = {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned"}
+
+
+@pytest.mark.parametrize(
+    "name, service, good, bad",
+    [
+        ("money-unit", "payments-api", API_GOOD, {"CHARGE_AMOUNT_UNIT": "dollars"}),
+        ("secret-rotation", "webhook-receiver", {"WEBHOOK_SECRET_VERSION": "v1"}, {"WEBHOOK_SECRET_VERSION": "v2"}),
+        ("pool-exhaustion", "payments-api", API_GOOD, {"REFUND_CONNECTION": "kept"}),
+    ],
+)
+def test_faults_4_to_6_deploy_one_known_bad_setting_and_clearing_rolls_it_back(name, service, good, bad):
+    s = FakeStack()
+    done = FAULTS[name].inject(s)
+    FAULTS[name].clear(s)
+    assert s.calls == [("redeploy", service, good | bad), ("redeploy", service, good)]
+    assert done == {"redeployed": service} | bad
+    assert deploys.known_bad(good | bad) == [f"{key}={value}" for key, value in bad.items()]
+
+
+def test_every_bad_deploy_sets_exactly_one_known_bad_value_and_its_clearing_none():
+    for fault in FAULTS.values():
+        s = FakeStack()
+        fault.inject(s)
+        fault.clear(s)
+        deployed = [call for call in s.calls if call[0] == "redeploy"]
+        if not deployed:  # the outage: not a deploy
+            assert fault.name == "provider-outage"
+            continue
+        (_, service, bad_settings), (_, again, good_settings) = deployed
+        assert service == again and deploys.check_settings(service, bad_settings) == bad_settings
+        assert len(deploys.known_bad(bad_settings)) == 1 and deploys.known_bad(good_settings) == [], fault.name
+
+
+def test_the_good_settings_are_those_compose_and_make_up_give_whatever_this_shells_variables_say(monkeypatch):
+    """Week 4, item 4: the bad deploys of faults 4 to 6 only ever come from a fault, never from a stray variable."""
+    from klaxon.patient import stack
+
+    good = faults.GOOD_API | faults.GOOD_RECEIVER
+    seen = []
+    for name in good:
+        monkeypatch.setenv(name, "x")
+    monkeypatch.setattr(stack, "ensure_local", lambda: None)
+    monkeypatch.setattr(stack, "compose", lambda *args, env: seen.append(env))
+    stack.up("idempotent")
+    makefile, compose = (stack.REPO / "Makefile").read_text(), (stack.REPO / "compose.yaml").read_text()
+    for name, value in good.items():
+        assert seen[0][name] == value
+        assert f"export {name} := {value}\n" in makefile
+        assert f"      {name}: ${{{name}:-{value}}}\n" in compose
+    assert faults.GOOD_API == API_GOOD and set(good) == set(deploys.SERVICES["payments-api"]) | {
+        "WEBHOOK_SECRET_VERSION"
+    }
+
+
+def test_the_rotated_secret_fault_names_a_version_never_a_secret():
+    s = FakeStack()
+    done = FAULTS["secret-rotation"].inject(s)
+    text = json.dumps([done, s.calls, FAULTS["secret-rotation"].describe()])
+    assert "not-real" not in text and "klaxon-dev-webhook-secret" not in text
 
 
 def test_clearing_a_fault_starts_a_stopped_ledger_with_its_good_settings():

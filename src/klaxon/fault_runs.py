@@ -40,12 +40,14 @@ label is built from what the run did: a run that stopped before the fault, the a
 and claims nothing it did not do. With --no-actions, no action is offered: week 3's run, diagnosis only.
 
 Also here: `quiet` runs the traffic with no fault and evaluates the rules: each evaluation must be quiet (every
-signal read, no condition holding, the money check passed), or the run fails; `grade` compares a saved run's
-diagnosis with its fault's cause again, offline.
+signal read, no condition holding, the money check passed), or the run fails; `rehearse` (week 4, item 4) runs steps 2
+to 5 and 7 on a fault, and calls no model: what the rules see of it, and when its alert fires, measured before any live
+run on it; `grade` compares a saved run's diagnosis with its fault's cause again, offline.
 
 Run: python -m klaxon.fault_runs run FAULT [--steps N --tool-calls N --seconds S]   live, with Aravind's OK each time
          [--no-actions]                                                               diagnosis only, as in week 3
      python -m klaxon.fault_runs quiet [--minutes M]                                  traffic only: injects nothing
+     python -m klaxon.fault_runs rehearse FAULT                                       the fault and the rules: no model
      python -m klaxon.fault_runs grade FOLDER                                         offline
 """
 
@@ -82,6 +84,11 @@ from klaxon.patient.stack import REPO, StackError
 QUIET_LABEL = (
     "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic and no fault, with the alert"
     " rules of klaxon.alerts evaluated again and again. No model was called. Synthetic data, a simulated provider."
+)
+REHEARSED = "a rehearsal: the alert fired, and no model was called"
+REHEARSAL = (
+    "A rehearsal: no model was called and nothing was offered; the fault was cleared once its alert fired, to measure"
+    " what the rules see of it."
 )
 # At the top of the loop's own files (its model recording and tool results), which exist only once the loop has run.
 WHAT = (
@@ -121,6 +128,7 @@ class Record:
     # A gated run (week 4): what came of the diagnosis at the gate, the verification, any undo proposed, the damage at
     # the alert, at the request, at the action and after it, the deploys made during the run, and who removed the cause.
     gated: bool = False
+    rehearsal: bool = False  # week 4, item 4: the fault and the rules only, and no model
     gate: dict | None = None
     verification: dict | None = None
     undo: dict | None = None
@@ -192,7 +200,7 @@ def run(
     record: Record,
     stack: Stack,
     settings: traffic.Settings,
-    investigate: Callable[[Alert], RunResult],
+    investigate: Callable[[Alert], RunResult] | None,
     warmup_seconds: float = WARMUP_SECONDS,
     alert_within_seconds: float = ALERT_WITHIN_SECONDS,
     after_seconds: float = AFTER_SECONDS,
@@ -201,8 +209,10 @@ def run(
 ) -> Record:
     """One run, filling in record as it goes. The fault is always cleared once its injection began, and the
     traffic always stopped, whatever happens; an error is raised after both. With gated, Klaxon may act on its
-    diagnosis, through the gate, before the fault is cleared."""
+    diagnosis, through the gate, before the fault is cleared. With no investigate, a rehearsal: no loop, no model, and
+    the fault cleared once its alert fired."""
     record.gated = gated is not None  # first: a run whose traffic never starts is still said as gated
+    record.rehearsal = investigate is None
     generator = stack.new_traffic(settings)
     generator.start()  # a provider out of reach raises here, before any traffic
     started = stack.clock()
@@ -245,14 +255,17 @@ def run(
             record.timings["alert_evaluation_began"] = record.evaluations[-1]["began"]  # as its alert's fired_at
             if gated is not None:
                 record.damage["at_alert"] = at_alert(record.evaluations[-1])
-            record.timings["loop_started_at"] = since()
-            result = investigate(alert)  # the alert as the rules raised it: the loop's only goal
-            record.timings["loop_ended_at"] = since()
-            record.loop = summary(result)
-            record.comparison = grading.compare(fault.name, record.loop["diagnosis"])
-            record.stopped = f"the loop stopped: {result.reason}"
-            if gated is not None and result.diagnosis is not None:  # the fault stays in place while Klaxon acts
-                _act(result.diagnosis, alert, gated, record, since, stack.alerting, lambda: evaluate("verify"))
+            if investigate is None:  # a rehearsal: no loop; the fault is cleared now, and the rules read once more
+                record.stopped = REHEARSED
+            else:
+                record.timings["loop_started_at"] = since()
+                result = investigate(alert)  # the alert as the rules raised it: the loop's only goal
+                record.timings["loop_ended_at"] = since()
+                record.loop = summary(result)
+                record.comparison = grading.compare(fault.name, record.loop["diagnosis"])
+                record.stopped = f"the loop stopped: {result.reason}"
+                if gated is not None and result.diagnosis is not None:  # the fault stays in place while Klaxon acts
+                    _act(result.diagnosis, alert, gated, record, since, stack.alerting, lambda: evaluate("verify"))
         finally:
             if gated is not None:
                 marks["clearing"] = _last_seq(gated)
@@ -491,6 +504,8 @@ def label(record: Record) -> str:
     if record.alert is None:
         return " ".join([*said, f"No alert fired. The run stopped: {record.stopped}."])
     said.append("The alert was raised by klaxon.alerts from what the stack showed.")
+    if record.rehearsal:
+        said.append(REHEARSAL)
     if "loop_started_at" in record.timings:
         offered = (
             ", offered one write action (rollback_deploy), which runs only if a person approves it at the gate"
@@ -650,6 +665,8 @@ def render(record: Record) -> str:
     title = (
         "Klaxon week 4: a gated run on a fault" if record.gated else "Klaxon week 3: a run of the first loop on a fault"
     )
+    if record.rehearsal:
+        title = "Klaxon week 4: a rehearsal of a fault, with no model"
     lines = [
         f"{title}: {f['name']}",
         label(record),
@@ -764,6 +781,15 @@ def klaxon_parts(folder: Path, deployer: Deployer) -> Gated:
     )
 
 
+def save(folder: Path, record: Record, header: Mapping) -> None:
+    """A run's evidence, written and printed, and a warning when its fault may still be in place."""
+    (folder / RUN_FILE).write_text(json.dumps(evidence(record, header), indent=2, default=str) + "\n")
+    print(render(record))
+    print(f"\nSaved in {clean_text(str(folder))}")
+    if "injected_at" in record.timings and record.cleared is None:
+        print(f"\nTHE FAULT MAY STILL BE IN PLACE: make fault-clear FAULT={record.fault['name']}", file=sys.stderr)
+
+
 def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     fault = faults.get(args.fault)
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
@@ -796,11 +822,7 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
         record.stopped, code = "interrupted" + (f" ({exc})" if str(exc) else ""), 130
     except Exception as exc:  # the fault was cleared and the traffic stopped, unless this is where it failed
         record.stopped, code = f"error: {type(exc).__name__}: {clean_text(str(exc), 300)}", 2
-    (folder / RUN_FILE).write_text(json.dumps(evidence(record, header), indent=2, default=str) + "\n")
-    print(render(record))
-    print(f"\nSaved in {clean_text(str(folder))}")
-    if "injected_at" in record.timings and record.cleared is None:
-        print(f"\nTHE FAULT MAY STILL BE IN PLACE: make fault-clear FAULT={fault.name}", file=sys.stderr)
+    save(folder, record, header)
     if code:
         return code
     if record.loop is None or record.loop["reason"] != "diagnosed":
@@ -808,6 +830,33 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     if record.gate is not None and record.gate["result"] in ("not run", "failed"):  # approved, and it did not run
         return 1
     return 1 if record.verification is not None and record.verification["verdict"] != "passed" else 0
+
+
+def _rehearse(args: argparse.Namespace, argv: Sequence[str]) -> int:
+    """A fault under traffic, with the rules and no model (week 4, item 4): what they see of it, and when its alert
+    fires, saved as a run's evidence is."""
+    fault = faults.get(args.fault)
+    try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
+        settings = traffic.Settings(rate=args.rate, seed=args.seed)
+        parts = Stack(faults.LocalStack(), alerts.Alerting())
+        header = {"fault_name": fault.name} | _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
+    except (ValueError, StackError) as exc:
+        print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
+        return 2
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+    folder = loop._new_folder(args.evidence_dir, f"{stamp}_rehearsal_{fault.name}")
+    record = Record(fault.describe(), asdict(settings), {})
+    print(f"The run's folder: {clean_text(str(folder))}", flush=True)
+    code = 0
+    try:
+        with stops_as_interrupts():
+            run(fault, record, parts, settings, None)
+    except KeyboardInterrupt as exc:
+        record.stopped, code = "interrupted" + (f" ({exc})" if str(exc) else ""), 130
+    except Exception as exc:  # the fault was cleared and the traffic stopped, unless this is where it failed
+        record.stopped, code = f"error: {type(exc).__name__}: {clean_text(str(exc), 300)}", 2
+    save(folder, record, header)
+    return code or (0 if record.alert is not None else 1)
 
 
 def _quiet(args: argparse.Namespace, argv: Sequence[str]) -> int:
@@ -870,7 +919,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     calm = actions.add_parser("quiet", help="traffic and no fault: do the alert rules stay quiet?")
     calm.add_argument("--minutes", type=float, default=5.0)
-    for sub in (live, calm):
+    rehearsal = actions.add_parser(
+        "rehearse", help="a fault under traffic and the alert rules, no model: what they see"
+    )
+    rehearsal.add_argument("fault", choices=sorted(faults.FAULTS))
+    for sub in (live, calm, rehearsal):
         sub.add_argument("--rate", type=float, default=3.0, help="new payments per second, on average")
         sub.add_argument("--seed", type=int, default=7)
         sub.add_argument("--evidence-dir", type=Path, default=REPO / "evidence" / "week4")
@@ -881,6 +934,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _grade(args.folder)
     if args.action == "quiet":
         return _quiet(args, argv)
+    if args.action == "rehearse":
+        return _rehearse(args, argv)
     return _run(args, argv)
 
 

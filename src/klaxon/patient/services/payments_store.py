@@ -67,8 +67,12 @@ class PaymentsStore(Protocol):
 
 
 class PgPaymentsStore:
-    def __init__(self, pool: ConnectionPool) -> None:
+    def __init__(self, pool: ConnectionPool, keep_refund_connections: bool = False) -> None:
         self.pool = pool  # autocommit connections with dict rows
+        # REFUND_CONNECTION=kept (week 4, fault 6), known to be bad: refunds_for takes a connection from the pool and
+        # never gives it back. Each refund asked for, and each payment read with its refunds, leaves the pool one
+        # connection smaller, until none is left and every request waits for one until the pool's timeout.
+        self.keep_refund_connections = keep_refund_connections
 
     def insert_or_get_payment(
         self, idempotency_key: str, fingerprint: str, customer: str, amount_cents: int, currency: str
@@ -130,8 +134,12 @@ class PgPaymentsStore:
         return RefundRow(**row)
 
     def refunds_for(self, payment_id: str) -> list[RefundRow]:
+        query = "SELECT * FROM refunds WHERE payment_id = %s ORDER BY id"
+        if self.keep_refund_connections:  # the known-bad leak, on purpose: taken from the pool, never put back
+            rows = self.pool.getconn().execute(query, (payment_id,)).fetchall()
+            return [RefundRow(**row) for row in rows]
         with self.pool.connection() as conn:
-            rows = conn.execute("SELECT * FROM refunds WHERE payment_id = %s ORDER BY id", (payment_id,)).fetchall()
+            rows = conn.execute(query, (payment_id,)).fetchall()
         return [RefundRow(**row) for row in rows]
 
     def pending_counts(self, older_than_seconds: int) -> tuple[int, int]:

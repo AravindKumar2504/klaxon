@@ -32,6 +32,19 @@ succeeded refund counts, and so does a pending one, whose outcome is unknown.
 So a refund stuck pending blocks a second one until it settles (a retry with
 its key, or its webhook). Only a failed refund does not count.
 
+Two deploy settings stand for bad versions of this service, the way the
+ledger's naive handler does (week 4, faults 4 and 6; klaxon.faults). Each is
+known to be bad (klaxon.patient.deploys), and compose.yaml and make up keep
+the good one:
+- CHARGE_AMOUNT_UNIT: cents (good), or dollars, a money-unit bug: the amount,
+  already in cents, is read as dollars and converted to cents again, so the
+  provider charges 100 times the amount. Our records keep the right amount,
+  and refunds send the right one.
+- REFUND_CONNECTION: returned (good), or kept, a connection leak: reading a
+  payment's refunds takes a connection from the database pool and never gives
+  it back (see payments_store). The pool runs dry, and then every request
+  waits for a connection until the pool's timeout, and fails.
+
 The ledger is not written here. Money is booked only from the provider's
 webhooks, one path for every payment (see ledger_consumer).
 
@@ -95,6 +108,9 @@ STUCK_AFTER_SECONDS = 60  # a payment pending longer than this is reported as st
 # unknown, so it counts until it settles (known gap 1, decided 2026-10-14). Only a failed one does not.
 COUNTED_REFUNDS = ("pending", "succeeded")
 EXCEEDS = "more than what is left to refund, counting the refunds whose outcome is not known yet"
+# CHARGE_AMOUNT_UNIT: what one unit of our amount is multiplied by in a charge to the provider. Our amounts are cents.
+CHARGE_UNITS = {"cents": 1, "dollars": 100}  # dollars: the known-bad money-unit bug (week 4, fault 4)
+REFUND_CONNECTIONS = {"returned": False, "kept": True}  # REFUND_CONNECTION: is the connection kept? (week 4, fault 6)
 
 
 class PaymentIn(BaseModel):
@@ -169,7 +185,26 @@ def _respond(outcome: Outcome, headers: dict[str, str] | None = None) -> JSONRes
     return JSONResponse(outcome.body, status_code=outcome.status, headers=headers or None)
 
 
-def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: ProviderClient) -> FastAPI:
+def charge_unit_setting(value: str) -> int:
+    """CHARGE_AMOUNT_UNIT: cents (the default), or dollars, known to be bad: each charge is 100 times the amount. What
+    our amount is multiplied by in a charge."""
+    if value not in CHARGE_UNITS:
+        raise RuntimeError(f"CHARGE_AMOUNT_UNIT must be cents or dollars, not {value!r}")
+    return CHARGE_UNITS[value]
+
+
+def refund_connection_setting(value: str) -> bool:
+    """REFUND_CONNECTION: returned (the default), or kept, known to be bad: reading a payment's refunds never gives its
+    database connection back. Whether the connection is kept."""
+    if value not in REFUND_CONNECTIONS:
+        raise RuntimeError(f"REFUND_CONNECTION must be returned or kept, not {value!r}")
+    return REFUND_CONNECTIONS[value]
+
+
+def create_app(
+    store: PaymentsStore, idempotency: RedisIdempotency, provider: ProviderClient, charge_unit: str = "cents"
+) -> FastAPI:
+    per_unit = charge_unit_setting(charge_unit)  # 1, or 100 with the known-bad money-unit bug
     app = FastAPI(title="Payments API", telemetry=telemetry.FASTAPI)
     add_request_logging(app, logger)
     add_trusted_hosts(app, "payments-api")
@@ -220,7 +255,11 @@ def create_app(store: PaymentsStore, idempotency: RedisIdempotency, provider: Pr
             # Layer 3: new, or pending from an earlier try that did not finish. Same provider key either way.
             try:
                 charge = provider.create_payment(
-                    row.customer, row.amount_cents, row.currency, row.id, metadata={"klaxon_payment_id": row.id}
+                    row.customer,
+                    row.amount_cents * per_unit,
+                    row.currency,
+                    row.id,
+                    metadata={"klaxon_payment_id": row.id},
                 )
             except ProviderUnavailable as exc:
                 log(
@@ -378,6 +417,15 @@ def observe_pending_payments(store: PaymentsStore) -> None:
     )
 
 
+def deploy_settings_from_env() -> tuple[str, bool]:
+    """The two settings that stand for bad versions of this service (week 4, faults 4 and 6), from its environment: the
+    charge unit (cents unless CHARGE_AMOUNT_UNIT says dollars), and whether reading a payment's refunds keeps its
+    connection (not unless REFUND_CONNECTION says kept). A value that is neither stops the service before it starts."""
+    unit = env_str("CHARGE_AMOUNT_UNIT", "cents")
+    charge_unit_setting(unit)
+    return unit, refund_connection_setting(env_str("REFUND_CONNECTION", "returned"))
+
+
 def provider_from_env() -> ProviderClient:
     """The provider client, from this service's settings: its circuit breaker on unless PROVIDER_BREAKER=off."""
     return ProviderClient(
@@ -404,9 +452,10 @@ def main() -> None:
         env_str("REDIS_URL", "redis://redis:6379/0"), socket_timeout=0.5, socket_connect_timeout=0.5
     )
     provider = provider_from_env()
-    store = PgPaymentsStore(pool)
+    unit, kept = deploy_settings_from_env()
+    store = PgPaymentsStore(pool, keep_refund_connections=kept)
     observe_pending_payments(store)
-    app = create_app(store, RedisIdempotency(redis_client), provider)
+    app = create_app(store, RedisIdempotency(redis_client), provider, charge_unit=unit)
     uvicorn.run(app, host="0.0.0.0", port=env_int("PORT", 8000), log_config=None, access_log=False)
 
 

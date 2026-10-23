@@ -31,11 +31,17 @@ def verdict(fault, hypothesis, version=grading.RUBRIC_VERSION):
 
 
 VERSIONS = sorted(grading.VERSIONS)
+FIRST_THREE = ("duplicate-delivery", "poison-message", "provider-outage")
+# The faults each version grades: versions 1 and 2 came before faults 4 to 6 (week 4, item 4).
+GRADES = {1: FIRST_THREE, 2: FIRST_THREE, 3: tuple(faults.FAULTS)}
+GRADED = [(name, version) for version in VERSIONS for name in GRADES[version]]
+PAIRS = [(name, other, version) for version in VERSIONS for name in GRADES[version] for other in GRADES[version]]
 
 
 @pytest.mark.parametrize("version", VERSIONS)
 def test_every_fault_has_a_rubric_with_three_required_elements(version):
-    assert set(grading.VERSIONS[version]) == set(faults.FAULTS)
+    assert set(grading.VERSIONS[version]) == set(GRADES[version])
+    assert set(grading.VERSIONS[grading.RUBRIC_VERSION]) == set(faults.FAULTS)  # the latest grades every fault
     for rubric in grading.VERSIONS[version].values():
         assert sum(element.required for element in rubric.elements) == 3
         for element in rubric.elements:
@@ -43,25 +49,30 @@ def test_every_fault_has_a_rubric_with_three_required_elements(version):
                 re.compile(pattern)
 
 
-@pytest.mark.parametrize("version", VERSIONS)
-@pytest.mark.parametrize("name", sorted(faults.FAULTS))
+@pytest.mark.parametrize("name, version", GRADED)
 def test_each_faults_own_recorded_cause_names_the_cause(name, version):
     found = grading.compare(name, diagnosis(faults.FAULTS[name].recorded(version).cause), version)
     assert found["verdict"] == "names the cause"
     assert all(item["named"] for item in found["elements"])
 
 
-@pytest.mark.parametrize("version", VERSIONS)
-@pytest.mark.parametrize("name, other", [(a, b) for a in faults.FAULTS for b in faults.FAULTS if a != b])
+@pytest.mark.parametrize("name, other, version", [(a, b, v) for a, b, v in PAIRS if a != b])
 def test_no_faults_cause_names_another_faults_cause(name, other, version):
     assert verdict(other, faults.FAULTS[name].recorded(version).cause, version) != "names the cause"
+
+
+@pytest.mark.parametrize("version", [1, 2])
+@pytest.mark.parametrize("name", sorted(set(faults.FAULTS) - set(FIRST_THREE)))
+def test_a_version_from_before_a_fault_refuses_to_grade_it(name, version):
+    with pytest.raises(ValueError, match=f"rubric version {version} has no rubric for {name}"):
+        grading.compare(name, diagnosis("x"), version)
 
 
 @pytest.mark.parametrize("version", VERSIONS)
 def test_the_first_live_runs_wrong_diagnosis_misses_every_faults_cause(version):
     # It called an idle ledger consumer "hung or silently stalled": that restates the alert, and names no cause.
     recorded = read_trace(FIRST_LIVE_RUN)[-1]["diagnosis"]
-    for name in faults.FAULTS:
+    for name in GRADES[version]:
         assert grading.compare(name, recorded, version)["verdict"] == "misses the cause", name
 
 
@@ -224,6 +235,7 @@ def test_the_printed_comparison_cleans_the_models_words():
 # After the independent review (DECISIONS.md lists its findings by number)
 
 FAULT_RUNS = REPO / "evidence" / "week3"
+GATED_RUNS = REPO / "evidence" / "week4"
 
 
 def test_the_rubric_is_version_1_exactly_as_committed_before_the_live_runs():
@@ -237,16 +249,14 @@ def test_the_rubric_is_version_1_exactly_as_committed_before_the_live_runs():
     assert "rubric version 1, committed in 95a64ab before the first live runs on the faults" in grading.BY[1]
 
 
-def test_version_2_is_version_1_but_for_fault_3_and_new_comparisons_use_it():
+def test_version_2_is_version_1_but_for_fault_3():
     # Week 4, item 3: committed before any live run on fault 3 with the circuit breaker. Pinned the same way.
-    assert grading.RUBRIC_VERSION == 2 and grading.RUBRICS is grading.VERSIONS[2]
-    assert grading.fingerprint() == grading.fingerprint(2)
     assert grading.fingerprint(2) == "3aafea2a2d77b934fada2e8817d8e693e23e1a895e9eeacea41cd366a34356c9"
     assert {name: rubric for name, rubric in grading.VERSIONS[2].items() if name != "provider-outage"} == {
         name: rubric for name, rubric in grading.VERSIONS[1].items() if name != "provider-outage"
     }
     assert grading.VERSIONS[2]["provider-outage"] != grading.VERSIONS[1]["provider-outage"]
-    found = grading.compare("provider-outage", diagnosis("x"))
+    found = grading.compare("provider-outage", diagnosis("x"), version=2)
     assert found["rubric"] == {"version": 2, "sha256": grading.fingerprint(2)}
     assert (found["recorded_cause"], found["remedy"]) == (
         faults.FAULTS["provider-outage"].cause,
@@ -256,6 +266,87 @@ def test_version_2_is_version_1_but_for_fault_3_and_new_comparisons_use_it():
         "rubric version 2, committed in 8e58e7f before any live run on fault 3 with the circuit breaker"
         in grading.BY[2]
     )
+
+
+def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6_and_new_comparisons_use_it():
+    # Week 4, item 4: committed before any live run on faults 4 to 6. Pinned the same way.
+    assert grading.RUBRIC_VERSION == 3 and grading.RUBRICS is grading.VERSIONS[3]
+    assert grading.fingerprint() == grading.fingerprint(3)
+    assert grading.fingerprint(3) == V3_FINGERPRINT
+    assert {name: grading.VERSIONS[3][name] for name in FIRST_THREE} == grading.VERSIONS[2]
+    assert set(grading.VERSIONS[3]) - set(FIRST_THREE) == {"money-unit", "secret-rotation", "pool-exhaustion"}
+    for name in faults.FAULTS:
+        found = grading.compare(name, diagnosis("x"))
+        assert found["rubric"] == {"version": 3, "sha256": grading.fingerprint(3)}
+        assert (found["recorded_cause"], found["remedy"]) == (faults.FAULTS[name].cause, faults.FAULTS[name].remedy)
+    assert "rubric version 3, committed" in grading.BY[3] and "before any live run on faults 4 to 6" in grading.BY[3]
+
+
+V3_FINGERPRINT = "fb37dd634d2a60b12322899d395e714666b2909cad1e2ce1f8f78f3c37dd6639"  # pinned before any live run
+
+
+@pytest.mark.parametrize(
+    "fault, hypothesis, expected",
+    [
+        (
+            "money-unit",
+            "A deploy of payments-api reads our amounts, already in cents, as dollars, so the provider charges each"
+            " customer 100 times the amount.",
+            "names the cause",
+        ),
+        (
+            "money-unit",
+            "Since its deploy, payments-api sends 100x amounts: the provider's charges are 100x ours.",
+            "names the cause",
+        ),
+        ("money-unit", "payments-api overcharges customers.", "partly"),
+        ("money-unit", "Our payments disagree with the provider's charges.", "misses the cause"),
+        (
+            "secret-rotation",
+            "The webhook receiver was deployed with a rotated secret the provider does not sign with, so it refuses"
+            " every webhook with a 400.",
+            "names the cause",
+        ),
+        ("secret-rotation", "Webhooks fail their signature check at the receiver.", "partly"),
+        (
+            "secret-rotation",
+            "Our books are behind the provider: its webhooks are not acknowledged.",
+            "misses the cause",
+        ),
+        (
+            "pool-exhaustion",
+            "A payments-api deploy leaks database connections in its refund path: its pool runs dry, and requests"
+            " wait for a connection until they time out.",
+            "names the cause",
+        ),
+        ("pool-exhaustion", "The payments API's database pool is exhausted.", "partly"),
+        ("pool-exhaustion", "Payments are slow and fail with 500s.", "misses the cause"),
+        ("pool-exhaustion", "The provider is down, and our breaker is open.", "misses the cause"),
+    ],
+)
+def test_version_3_hypotheses_written_for_the_test_get_the_expected_verdict(fault, hypothesis, expected):
+    assert verdict(fault, hypothesis, version=3) == expected
+
+
+@pytest.mark.parametrize(
+    "fault, kind, target, fits",
+    [
+        ("money-unit", "rollback", "payments-api", True),
+        ("money-unit", "config_change", "payments-api", True),
+        ("money-unit", "data_repair", "payments-api", False),  # the overcharges need repair, but that is not the fix
+        ("money-unit", "rollback", "ledger-consumer", False),
+        ("secret-rotation", "rollback", "webhook-receiver", True),
+        ("secret-rotation", "config_change", "webhook-receiver", True),
+        ("secret-rotation", "none", "fake-provider", False),
+        ("secret-rotation", "rollback", "payments-api", False),
+        ("pool-exhaustion", "rollback", "payments-api", True),
+        ("pool-exhaustion", "restart", "payments-api", False),  # a fresh pool leaks again
+        ("pool-exhaustion", "scale", "postgres", False),
+    ],
+)
+def test_in_version_3_whether_the_proposed_fix_fits_faults_4_to_6(fault, kind, target, fits):
+    found = grading.compare(fault, diagnosis("x", kind=kind, target=target), version=3)
+    assert found["fix_fits_the_remedy"] is fits
 
 
 def test_a_comparison_by_version_1_reads_the_cause_fault_3_recorded_then():
@@ -269,10 +360,11 @@ def test_a_comparison_by_version_1_reads_the_cause_fault_3_recorded_then():
 @pytest.mark.parametrize(
     "saved, version",
     [
-        (None, 2),  # no comparison saved: the latest
+        (None, 3),  # no comparison saved: the latest
         ({"verdict": "names the cause"}, 1),  # saved before comparisons recorded a version: the week 3 runs
         ({"rubric": {"version": 1, "sha256": "x"}}, 1),
         ({"rubric": {"version": 2, "sha256": "x"}}, 2),
+        ({"rubric": {"version": 3, "sha256": "x"}}, 3),
     ],
 )
 def test_a_saved_comparison_is_graded_again_with_its_own_version(saved, version):
@@ -291,22 +383,41 @@ def test_a_saved_comparison_that_is_not_an_object_is_refused(saved):
         grading.version_of(saved)
 
 
+# The rules' own sentences for each fault's symptoms. Faults 4 to 6's are the rules' sentences for what those faults are
+# built to show; their live runs' alerts join the ones read from the evidence below.
+MADE = [
+    (
+        "duplicate-delivery",
+        alerts.money(
+            {"outcome": "failed", "invariants": 5, "failed": {"posted_exactly_once": 7}, "money_off_cents": 1}
+        ).sentence,
+    ),
+    ("poison-message", alerts.lags([({"consumer": "ledger"}, 271.0)])[0].sentence),
+    ("poison-message", alerts.books({"outcome": "could not settle", "messages_behind": {"ledger": 124}}).sentence),
+    ("provider-outage", f"{alerts.errors(2.2, 2.97).sentence} {alerts.latency(10.0).sentence}"),
+    (
+        "money-unit",
+        alerts.money(
+            {"outcome": "failed", "invariants": 5, "failed": {"payments_match_provider": 40}, "money_off_cents": 0}
+        ).sentence,
+    ),
+    ("secret-rotation", alerts.books({"outcome": "could not settle", "webhooks_not_acknowledged": 52}).sentence),
+    ("pool-exhaustion", f"{alerts.errors(3.0, 3.0).sentence} {alerts.latency(5.0).sentence}"),
+]
+
+
 @pytest.mark.parametrize("version", VERSIONS)
 def test_an_alerts_own_words_never_name_enough_of_its_faults_cause(version):
     # Finding 2: restating the alert is not a diagnosis. The alerts the live runs raised (recorded in their run.json),
     # each read as a hypothesis, miss their fault's cause; so do the rules' sentences for those symptoms.
-    saved = [json.loads(path.read_text()) for path in sorted(FAULT_RUNS.glob("*_fault-run_*/run.json"))]
+    runs = [*FAULT_RUNS.glob("*_fault-run_*/run.json"), *GATED_RUNS.glob("*_gated-run_*/run.json")]
+    saved = [json.loads(path.read_text()) for path in sorted(runs)]
     recorded = [(run["fault"]["name"], run["alert"]["summary"]) for run in saved if run["alert"] is not None]
-    assert {fault for fault, _ in recorded} == set(faults.FAULTS)  # a run that stopped before its alert has none
-    made = {
-        "duplicate-delivery": alerts.money(
-            {"outcome": "failed", "invariants": 5, "failed": {"posted_exactly_once": 7}, "money_off_cents": 1}
-        ).sentence,
-        "poison-message": alerts.lags([({"consumer": "ledger"}, 271.0)])[0].sentence,
-        "provider-outage": f"{alerts.errors(2.2, 2.97).sentence} {alerts.latency(10.0).sentence}",
-    }
-    for fault, sentence in [*recorded, *made.items()]:
-        assert verdict(fault, sentence, version) == "misses the cause", (fault, sentence)
+    assert set(FIRST_THREE) <= {fault for fault, _ in recorded}  # a run that stopped before its alert has none
+    assert {fault for fault, _ in MADE} == set(faults.FAULTS)
+    for fault, sentence in [*recorded, *MADE]:
+        if fault in GRADES[version]:
+            assert verdict(fault, sentence, version) == "misses the cause", (fault, sentence)
 
 
 # Finding 2's examples: what a person would say, and version 1 does not. Each is a known limit, kept as a test that

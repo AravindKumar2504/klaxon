@@ -315,6 +315,92 @@ def test_the_api_runs_its_breaker_unless_told_off(monkeypatch):
     assert payments_api.provider_from_env().breaker is None
 
 
+# Week 4, item 4: two settings that stand for bad versions of this service (faults 4 and 6 in klaxon.faults)
+
+
+def test_with_the_money_unit_bug_the_provider_charges_100_times_the_amount_and_our_records_keep_it_right(parts):
+    store, redis, provider = parts
+    api = TestClient(create_app(store, RedisIdempotency(redis), provider, charge_unit="dollars"))
+    payment = pay(api, amount=2_500).json()
+    [(_, key, charged)] = provider.calls
+    assert (key, charged["amount_cents"]) == ("pmt_000001", 250_000)  # $25.00 read as dollars: $2,500.00
+    assert payment["amount_cents"] == 2_500 and store.get_payment("pmt_000001").amount_cents == 2_500
+    # Refunds send the right amount: the bug is in the charge only.
+    assert refund(api, payment["id"], 2_500, "r1").status_code == 201
+    [(_, _, refunded)] = [call for call in provider.calls if call[0] == "create_refund"]
+    assert refunded["amount_cents"] == 2_500
+
+
+def test_by_default_a_charge_is_the_amount_in_cents(api, parts):
+    pay(api, amount=2_500)
+    assert parts[2].calls[0][2]["amount_cents"] == 2_500
+
+
+@pytest.mark.parametrize("unit", ["euros", "", "Cents", "100"])
+def test_a_charge_unit_that_is_neither_cents_nor_dollars_stops_the_api(parts, unit):
+    store, redis, provider = parts
+    with pytest.raises(RuntimeError, match="CHARGE_AMOUNT_UNIT must be cents or dollars"):
+        create_app(store, RedisIdempotency(redis), provider, charge_unit=unit)
+
+
+def test_the_api_reads_its_charge_unit_and_its_refund_connection_from_its_settings(monkeypatch):
+    from klaxon.patient.services import payments_api
+
+    monkeypatch.delenv("CHARGE_AMOUNT_UNIT", raising=False)
+    monkeypatch.delenv("REFUND_CONNECTION", raising=False)
+    assert payments_api.deploy_settings_from_env() == ("cents", False)
+    monkeypatch.setenv("CHARGE_AMOUNT_UNIT", "dollars")
+    monkeypatch.setenv("REFUND_CONNECTION", "kept")
+    assert payments_api.deploy_settings_from_env() == ("dollars", True)
+    monkeypatch.setenv("REFUND_CONNECTION", "returned")
+    assert payments_api.deploy_settings_from_env() == ("dollars", False)
+    monkeypatch.setenv("REFUND_CONNECTION", "leaky")
+    with pytest.raises(RuntimeError, match="REFUND_CONNECTION must be returned or kept"):
+        payments_api.deploy_settings_from_env()
+    monkeypatch.setenv("REFUND_CONNECTION", "returned")
+    monkeypatch.setenv("CHARGE_AMOUNT_UNIT", "pennies")
+    with pytest.raises(RuntimeError, match="CHARGE_AMOUNT_UNIT must be cents or dollars"):
+        payments_api.deploy_settings_from_env()
+
+
+class MadeUpPoolClass:
+    """Stands in for psycopg_pool.ConnectionPool in main(): it connects to nothing."""
+
+    check_connection = staticmethod(lambda conn: None)
+
+    def __init__(self, *args, **kwargs):
+        self.kwargs = kwargs
+
+
+def test_the_service_passes_its_deploy_settings_to_its_store_and_its_app(monkeypatch):
+    """main(), with every outside part made up (no database, Redis or server): the two settings reach the store and
+    the app."""
+    from klaxon.patient.services import payments_api
+
+    made = {}
+    monkeypatch.setattr(payments_api, "configure_logging", lambda name: None)
+    monkeypatch.setattr(payments_api.telemetry, "setup", lambda name: None)
+    monkeypatch.setattr(payments_api, "ConnectionPool", MadeUpPoolClass)
+    monkeypatch.setattr(payments_api.redis.Redis, "from_url", staticmethod(lambda *args, **kwargs: FakeRedis()))
+    monkeypatch.setattr(payments_api, "observe_pending_payments", lambda store: None)
+
+    def app(store, idempotency, provider, charge_unit="cents"):
+        made.update(store=store, unit=charge_unit)
+        return "the app"
+
+    monkeypatch.setattr(payments_api, "create_app", app)
+    monkeypatch.setattr(payments_api.uvicorn, "run", lambda app, **kwargs: made.update(ran=app))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://made-up")
+    monkeypatch.setenv("CHARGE_AMOUNT_UNIT", "dollars")
+    monkeypatch.setenv("REFUND_CONNECTION", "kept")
+    payments_api.main()
+    assert (made["unit"], made["store"].keep_refund_connections, made["ran"]) == ("dollars", True, "the app")
+    monkeypatch.setenv("CHARGE_AMOUNT_UNIT", "cents")
+    monkeypatch.setenv("REFUND_CONNECTION", "returned")
+    payments_api.main()
+    assert (made["unit"], made["store"].keep_refund_connections) == ("cents", False)
+
+
 def test_only_a_settled_payment_can_be_refunded(api, parts):
     store, redis, provider = parts
     provider.unavailable = True

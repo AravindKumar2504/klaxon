@@ -10,13 +10,18 @@ records each fault's cause; klaxon.grading compares the diagnosis with it).
     PaymentsErrorsHigh   over 20% of the answers to POST /payments were 5xx in the last minute
     PaymentsLatencyHigh  the p95 latency of POST /payments was over 2 s in the last minute
     ConsumerLagHigh      a consumer group is more than 50 messages behind on the topic provider-events
+    BooksBehindProvider  our books cannot catch up with the provider: the money check could not settle (week 4)
 
 The metric rules read Prometheus on this Mac (GET only, no redirects followed, no proxies) and fire once their
 condition has held at 2 evaluations in a row, so that one blip does not page (Prometheus calls this `for`). The
 harness waits 15 s between evaluations, and an evaluation takes as long as its money check: up to 15 s more when the
 books cannot settle. The error rule needs at least 0.2 requests per second: below that, one 503 would be a share of
 100%. The money rule runs the money check through its read-only role, waiting up to 15 s for it to settle, and fires
-the first time it fails. A check that cannot settle does not fire it: a stalled consumer shows as lag.
+the first time it fails. A check that cannot settle does not fire it. The books rule (week 4) does, at 2 evaluations
+in a row: in that time our side did not handle everything the provider did up to the check's cutoff. Webhooks that our
+side does not acknowledge, or messages a consumer does not handle, both keep it from settling, whatever the cause: a
+stalled consumer, which also shows as lag, or webhooks that never reach Kafka, which nothing else shows. On a quiet
+stack a whole evaluation, its money check included, took about a second (evidence/week4/*_alerts-under-traffic_*).
 
 The thresholds come from week 2's measurements at 3 payments per second (evidence/week2/*_live-fault_*). On a healthy
 stack, under the traffic's noise, the p95 of POST /payments was 0.06 to 0.09 s in three runs and 0.50 s in the
@@ -59,6 +64,7 @@ ERROR_SHARE = 0.20
 MIN_REQUESTS_PER_SECOND = 0.2  # below this, a share of errors says little
 LAG_MESSAGES = 50
 MONEY_SETTLE_SECONDS = 15.0  # how long the money check may wait to settle each time
+BOOKS_IN_A_ROW = 2  # evaluations in a row at which the money check could not settle before the books rule fires
 
 _API = 'job="klaxon-patient/payments-api", http_route="/payments"'  # the route takes only POST
 QUERIES = {
@@ -76,7 +82,8 @@ CONSUMER_GROUPS = {"ledger": "ledger", "payment-confirmer": "payment-confirmer"}
 INVARIANTS = frozenset(
     {"posted_exactly_once", "ledger_balanced", "matches_provider", "payments_match_provider", "refunds_match_provider"}
 )
-ORDER = ("MoneyCheckFailed", "PaymentsErrorsHigh", "PaymentsLatencyHigh", "ConsumerLagHigh")  # how an alert lists them
+# How an alert lists them.
+ORDER = ("MoneyCheckFailed", "PaymentsErrorsHigh", "PaymentsLatencyHigh", "ConsumerLagHigh", "BooksBehindProvider")
 
 Series = list[tuple[dict, float | None]]  # an instant query's answer: each series' labels and its value
 
@@ -214,6 +221,39 @@ def _money_sentence(reading: Mapping) -> str:
     return sentence
 
 
+def books(reading: Mapping) -> Check:
+    """BooksBehindProvider: the money check could not settle in its wait, so our side has not handled everything the
+    provider did up to its cutoff. Its numbers: whether it settled (None when the check could not run, so nobody can
+    say), and how far from settled it was when it gave up."""
+    outcome = reading.get("outcome")
+    settled = None if outcome not in ("passed", "failed", "could not settle") else outcome != "could not settle"
+    numbers = {
+        "settled": settled,
+        "webhooks_not_acknowledged": reading.get("webhooks_not_acknowledged"),
+        "messages_behind": reading.get("messages_behind"),
+    }
+    breached = settled is False
+    sentence = _books_sentence(reading) if breached else ""
+    return Check("BooksBehindProvider", "the books", numbers, breached, BOOKS_IN_A_ROW, sentence)
+
+
+def _books_sentence(reading: Mapping) -> str:
+    sentence = (
+        f"Our books cannot catch up with the provider: at each of the last {BOOKS_IN_A_ROW} evaluations, the money"
+        f" check waited {MONEY_SETTLE_SECONDS:g} s and could not settle up to its cutoff."
+    )
+    webhooks, behind = reading.get("webhooks_not_acknowledged"), reading.get("messages_behind")
+    if type(webhooks) is int and webhooks > 0:
+        sentence += f" At the last one, {webhooks} of the provider's webhooks up to it had not been acknowledged yet."
+    elif isinstance(behind, Mapping):
+        named = [
+            f"{name} {n}" for name, n in behind.items() if name in CONSUMER_GROUPS.values() and type(n) is int and n > 0
+        ]
+        if named:
+            sentence += f" At the last one, messages up to it were not handled yet: {', '.join(named)}."
+    return sentence
+
+
 def raise_alert(firing: Sequence[Check], at_utc: str) -> Alert | None:
     """One alert for every rule that fires at one evaluation, as an alerting system groups them: named after the
     first in ORDER, and saying what each one saw."""
@@ -267,11 +307,12 @@ def one(series: Series, empty: float | None = None) -> float | None:
 
 
 def read_money(check: Callable[..., live.LiveCheck] = live.check_live) -> dict:
-    """The money check's verdict in numbers and known names: passed, failed, could not settle, or could not run."""
+    """The money check's verdict in numbers and known names: passed, failed, could not settle (with how far from
+    settled it was), or could not run."""
     try:
         result = check(wait=True, timeout_seconds=MONEY_SETTLE_SECONDS)
-    except live.NotSettled:
-        return {"outcome": "could not settle"}
+    except live.NotSettled as exc:
+        return {"outcome": "could not settle"} | unsettled(exc.settling)
     except Exception as exc:  # out of reach, or an answer it refuses to read: no verdict either way
         return {"outcome": "could not run", "error": type(exc).__name__}
     report = result.report
@@ -281,6 +322,21 @@ def read_money(check: Callable[..., live.LiveCheck] = live.check_live) -> dict:
         "failed": {inv.name: len(inv.evidence) for inv in report.invariants if not inv.passed},
         "money_off_cents": int(report.money_off_cents),
     }
+
+
+def unsettled(settling: live.Settling) -> dict:
+    """How far from settled a money check was when it gave up: the provider's webhooks up to its cutoff that our side
+    had not acknowledged yet, or, once they all were, the messages up to it each consumer group had not handled yet.
+    Numbers and known names only: a group this module does not know is left out."""
+    if settling.behind is None:
+        pending = settling.pending_deliveries
+        return {"webhooks_not_acknowledged": pending if type(pending) is int and pending >= 0 else None}
+    behind = {
+        CONSUMER_GROUPS[group]: n
+        for group, n in settling.behind.items()
+        if isinstance(group, str) and group in CONSUMER_GROUPS and type(n) is int and n >= 0
+    }
+    return {"messages_behind": behind}
 
 
 def utc(seconds: float) -> str:
@@ -330,7 +386,7 @@ class Alerting:
         else:
             checks += [latency(p95), errors(per_second, requests), *lags(lag)]
         reading = self.money_check()
-        checks.append(money(reading))
+        checks += [money(reading), books(reading)]
         if reading.get("outcome") == "could not run":
             problems.append(f"the money check could not run ({reading.get('error')})")
         return checks, problems
