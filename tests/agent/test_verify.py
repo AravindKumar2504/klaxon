@@ -518,12 +518,14 @@ class Clock:
 
 
 def rounds_of(*readings):
-    """The rules' evaluations, one per round, from these readings in turn (the last one again after them)."""
+    """The rules' evaluations, one per round, from these readings in turn (the last one again after them): their
+    Prometheus answers and their money check."""
     alerting = rules(Readings())
     queue = list(readings)
 
     def evaluate():
-        alerting.prometheus = (queue.pop(0) if len(queue) > 1 else queue[0]).prometheus
+        now = queue.pop(0) if len(queue) > 1 else queue[0]
+        alerting.prometheus, alerting.money_check = now.prometheus, now.money_check
         return alerting.evaluate()
 
     return evaluate
@@ -660,6 +662,33 @@ def test_the_health_sentence_names_the_books_rule_only_for_health_that_read_it()
     assert (
         before.said[0]
         == "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row."
+    )
+
+
+def test_health_whose_money_check_gave_no_verdict_says_the_books_rule_had_no_data():
+    """The re-check's finding 3: a round whose money check gave no verdict leaves the books rule out, so health must not
+    say it was quiet."""
+
+    def broken(wait, timeout_seconds):
+        raise OSError("x")
+
+    found, _ = verified(broken, broken, readings=Readings(money={"outcome": "could not run", "error": "OSError"}))
+    assert found.health.healthy and found.health.books is False
+    assert found.said[0] == (
+        "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row. The books"
+        " rule had no data: the money check gave no verdict."
+    )
+
+
+def test_health_says_the_books_rule_was_quiet_only_when_both_quiet_rounds_read_it():
+    clock = Clock()
+    no_verdict = Readings(money={"outcome": "could not run", "error": "OSError"})
+    health = verify.wait_healthy(rounds_of(Readings(), no_verdict), lambda: HEALTHY_ROWS, clock.sleep, clock)
+    assert health.healthy and health.books is False  # its second quiet round had no verdict to read
+    health = verify.wait_healthy(rounds_of(Readings()), lambda: HEALTHY_ROWS, clock.sleep, clock)
+    assert health.healthy and health.books is True
+    assert (
+        verify.books_read(evaluation_of(Readings())) is True and verify.books_read(evaluation_of(no_verdict)) is False
     )
 
 

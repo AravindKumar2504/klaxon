@@ -4,12 +4,14 @@ An action that ran (klaxon.agent.gate) does not end an incident. After it, code 
 model:
 
     health  every container is healthy (the one-shot kafka-init has exited 0), and the metric rules of klaxon.alerts
-            and its books rule are quiet at 2 evaluations in a row: every signal read, no condition holding. Within
-            3 minutes of the first evaluation, which comes once the first money check below is done.
+            and its books rule are quiet at 2 evaluations in a row: every signal read, no condition holding (the
+            books rule only when the money check gave a verdict). Within 3 minutes of the first evaluation, which
+            comes once the first money check below is done.
     money   the money check (klaxon.checks.live) right after the action, and again at least 60 s after it.
 
 The books rule (week 4) asks only whether the money check settled: whether our side caught up with the provider, so a
-backlog the action freed has drained. The money rule is left out of health: the money is judged on its own, below,
+backlog the action freed has drained. A money check with no verdict (it could not run) is left to the money's own
+judgment, which then cannot verify; health then says the books rule had no data. The money rule is left out of health: the money is judged on its own, below,
 because a rollback can remove a cause and still leave the money wrong. So the money has two questions, said apart:
 
     the cause is removed   no new damage after the action: nothing the provider made in the minute after it was
@@ -305,7 +307,8 @@ def read_containers() -> list[dict]:
 
 def metrics_unwell(evaluation: alerts.Evaluation) -> str | None:
     """Why the metric rules and the books rule are not quiet at this evaluation, or None: each must have read its
-    signal, with no condition holding. The money rule is left out: the money is judged apart."""
+    signal, with no condition holding; the books rule only when the money check gave a verdict (books_read). The money
+    rule is left out: the money is judged apart."""
     read = {(check.rule, check.subject): check for check in evaluation.checks}
     missing, held = [], []
     lags = (("ConsumerLagHigh", group, "messages_behind") for group in alerts.CONSUMER_GROUPS.values())
@@ -323,6 +326,12 @@ def metrics_unwell(evaluation: alerts.Evaluation) -> str | None:
     if missing:
         return f"no data for {', '.join(missing)}"
     return None
+
+
+def books_read(evaluation: alerts.Evaluation) -> bool:
+    """Whether the books rule had a verdict at this evaluation: the money check settled, or could not."""
+    check = next((c for c in evaluation.checks if (c.rule, c.subject) == BOOKS[:2]), None)
+    return check is not None and check.numbers.get(BOOKS[2]) is not None
 
 
 def containers_unwell(rows: Sequence[Mapping]) -> str | None:
@@ -348,7 +357,9 @@ class Health:
     healthy: bool
     why: str | None  # the last reason it was not, when it was not healthy in time
     rounds: tuple[dict, ...]  # each round: when, and why it was not quiet (None: quiet)
-    books: bool = False  # whether its rounds read the books rule too (week 4, item 4): health saved before did not
+    # Whether its quiet rounds read the books rule's verdict (week 4, item 4): False when the money check gave none;
+    # None for health saved before the books rule.
+    books: bool | None = None
 
 
 def wait_healthy(
@@ -363,10 +374,12 @@ def wait_healthy(
     rounds in a row; at most `within` seconds."""
     started = clock()
     rounds: list[dict] = []
+    read: list[bool] = []  # at each round, whether the books rule had a verdict to read
     in_a_row = 0
     while True:
         evaluation = rules()
         why = metrics_unwell(evaluation)
+        read.append(books_read(evaluation))
         try:
             unwell = containers_unwell(containers())
         except Exception as exc:  # docker out of reach: not healthy, as far as anyone can tell
@@ -375,9 +388,9 @@ def wait_healthy(
         rounds.append({"at_utc": evaluation.at_utc, "unwell": why})
         in_a_row = 0 if why else in_a_row + 1
         if in_a_row >= QUIET_IN_A_ROW:
-            return Health(True, None, tuple(rounds), books=True)
+            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]))
         if clock() - started + every > within:
-            return Health(False, why or "not quiet long enough", tuple(rounds), books=True)
+            return Health(False, why or "not quiet long enough", tuple(rounds), books=read[-1])
         sleep(every)
 
 
@@ -481,6 +494,8 @@ def say(found: Verification) -> list[str]:
     if health.healthy:
         rules = "the metric rules and the books rule were" if health.books else "the metric rules were"
         lines = [f"Healthy: every container is healthy, and {rules} quiet at {QUIET_IN_A_ROW} evaluations in a row."]
+        if health.books is False:
+            lines[0] += " The books rule had no data: the money check gave no verdict."
     else:
         lines = [f"Not healthy within {HEALTHY_WITHIN_SECONDS:g} s: {health.why}."]
     if money.cause_removed is True:

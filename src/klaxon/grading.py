@@ -197,6 +197,13 @@ RUBRICS_V2 = RUBRICS_V1 | {
 }
 # The payments API: by name, or as "our API" or "the API".
 API = r"payments[-_ ]?api|\b(our|the) api\b"
+# Fault 5: a change of the secret, and a gap of a few words within one clause (not across a full stop or semicolon).
+SECRET = r"(secret|signing key|hmac|rotat)"
+CHANGE = r"(deploy|redeploy|roll(ed|s)?[ -]?out|config)"
+GAP = r"[^\w.;]+(\w+[^\w.;]+){0,8}"
+# Fault 6: a pool that is not the database's (Redis's, an HTTP client's, a thread or worker pool).
+NOT_OTHER = r"(?<!redis )(?<!http )(?<!https )(?<!httpx )(?<!thread )(?<!worker )"
+LATE = r"(?! (in time|quickly|fast|soon|promptly|on time))"  # a connection released late is not a leak
 RUBRICS_V3 = RUBRICS_V2 | {
     "money-unit": Rubric(
         elements=(
@@ -218,8 +225,11 @@ RUBRICS_V3 = RUBRICS_V2 | {
                 "how: the provider charges customers more than our records say",
                 (
                     r"overcharg",
-                    r"charg\w* (the |each |every )?(customers?|them|cards?) (100|more|too much|a hundred)",
+                    r"charg\w*\W+(\w+\W+){0,8}(100|hundred|more than|too much)",  # the charge, in any word order
+                    r"\b(bill|billed|bills|billing)\W+(\w+\W+){0,3}(100|hundred|more than|too much)",
                     r"provider('s)? charge\w* .{0,40}(more|100|hundred|different)",
+                    r"charg\w* \$[\d,]+(\.\d+)? (for|on) (a |an )?\$",  # charged $4,500.00 for a $45.00 payment
+                    r"(sends?|sent|sending) [\w.]*\s?(x|×|\*) ?100\b",  # sends amount_cents*100
                     r"amounts? (differ|disagree|do not match|does not match|don't match|doesn't match|mismatch)",
                     r"(differ|disagree|mismatch)\w* .{0,20}amounts?",
                 ),
@@ -236,11 +246,12 @@ RUBRICS_V3 = RUBRICS_V2 | {
                 "what: our side moved it to a secret the provider does not sign with",
                 (
                     r"WEBHOOK_SECRET_VERSION",
-                    r"\bv2\b",
-                    r"(deploy|redeploy|roll(ed|s)?[ -]?out|config)\w*\W+(\w+\W+){0,8}(secret|signing key|hmac|rotat)",
-                    r"(secret|signing key|hmac|rotat)\w*\W+(\w+\W+){0,8}(deploy|redeploy|roll(ed|s)?[ -]?out|config)",
-                    r"\bour (\w+ ){0,3}(secret|signing key|hmac key)",
-                    r"(only )?on our side( only)?\W+(\w+\W+){0,6}(secret|key|rotat)",
+                    r"\bv2\b\W+(\w+\W+){0,3}(secret|key|version)|(secret|key|version)\W+(\w+\W+){0,3}v2\b",
+                    rf"(?<!no )(?<!not a )(?<!no recent ){CHANGE}\w*{GAP}{SECRET}",
+                    rf"{SECRET}\w*{GAP}(?<!no )(?<!not )(?<!no recent ){CHANGE}",
+                    r"provider (still |is still |keeps )?sign\w* (\w+ ){0,3}(old|previous|former|v1|first)",
+                    r"(still |only )?(signs?|signed|signing) with (the )?(old|previous|former|v1)",
+                    rf"on our side( only)?\W+(\w+\W+){{0,6}}{SECRET}|{SECRET}\w*\W+(\w+\W+){{0,4}}on our side",
                 ),
             ),
             Element(
@@ -251,7 +262,8 @@ RUBRICS_V3 = RUBRICS_V2 | {
                     r"(http|status|code|with a|answers?|answered|returns?|returned|responds? with|responded with) 400\b",
                     r"\b400 (bad|error|response|status)",
                     r"bad[_ ]signature",
-                    r"signatures? (check |verification )?(fail|mismatch|invalid|do not match|don't match)",
+                    r"signatures? (check |verification )?(fail|mismatch|invalid|do not match|don't match|does not match"
+                    r"|doesn't match)",
                     r"(invalid|wrong|mismatched) signature",
                     r"(fail|fails|failing|failed) (its |the |their )?signature",
                 ),
@@ -267,10 +279,12 @@ RUBRICS_V3 = RUBRICS_V2 | {
                 "where: the payments API's database pool",
                 (
                     r"(database|db|psycopg|postgres\w*|sql)[-_ ]?(connection[-_ ]?)?pool",
-                    r"(?<!redis )connection[-_ ]?pool",
-                    # "database connections ... its pool": not a thread pool, a worker pool, or Redis's
-                    r"(?<!redis )(database|db|postgres\w*|connection)s?\W+((?!redis|thread|worker)\w+\W+){0,6}pool\b",
+                    rf"{NOT_OTHER}connection[-_ ]?pool",
+                    # "database connections ... its pool"
+                    rf"{NOT_OTHER}(database|db|postgres\w*|connection)s?\W+((?!redis|thread|worker|http)\w+\W+){{0,6}}"
+                    r"pool\b",
                     r"pool of (\d+ )?(database |db |postgres\w* )?connections",
+                    r"out of (database |db |postgres\w* )?connections",
                     r"DB_POOL",
                 ),
             ),
@@ -278,11 +292,14 @@ RUBRICS_V3 = RUBRICS_V2 | {
                 "what: its connections are never given back",
                 (
                     r"leak",
-                    r"never (\w+ ){0,2}(back|returned|released|freed)",
-                    r"never (returns?|releases?|frees?)\b",
-                    r"(not|n't) (\w+ ){0,2}(back|returned|released|freed)",
+                    rf"never (\w+ ){{0,2}}(back|returned|released|freed){LATE}",
+                    r"never (returns?|releases?|frees?|gives? back|puts? back) (\w+ ){0,2}connections?",
+                    rf"connections? (are |is |were |was )?(never|not) (\w+ )?(returned|released|freed|given back|put back)"
+                    rf"{LATE}",
+                    rf"(not|n't) (\w+ ){{0,2}}(back|returned|released|freed){LATE}",
+                    rf"(not|n't) (return|release|free|give back|put back)s?\b{LATE}",
                     r"REFUND_CONNECTION",
-                    r"(keeps?|kept) (on to |onto )?(\w+ ){0,2}connections?",
+                    r"(keeps?|kept) (on to |onto )?(\w+ ){0,2}connections?\b(?! (busy|open|occupied|in use|longer|alive))",
                 ),
             ),
             Element(

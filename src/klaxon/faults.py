@@ -284,16 +284,17 @@ FAULTS = {
                 " charges every customer 100 times the amount, while our own records keep the right one"
             ),
             symptoms=(
-                "the money check fails on payments_match_provider: for each payment since the deploy, the provider"
-                " charged 100 times our amount",
+                "the money check fails on payments_match_provider, at the first evaluation after the deploy: for each"
+                " payment since, the provider charged 100 times our amount ('amount differs')",
                 "the ledger books what the provider charged, so it agrees with the provider, and the other invariants"
                 " pass",
                 "the payment confirmer logs a conflict for each such payment: the provider charged a different amount"
                 " than our payment's",
-                "the API stays fast and healthy, and its answers show the right amount",
+                "a payment whose answer was lost during the fault stays pending for good ('pending but charged,"
+                " amount differs'): the confirmer refuses the provider's 100 times amount; its client's retries raise"
+                " the p95 of POST /payments to about 0.6 s, under its threshold",
+                "the API stays healthy, and its answers show the right amount",
                 "refunds send the right amount: a full refund gives back 1% of what was charged",
-                "a payment whose answer was lost during the fault stays pending for good: the confirmer refuses the"
-                " provider's 100 times amount as a conflict",
             ),
             remedy=(
                 "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the"
@@ -314,16 +315,21 @@ FAULTS = {
                 " again, with backoff"
             ),
             symptoms=(
-                "the books cannot catch up with the provider: the money check cannot settle, its webhooks not"
-                " acknowledged",
-                "the receiver counts every webhook as bad_signature, and logs 'webhook refused: bad signature'",
+                "the books cannot catch up with the provider: the money check cannot settle, the provider's webhooks"
+                " not acknowledged, and the books rule fires at its second evaluation, about 50 s after the deploy",
+                "the receiver refuses every webhook with a 400, counts it as bad_signature and logs 'webhook refused:"
+                " bad signature'; the provider sends its growing backlog again and again, tens of times a second",
                 "nothing new is booked or confirmed, and both consumers' lag stays at 0: nothing reaches Kafka",
-                "payments whose answer was lost stay pending, so the payments pending over a minute climb",
-                "payments and refunds still succeed, and the API stays fast and healthy",
+                "payments and refunds still go through, but one whose answer was lost cannot be confirmed: its"
+                " client's retries get 503 again, so the 5xx share of POST /payments about doubles and its p95 climbs"
+                " to about 0.6 s, both under their thresholds",
+                "after the rollback the books catch up within about two minutes: the provider sends each refused"
+                " webhook again within a minute of its last try, and one whose acknowledgement is then lost (the"
+                " traffic's noise) a minute later",
             ),
             remedy=(
                 "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the"
-                " provider sends every refused webhook again within a minute, and the books catch up"
+                " provider sends every refused webhook again, and the books catch up by themselves"
             ),
             expected_money={"during": "could not run", "after": "passed", "quiet": "passed"},
             inject=_deploy_rotated_secret,
@@ -335,13 +341,19 @@ FAULTS = {
             cause=(
                 "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's"
                 " refunds takes a connection from its database pool of 10 and never gives it back, so after about"
-                " ten refunds the pool is empty, and every request waits 5 s for a connection, then fails with a 500"
+                " ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s"
+                " timeout, then fails with a 500"
             ),
             symptoms=(
-                "POST /payments takes about 5 s and fails with a 500: the 5xx share and the p95 latency climb",
+                "the pool runs dry about 40 to 50 s after the deploy; then POST /payments takes 5 to 8 s (a worker"
+                " thread, then the pool's 5 s wait) and fails with a 500: the p95 latency passes 7 s, and the 5xx"
+                " share passes 70% within a minute",
                 "the payments API logs 'unhandled error' with PoolTimeout: no connection within 5 s",
-                "its health check fails: it cannot get a connection either, while PostgreSQL itself is up",
-                "the money check passes: a payment that never got a connection was never charged",
+                "its health check fails too, so docker marks it unhealthy, while PostgreSQL itself is up",
+                "the traffic's clients retry and give up: many payments end with their outcome unknown, and arrivals"
+                " past 64 in flight are shed",
+                "the money check passes: a payment that never got a connection was never charged, and one charged"
+                " before its answer was lost is confirmed by its webhook",
             ),
             remedy=(
                 "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool"

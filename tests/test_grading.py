@@ -282,85 +282,203 @@ def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6_and_new_c
     assert "rubric version 3, committed" in grading.BY[3] and "before any live run on faults 4 to 6" in grading.BY[3]
 
 
-V3_FINGERPRINT = "6aa74ad7d553ef926774b17c110dd88249ba832f0c5be22a39ae7fceade8ab14"  # pinned before any live run
+V3_FINGERPRINT = "9cd4375a58cc3b1cb2b7a2da52835d398b24c544a14855cc2f0b72b56f19d4c7"  # pinned before any live run
 
 
-@pytest.mark.parametrize(
-    "fault, hypothesis, expected",
-    [
-        (
-            "money-unit",
-            "A deploy of payments-api reads our amounts, already in cents, as dollars, so the provider charges each"
-            " customer 100 times the amount.",
-            "names the cause",
-        ),
-        (
-            "money-unit",
-            "Since its deploy, payments-api sends 100x amounts: the provider's charges are 100x ours.",
-            "names the cause",
-        ),
-        ("money-unit", "payments-api overcharges customers.", "partly"),
-        ("money-unit", "Our payments disagree with the provider's charges.", "misses the cause"),
-        (
-            "secret-rotation",
-            "The webhook receiver was deployed with a rotated secret the provider does not sign with, so it refuses"
-            " every webhook with a 400.",
-            "names the cause",
-        ),
-        ("secret-rotation", "Webhooks fail their signature check at the receiver.", "partly"),
-        (
-            "secret-rotation",
-            "Our books are behind the provider: its webhooks are not acknowledged.",
-            "misses the cause",
-        ),
-        (
-            "pool-exhaustion",
-            "A payments-api deploy leaks database connections in its refund path: its pool runs dry, and requests"
-            " wait for a connection until they time out.",
-            "names the cause",
-        ),
-        ("pool-exhaustion", "The payments API's database pool is exhausted.", "partly"),
-        ("pool-exhaustion", "Payments are slow and fail with 500s.", "misses the cause"),
-        ("pool-exhaustion", "The provider is down, and our breaker is open.", "misses the cause"),
-        # The review's finding 3: plausible wrong causes the draft scored as right, and right ones it missed.
-        (
-            "pool-exhaustion",
-            "Slow database queries in payments-api are holding connections, so requests hit PoolTimeout.",
-            "misses the cause",
-        ),
-        (
-            "pool-exhaustion",
-            "The provider hangs; our API's worker threads hold their connections while they wait, the thread pool is"
-            " exhausted, and requests fail.",
-            "misses the cause",
-        ),
-        (
-            "pool-exhaustion",
-            "payments-api leaks Redis connections, until the Redis connection pool is exhausted.",
-            "partly",
-        ),
-        (
-            "secret-rotation",
-            "The provider rotated its webhook signing key and our webhook receiver still checks the old one, so it"
-            " rejects every webhook.",
-            "partly",
-        ),
-        ("secret-rotation", "The receiver is down; 400 of the provider's webhooks are pending.", "misses the cause"),
-        (
-            "secret-rotation",
-            "A deploy rotated our webhook secret on the receiver only; the provider still signs with the old one, so"
-            " every signature check fails.",
-            "names the cause",
-        ),
-        ("money-unit", "The payment confirmer converts amounts to dollars and fails a unit test.", "misses the cause"),
-        (
-            "money-unit",
-            "Since its deploy, payments-api sends amount_cents*100 to the provider, which charges customers more than"
-            " our records say.",
-            "names the cause",
-        ),
-    ],
-)
+# Version 3's sentences: written for the tests (not model output), with the independent review's and its re-check's.
+V3_SENTENCES = [
+    # Fault 4: right, in many word orders.
+    (
+        "money-unit",
+        "A deploy of payments-api reads our amounts, already in cents, as dollars, so the provider charges each"
+        " customer 100 times the amount.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "Since its deploy, payments-api sends 100x amounts: the provider's charges are 100x ours.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "The payments-api deploy multiplies each amount by 100: each charge sent to the provider is 100x our recorded"
+        " amount.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "After the payments-api deploy (CHARGE_AMOUNT_UNIT=dollars), customers are charged 100 times the amount.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "payments-api has a money-unit bug since its deploy: the provider bills customers 100x.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "The payments API now treats cents as dollars, so every charge is 100 times the payment amount.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "A deploy of the payments API converts amounts to cents twice; charges at the provider are 100x ours.",
+        "names the cause",
+    ),
+    ("money-unit", "Since its deploy, payments-api sends amount_cents*100 to the provider.", "names the cause"),
+    (
+        "money-unit",
+        "The payments API reads cents as dollars: every customer is charged a hundredfold.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "The payments API's charge unit changed to dollars: the provider charged $4,500.00 for a $45.00 payment.",
+        "names the cause",
+    ),
+    # Fault 4: partly, or wrong.
+    ("money-unit", "payments-api overcharges customers.", "partly"),
+    ("money-unit", "Our payments disagree with the provider's charges.", "misses the cause"),
+    ("money-unit", "The payment confirmer converts amounts to dollars and fails a unit test.", "misses the cause"),
+    ("money-unit", "The payments API has a unit test failure.", "misses the cause"),
+    # Fault 5: right.
+    (
+        "secret-rotation",
+        "The webhook receiver was deployed with a rotated secret the provider does not sign with, so it refuses every"
+        " webhook with a 400.",
+        "names the cause",
+    ),
+    (
+        "secret-rotation",
+        "A deploy rotated our webhook secret on the receiver only; the provider still signs with the old one, so every"
+        " signature check fails.",
+        "names the cause",
+    ),
+    (
+        "secret-rotation",
+        "The webhook receiver's signing secret was rotated, but the provider still signs with the old one, so every"
+        " webhook fails its signature check and is refused.",
+        "names the cause",
+    ),
+    (
+        "secret-rotation",
+        "The secret was rotated on our side only: the webhook receiver now checks v2, and rejects every webhook the"
+        " provider signs with v1.",
+        "names the cause",
+    ),
+    (
+        "secret-rotation",
+        "webhook-receiver was redeployed with WEBHOOK_SECRET_VERSION=v2; every webhook gets a 400 bad_signature.",
+        "names the cause",
+    ),
+    (
+        "secret-rotation",
+        "A recent config change moved the receiver to a new HMAC secret, so it rejects every webhook as a signature"
+        " mismatch.",
+        "names the cause",
+    ),
+    # Fault 5: partly, or wrong (the provider rotating, not us; a webhook format; a count of 400).
+    ("secret-rotation", "Webhooks fail their signature check at the receiver.", "partly"),
+    ("secret-rotation", "Our books are behind the provider: its webhooks are not acknowledged.", "misses the cause"),
+    (
+        "secret-rotation",
+        "The provider rotated its webhook signing key and our webhook receiver still checks the old one, so it rejects"
+        " every webhook.",
+        "partly",
+    ),
+    ("secret-rotation", "The receiver is down; 400 of the provider's webhooks are pending.", "misses the cause"),
+    (
+        "secret-rotation",
+        "No recent deploy touched the receiver; the provider must have rotated its signing secret, so every signature"
+        " check fails.",
+        "partly",
+    ),
+    (
+        "secret-rotation",
+        "The provider moved to v2 of its webhook format, and our receiver rejects the new payloads.",
+        "partly",
+    ),
+    (
+        "secret-rotation",
+        "The provider rotated its secret; our receiver's config still has the old key, so it rejects every webhook.",
+        "partly",
+    ),
+    (
+        "secret-rotation",
+        "The provider rotated its signing key, so our secret is now stale and the receiver rejects every webhook.",
+        "partly",
+    ),
+    # Fault 6: right, with or without the word "pool".
+    (
+        "pool-exhaustion",
+        "A payments-api deploy leaks database connections in its refund path: its pool runs dry, and requests wait"
+        " for a connection until they time out.",
+        "names the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "Since its deploy, payments-api leaks database connections: the connection pool is exhausted and every request"
+        " hits PoolTimeout.",
+        "names the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "The payments API's refund path does not return its database connection to the pool, so the pool of 10 runs"
+        " out and requests fail.",
+        "names the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "payments-api never releases the connections it takes for refunds (REFUND_CONNECTION=kept), so its psycopg"
+        " pool is empty and requests fail with PoolTimeout.",
+        "names the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "A deploy of payments-api leaks database connections, until it runs out of connections and requests fail with"
+        " PoolTimeout.",
+        "names the cause",
+    ),
+    # Fault 6: partly, or wrong (a thread pool, an HTTP client's pool, Redis's, a slow query, a late release).
+    ("pool-exhaustion", "The payments API's database pool is exhausted.", "partly"),
+    ("pool-exhaustion", "Payments are slow and fail with 500s.", "misses the cause"),
+    ("pool-exhaustion", "The provider is down, and our breaker is open.", "misses the cause"),
+    (
+        "pool-exhaustion",
+        "Slow database queries in payments-api are holding connections, so requests hit PoolTimeout.",
+        "misses the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "The provider hangs; our API's worker threads hold their connections while they wait, the thread pool is"
+        " exhausted, and requests fail.",
+        "misses the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "payments-api leaks Redis connections, until the Redis connection pool is exhausted.",
+        "partly",
+    ),
+    (
+        "pool-exhaustion",
+        "The provider never returns an answer, so the payments API's HTTP connection pool to it is exhausted and"
+        " requests fail.",
+        "misses the cause",
+    ),
+    (
+        "pool-exhaustion",
+        "Database connections are not released in time, so the connection pool is exhausted and requests fail.",
+        "partly",
+    ),
+    (
+        "pool-exhaustion",
+        "A long-running transaction keeps database connections busy, exhausting the connection pool.",
+        "partly",
+    ),
+]
+
+
+@pytest.mark.parametrize("fault, hypothesis, expected", V3_SENTENCES)
 def test_version_3_hypotheses_written_for_the_test_get_the_expected_verdict(fault, hypothesis, expected):
     assert verdict(fault, hypothesis, version=3) == expected
 
@@ -526,6 +644,28 @@ KNOWN_LIMITS_V2 = [
         "partly",
     ),
 ]
+
+
+# Version 3's own (the independent review's sentence): a wrong cause that names every element. It blames the payment
+# confirmer, but says "a unit bug", "the amounts differ" and, in passing, "the payments API's records".
+KNOWN_LIMITS_V3 = [
+    (
+        "money-unit",
+        "A deploy of the payment confirmer has a unit bug: it reads the provider's amounts as dollars, so the amounts"
+        " differ from the payments API's records.",
+        "partly",
+    ),
+]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="a known limit of rubric version 3: it reads words, not meaning",
+)
+@pytest.mark.parametrize("fault, hypothesis, right", KNOWN_LIMITS_V3)
+def test_a_known_limit_of_version_3(fault, hypothesis, right):
+    assert verdict(fault, hypothesis, version=3) == right
 
 
 @pytest.mark.xfail(
