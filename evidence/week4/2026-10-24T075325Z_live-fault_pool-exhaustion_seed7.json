@@ -1,0 +1,2339 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic and one fault from klaxon.faults injected on purpose (synthetic data, a simulated provider, no real money). It records what the fault looks like from the outside; it is not the Klaxon agent.",
+  "scenario": "live-fault",
+  "fault": {
+    "name": "pool-exhaustion",
+    "title": "Payments fail: the payments API's database pool runs dry",
+    "cause": "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits 5 s for a connection, then fails with a 500",
+    "expected_symptoms": [
+      "POST /payments takes about 5 s and fails with a 500: the 5xx share and the p95 latency climb",
+      "the payments API logs 'unhandled error' with PoolTimeout: no connection within 5 s",
+      "its health check fails: it cannot get a connection either, while PostgreSQL itself is up",
+      "the money check passes: a payment that never got a connection was never charged"
+    ],
+    "expected_money": {
+      "during": "passed",
+      "after": "passed",
+      "quiet": "passed"
+    },
+    "remedy": "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool"
+  },
+  "rerun_command": "python -m klaxon.demo live-fault --fault pool-exhaustion --during 90 --evidence-dir evidence/week4",
+  "ran_at_utc": "2026-10-24T07:53:25+00:00",
+  "ran_at_local": "2026-10-24T00:53:25-07:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "837dfbdf7525db56c4ac66992ff6856768a36c064b3fa7903c4871285c9fcf4c",
+  "stack_files_sha256": "332960034f7b77bb6eb4a43a573a2bbe7decc94dc464054a289d1caea44f7bbf",
+  "git_commit": "868f57712cb8339c087aad0c05de49637d3f7f32",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6312353d67c1125b1f99111e48c63db60f7630325045d2797c37d5bc9dcab47e"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6312353d67c1125b1f99111e48c63db60f7630325045d2797c37d5bc9dcab47e"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6312353d67c1125b1f99111e48c63db60f7630325045d2797c37d5bc9dcab47e"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6312353d67c1125b1f99111e48c63db60f7630325045d2797c37d5bc9dcab47e"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:6312353d67c1125b1f99111e48c63db60f7630325045d2797c37d5bc9dcab47e"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      }
+    ]
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "a46a1cbe"
+  },
+  "timings": {
+    "warmup_seconds": 10.0,
+    "during_seconds": 90.0,
+    "after_seconds": 60.0,
+    "injected_at_seconds": 2.2,
+    "cleared_at_seconds": 97.9,
+    "every_seconds": 10.0
+  },
+  "injected": {
+    "redeployed": "payments-api",
+    "REFUND_CONNECTION": "kept"
+  },
+  "cleared": {
+    "redeployed": "payments-api",
+    "PROVIDER_BREAKER": "on",
+    "CHARGE_AMOUNT_UNIT": "cents",
+    "REFUND_CONNECTION": "returned"
+  },
+  "moments": [
+    {
+      "phase": "before",
+      "seconds": 0.0,
+      "at_utc": "2026-10-24T07:50:45+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.059953236475549065
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.03995684660566588
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.024442307692307694
+          }
+        ],
+        "provider_no_answer_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 169.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 12.2,
+      "at_utc": "2026-10-24T07:50:57+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.07995202878273036
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.019292735042735043
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.024002570972847317
+          }
+        ],
+        "provider_no_answer_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 22.4,
+      "at_utc": "2026-10-24T07:51:07+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.07995682331540968
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.03595545573647763
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.02415917112923092
+          }
+        ],
+        "provider_no_answer_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 32.5,
+      "at_utc": "2026-10-24T07:51:18+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.07997121036426887
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.03515016418590158
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.02401843309258572
+          }
+        ],
+        "provider_no_answer_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 42.7,
+      "at_utc": "2026-10-24T07:51:28+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.05998560345517076
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.03888888888888888
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.0239901267300504
+          }
+        ],
+        "provider_no_answer_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 52.9,
+      "at_utc": "2026-10-24T07:51:38+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.05998320470268325
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.5666185309826377
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 6.881074223621384
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 63.1,
+      "at_utc": "2026-10-24T07:51:48+00:00",
+      "unhealthy": [
+        "payments-api (unhealthy)"
+      ],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 2.796258230977798
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.304952628993608
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 73.3,
+      "at_utc": "2026-10-24T07:51:58+00:00",
+      "unhealthy": [
+        "payments-api (unhealthy)"
+      ],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 4.217165803224445
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.410511557982865
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 83.4,
+      "at_utc": "2026-10-24T07:52:08+00:00",
+      "unhealthy": [
+        "payments-api (unhealthy)"
+      ],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 5.524369587380611
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.44750690395137
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "during",
+      "seconds": 92.2,
+      "at_utc": "2026-10-24T07:52:17+00:00",
+      "unhealthy": [
+        "payments-api (unhealthy)"
+      ],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 6.797846534166229
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.634256131247781
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 338.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 107.9,
+      "at_utc": "2026-10-24T07:52:33+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.0
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 6.495508488365304
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.888266816664238
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 507.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 118.1,
+      "at_utc": "2026-10-24T07:52:43+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.03998320705303772
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 5.168443278343171
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.886880562081075
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 507.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 128.3,
+      "at_utc": "2026-10-24T07:52:53+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.05997241269016253
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 3.982967047250767
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 8.249688013196026
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 507.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 138.5,
+      "at_utc": "2026-10-24T07:53:04+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.13993003498250872
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 2.5787188602331685
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 7.670658570688201
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 507.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 148.7,
+      "at_utc": "2026-10-24T07:53:14+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.17991364145210298
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.034664686141827585
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.023878639890836762
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 507.0
+          }
+        ]
+      }
+    },
+    {
+      "phase": "after",
+      "seconds": 157.9,
+      "at_utc": "2026-10-24T07:53:23+00:00",
+      "unhealthy": [],
+      "signals": {
+        "webhooks_refused_per_s": [],
+        "consumer_lag": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "partition": "2"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "0"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "1"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "partition": "2"
+            },
+            "value": 0.0
+          }
+        ],
+        "consumer_retries_per_s": [
+          {
+            "labels": {
+              "consumer": "ledger"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer"
+            },
+            "value": 0.0
+          }
+        ],
+        "dead_letters": [
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "ledger",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "bad_event"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "consumer": "payment-confirmer",
+              "reason": "refused_values"
+            },
+            "value": 0.0
+          }
+        ],
+        "ledger_duplicates_skipped_per_s": [
+          {
+            "labels": {},
+            "value": 0.25985967577508146
+          }
+        ],
+        "api_5xx_per_s": [
+          {
+            "labels": {},
+            "value": 0.03398199923619305
+          }
+        ],
+        "api_p95_seconds": [
+          {
+            "labels": {},
+            "value": 0.023877371784699616
+          }
+        ],
+        "provider_no_answer_per_s": [],
+        "payments_pending": [
+          {
+            "labels": {
+              "age": "under_1m"
+            },
+            "value": 0.0
+          },
+          {
+            "labels": {
+              "age": "over_1m"
+            },
+            "value": 507.0
+          }
+        ]
+      }
+    }
+  ],
+  "money_checks": [
+    {
+      "phase": "before",
+      "outcome": "passed",
+      "findings": [],
+      "problems": {},
+      "money_off_cents": 0,
+      "without_waiting": null
+    },
+    {
+      "phase": "during",
+      "outcome": "passed",
+      "findings": [],
+      "problems": {},
+      "money_off_cents": 0,
+      "without_waiting": null
+    },
+    {
+      "phase": "after",
+      "outcome": "passed",
+      "findings": [],
+      "problems": {},
+      "money_off_cents": 0,
+      "without_waiting": null
+    },
+    {
+      "phase": "quiet",
+      "outcome": "passed",
+      "findings": [],
+      "problems": {},
+      "money_off_cents": 0,
+      "without_waiting": null
+    }
+  ],
+  "as_expected": true,
+  "surprises": [],
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 4,
+      "double_clicks.no_answer": 1,
+      "double_clicks.ran_first": 7,
+      "double_clicks.sent": 16,
+      "not_sent.refunds": 2,
+      "payments.arrived": 522,
+      "payments.succeeded": 343,
+      "payments.unknown": 129,
+      "refunds.succeeded": 28,
+      "refunds.unknown": 1,
+      "retries": 459,
+      "retries.after_409": 18,
+      "retries.after_500": 357,
+      "retries.after_503": 3,
+      "retries.after_no_answer": 81,
+      "shed": 54,
+      "unknown_payments.confirmed_later": 1
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "printed_output": [
+    "Klaxon week 2: a fault injected on purpose: pool-exhaustion",
+    "REAL RUN on this Mac's Docker Compose stack, with synthetic traffic (run a46a1cbe, seed 7, 3 payments per second). Synthetic data, simulated provider, no real money. Not the agent.",
+    "",
+    "The fault: Payments fail: the payments API's database pool runs dry",
+    "  cause: a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits 5 s for a connection, then fails with a 500",
+    "  expected: POST /payments takes about 5 s and fails with a 500: the 5xx share and the p95 latency climb",
+    "  expected: the payments API logs 'unhandled error' with PoolTimeout: no connection within 5 s",
+    "  expected: its health check fails: it cannot get a connection either, while PostgreSQL itself is up",
+    "  expected: the money check passes: a payment that never got a connection was never charged",
+    "  injected (took 2.2 s): {\"redeployed\": \"payments-api\", \"REFUND_CONNECTION\": \"kept\"}",
+    "  cleared after 97.9 s: {\"redeployed\": \"payments-api\", \"PROVIDER_BREAKER\": \"on\", \"CHARGE_AMOUNT_UNIT\": \"cents\", \"REFUND_CONNECTION\": \"returned\"}",
+    "",
+    "What the stack showed (Prometheus and container health, sampled; t counts from the start of the injection)",
+    "  Rates are over the last minute, so they trail a change by up to a minute.",
+    "  before t=    0 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.06; API 5xx/s 0.04, p95 0.02 s; provider no answer/s 0.00; pending over 1 min 169",
+    "  during t=   12 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.08; API 5xx/s 0.02, p95 0.02 s; provider no answer/s 0.00; pending over 1 min 338",
+    "  during t=   22 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.08; API 5xx/s 0.04, p95 0.02 s; provider no answer/s 0.00; pending over 1 min 338",
+    "  during t=   32 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.08; API 5xx/s 0.04, p95 0.02 s; provider no answer/s 0.00; pending over 1 min 338",
+    "  during t=   43 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.06; API 5xx/s 0.04, p95 0.02 s; provider no answer/s 0.00; pending over 1 min 338",
+    "  during t=   53 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.06; API 5xx/s 0.57, p95 6.88 s; provider no answer/s -; pending over 1 min 338",
+    "  during t=   63 s  unhealthy: payments-api (unhealthy); ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.00; API 5xx/s 2.80, p95 7.30 s; provider no answer/s -; pending over 1 min 338",
+    "  during t=   73 s  unhealthy: payments-api (unhealthy); ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.00; API 5xx/s 4.22, p95 7.41 s; provider no answer/s -; pending over 1 min 338",
+    "  during t=   83 s  unhealthy: payments-api (unhealthy); ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.00; API 5xx/s 5.52, p95 7.45 s; provider no answer/s -; pending over 1 min 338",
+    "  during t=   92 s  unhealthy: payments-api (unhealthy); ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.00; API 5xx/s 6.80, p95 7.63 s; provider no answer/s -; pending over 1 min 338",
+    "  after  t=  108 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.00; API 5xx/s 6.50, p95 7.89 s; provider no answer/s -; pending over 1 min 507",
+    "  after  t=  118 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.04; API 5xx/s 5.17, p95 7.89 s; provider no answer/s -; pending over 1 min 507",
+    "  after  t=  128 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.06; API 5xx/s 3.98, p95 8.25 s; provider no answer/s -; pending over 1 min 507",
+    "  after  t=  138 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.14; API 5xx/s 2.58, p95 7.67 s; provider no answer/s -; pending over 1 min 507",
+    "  after  t=  149 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.18; API 5xx/s 0.03, p95 0.02 s; provider no answer/s -; pending over 1 min 507",
+    "  after  t=  158 s  unhealthy: none; ledger lag 0, confirmer lag 0; retries/s 0.00; new dead letters: ledger 0, confirmer 0; ledger duplicates skipped/s 0.26; API 5xx/s 0.03, p95 0.02 s; provider no answer/s -; pending over 1 min 507",
+    "",
+    "Money check (expected: during passed, after passed, quiet passed)",
+    "  before  PASSED",
+    "  during  PASSED",
+    "  after   PASSED",
+    "  quiet   PASSED",
+    "",
+    "The traffic generator",
+    "  payments  472 answered: 343 succeeded, 0 refused, 129 outcome unknown (1 confirmed later, 0 still pending), 0 unexpected",
+    "  refunds   29 answered: 28 succeeded, 0 refused, 1 outcome unknown (0 confirmed later, 0 still pending), 0 unexpected",
+    "  double clicks 16: 4 told \"still running\", 0 given the saved answer, 7 ran first",
+    "  retries 459 (after 409: 18, after 500: 357, after 503: 3, after no answer: 81), shed 54, generator errors 0; not sent because the run ended: 2 refunds, 0 status checks, 0 double clicks",
+    "  the provider's behavior was put back as it was found",
+    "",
+    "RESULT: the money check said what the fault expects in every phase"
+  ]
+}
