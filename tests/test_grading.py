@@ -279,7 +279,7 @@ def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6_and_new_c
         found = grading.compare(name, diagnosis("x"))
         assert found["rubric"] == {"version": 3, "sha256": grading.fingerprint(3)}
         assert (found["recorded_cause"], found["remedy"]) == (faults.FAULTS[name].cause, faults.FAULTS[name].remedy)
-    assert "rubric version 3, committed" in grading.BY[3] and "before any live run on faults 4 to 6" in grading.BY[3]
+    assert "rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6" in grading.BY[3]
 
 
 V3_FINGERPRINT = "9cd4375a58cc3b1cb2b7a2da52835d398b24c544a14855cc2f0b72b56f19d4c7"  # pinned before any live run

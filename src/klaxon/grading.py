@@ -34,8 +34,8 @@ version 1's). Its third element becomes the breaker failing fast, and the fixes 
 to the provider): there is nothing to change on our side. Faults 1 and 2 are graded as in version 1. New comparisons
 use the latest version; a saved run is graded again with the version that graded it (klaxon.fault_runs grade).
 
-Version 3 (week 4, item 4), committed before any live run on faults 4 to 6: version 2, and a rubric for each of them.
-Versions 1 and 2 have none for them: they came before those faults.
+Version 3 (week 4, item 4), committed in 75fedf1 before any live run on faults 4 to 6: version 2, and a rubric for
+each of them. Versions 1 and 2 have none for them: they came before those faults.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ BY = {
         "a rule (klaxon.grading, rubric version 2, committed in 8e58e7f before any live run on fault 3 with the circuit"
         f" breaker): {HOW}"
     ),
-    3: f"a rule (klaxon.grading, rubric version 3, committed before any live run on faults 4 to 6): {HOW}",
+    3: (f"a rule (klaxon.grading, rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6): {HOW}"),
 }
 
 
