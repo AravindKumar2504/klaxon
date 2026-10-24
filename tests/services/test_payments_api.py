@@ -12,6 +12,7 @@ from klaxon.patient.services.idempotency import LOCK_TTL_SECONDS, RedisIdempoten
 from klaxon.patient.services.payments_api import PaymentIn, create_app, fingerprint
 from klaxon.patient.services.provider_client import (
     CircuitBreaker,
+    KeyReused,
     ProviderClient,
     ProviderRejected,
     ProviderUnavailable,
@@ -318,6 +319,24 @@ def test_the_api_runs_its_breaker_unless_told_off(monkeypatch):
 # Week 4, item 4: two settings that stand for bad versions of this service (faults 4 and 6 in klaxon.faults)
 
 
+def test_a_retry_whose_key_the_provider_first_saw_with_another_amount_leaves_the_payment_pending(parts, tmp_path):
+    """The review's finding 1: a charge made under the money-unit bug, its answer lost, then retried after the
+    rollback with the right amount. The provider refuses the key, first used with another request; that first one
+    went through, so the outcome is unknown, never "failed". The real provider app and store, in this process."""
+    from klaxon.patient.services.provider_app import create_app as provider_app
+    from klaxon.patient.services.provider_store import ProviderStore
+
+    store, redis, _ = parts
+    books = ProviderStore(str(tmp_path / "provider.sqlite3"))
+    books.create_payment("cus_001", 250_000, "usd", {"klaxon_payment_id": "pmt_000001"}, "pmt_000001")  # in dollars
+    provider = ProviderClient("http://testserver", http=TestClient(provider_app(books)), sleep=lambda seconds: None)
+    api = TestClient(create_app(store, RedisIdempotency(redis), provider))  # rolled back: in cents
+    answer = pay(api, amount=2_500)
+    assert (answer.status_code, answer.json()["error"]["code"]) == (503, "provider_unavailable")
+    assert answer.json()["payment"]["status"] == "pending" and store.get_payment("pmt_000001").status == "pending"
+    assert [charge["amount_cents"] for charge in books.list_payments()[0]] == [250_000]  # charged once, 100 times
+
+
 def test_with_the_money_unit_bug_the_provider_charges_100_times_the_amount_and_our_records_keep_it_right(parts):
     store, redis, provider = parts
     api = TestClient(create_app(store, RedisIdempotency(redis), provider, charge_unit="dollars"))
@@ -539,6 +558,29 @@ def test_a_refund_answer_whose_id_is_not_a_plain_id_is_not_trusted(api, parts):
     assert (response.status_code, response.json()["error"]["code"]) == (503, "provider_unavailable")
     [row] = store.refunds_for(payment_id)
     assert (row.status, row.provider_refund_id) == ("pending", None)
+
+
+def test_a_key_first_used_with_another_request_is_an_unknown_outcome_never_a_refusal():
+    """The review's finding 1 (week 4, item 4): the provider's 400 idempotency_key_reused does not say nothing was
+    charged: the key's first request may have gone through. Not retried, and an answer for the breaker."""
+    sent = []
+
+    def reused(request):
+        sent.append(request)
+        error = {"code": "idempotency_key_reused", "message": "this idempotency key was used with a different request"}
+        return httpx.Response(400, json={"error": error})
+
+    breaker = CircuitBreaker(failures=1, open_seconds=10.0, clock=lambda: 0.0)
+    http = httpx.Client(transport=httpx.MockTransport(reused), base_url="http://provider")
+    client = ProviderClient("http://provider", http=http, sleep=lambda seconds: None, breaker=breaker)
+    for call in (
+        lambda: client.create_payment("cus_001", 2_500, "usd", "pmt_000001", metadata={}),
+        lambda: client.create_refund("pay_000001", 1_000, "rfd_000001"),
+    ):
+        with pytest.raises(KeyReused, match="first used with another request") as found:
+            call()
+        assert isinstance(found.value, ProviderUnavailable) and not isinstance(found.value, ProviderRejected)
+    assert len(sent) == 2 and breaker.state == "closed"  # one attempt each; the provider answered: no failed call
 
 
 def test_the_client_sends_a_refunds_metadata_with_the_same_key():

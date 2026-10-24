@@ -205,11 +205,12 @@ RUBRICS_V3 = RUBRICS_V2 | {
                 "what: our amount in the wrong unit, 100 times over",
                 (
                     r"\b100 ?(x|×|times)",
-                    r"(x|×) ?100\b",
+                    r"(x|×|\*) ?100\b",
                     r"hundred(fold| times)",
-                    r"\bunits?\b",
+                    r"(money|amount|currency|charge)[-_ ]?units?\b",
+                    r"wrong units?\b|\bunits? (bug|error|mix|mismatch|confusion)",
                     r"CHARGE_AMOUNT_UNIT",
-                    r"multipl\w* (it |them |each amount |the amount )?by 100",
+                    r"multipl\w* (it |them |each amount |the amount |amounts )?by 100",
                     r"cents?\W+(\w+\W+){0,6}dollars?|dollars?\W+(\w+\W+){0,6}cents?",
                 ),
             ),
@@ -232,15 +233,23 @@ RUBRICS_V3 = RUBRICS_V2 | {
         elements=(
             Element("where: the webhook receiver", (r"receiver", r"webhook (endpoint|handler|service)")),
             Element(
-                "what: its secret is not the one the provider signs with",
-                (r"secret", r"\bhmac\b", r"rotat", r"signing key", r"\bv2\b"),
+                "what: our side moved it to a secret the provider does not sign with",
+                (
+                    r"WEBHOOK_SECRET_VERSION",
+                    r"\bv2\b",
+                    r"(deploy|redeploy|roll(ed|s)?[ -]?out|config)\w*\W+(\w+\W+){0,8}(secret|signing key|hmac|rotat)",
+                    r"(secret|signing key|hmac|rotat)\w*\W+(\w+\W+){0,8}(deploy|redeploy|roll(ed|s)?[ -]?out|config)",
+                    r"\bour (\w+ ){0,3}(secret|signing key|hmac key)",
+                    r"(only )?on our side( only)?\W+(\w+\W+){0,6}(secret|key|rotat)",
+                ),
             ),
             Element(
                 "how: it refuses every webhook, so nothing reaches the books",
                 (
                     r"refus",
                     r"reject",
-                    r"\b400\b",
+                    r"(http|status|code|with a|answers?|answered|returns?|returned|responds? with|responded with) 400\b",
+                    r"\b400 (bad|error|response|status)",
                     r"bad[_ ]signature",
                     r"signatures? (check |verification )?(fail|mismatch|invalid|do not match|don't match)",
                     r"(invalid|wrong|mismatched) signature",
@@ -254,7 +263,17 @@ RUBRICS_V3 = RUBRICS_V2 | {
     ),
     "pool-exhaustion": Rubric(
         elements=(
-            Element("where: the payments API's database pool", (r"\bpool", r"psycopg_pool")),
+            Element(
+                "where: the payments API's database pool",
+                (
+                    r"(database|db|psycopg|postgres\w*|sql)[-_ ]?(connection[-_ ]?)?pool",
+                    r"(?<!redis )connection[-_ ]?pool",
+                    # "database connections ... its pool": not a thread pool, a worker pool, or Redis's
+                    r"(?<!redis )(database|db|postgres\w*|connection)s?\W+((?!redis|thread|worker)\w+\W+){0,6}pool\b",
+                    r"pool of (\d+ )?(database |db |postgres\w* )?connections",
+                    r"DB_POOL",
+                ),
+            ),
             Element(
                 "what: its connections are never given back",
                 (
@@ -263,7 +282,7 @@ RUBRICS_V3 = RUBRICS_V2 | {
                     r"never (returns?|releases?|frees?)\b",
                     r"(not|n't) (\w+ ){0,2}(back|returned|released|freed)",
                     r"REFUND_CONNECTION",
-                    r"(keeps?|kept|held|holds?|holding) (on to |onto )?(\w+ ){0,2}connections?",
+                    r"(keeps?|kept) (on to |onto )?(\w+ ){0,2}connections?",
                 ),
             ),
             Element(

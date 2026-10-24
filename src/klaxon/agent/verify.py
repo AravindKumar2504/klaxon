@@ -312,6 +312,8 @@ def metrics_unwell(evaluation: alerts.Evaluation) -> str | None:
     wanted = [*METRICS, *lags, BOOKS]
     for rule, subject, number in wanted:
         check = read.get((rule, subject))
+        if (rule, subject, number) == BOOKS and check is not None and check.numbers.get(number) is None:
+            continue  # the money check gave no verdict: the money's own judgment says so (could not verify)
         if check is None or check.numbers.get(number) is None:
             missing.append(f"{rule} ({subject})")
         elif check.breached:
@@ -346,6 +348,7 @@ class Health:
     healthy: bool
     why: str | None  # the last reason it was not, when it was not healthy in time
     rounds: tuple[dict, ...]  # each round: when, and why it was not quiet (None: quiet)
+    books: bool = False  # whether its rounds read the books rule too (week 4, item 4): health saved before did not
 
 
 def wait_healthy(
@@ -372,9 +375,9 @@ def wait_healthy(
         rounds.append({"at_utc": evaluation.at_utc, "unwell": why})
         in_a_row = 0 if why else in_a_row + 1
         if in_a_row >= QUIET_IN_A_ROW:
-            return Health(True, None, tuple(rounds))
+            return Health(True, None, tuple(rounds), books=True)
         if clock() - started + every > within:
-            return Health(False, why or "not quiet long enough", tuple(rounds))
+            return Health(False, why or "not quiet long enough", tuple(rounds), books=True)
         sleep(every)
 
 
@@ -476,10 +479,8 @@ def say(found: Verification) -> list[str]:
     right, said apart."""
     health, money = found.health, found.money
     if health.healthy:
-        lines = [
-            "Healthy: every container is healthy, and the metric rules were quiet at"
-            f" {QUIET_IN_A_ROW} evaluations in a row."
-        ]
+        rules = "the metric rules and the books rule were" if health.books else "the metric rules were"
+        lines = [f"Healthy: every container is healthy, and {rules} quiet at {QUIET_IN_A_ROW} evaluations in a row."]
     else:
         lines = [f"Not healthy within {HEALTHY_WITHIN_SECONDS:g} s: {health.why}."]
     if money.cause_removed is True:

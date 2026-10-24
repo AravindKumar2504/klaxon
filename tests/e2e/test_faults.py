@@ -226,11 +226,14 @@ def test_a_receiver_on_a_secret_the_provider_does_not_sign_with_stops_the_books_
             assert stuck.value.settling.behind is None and stuck.value.settling.pending_deliveries > 0
             until(lambda: counted_bad_signatures() > refused_before, timeout=60, every=2)
             assert "webhook refused: bad signature" in receiver_logs()
+            # The books rule fires at its second evaluation. The rules' one-minute windows may still hold the errors of
+            # the outage test before this one (seen on 2026-10-24), so the alert may carry them too, and their name.
             rules = alerts.Alerting()
             first, second = rules.evaluate(), rules.evaluate()
-            assert first.alert is None and second.alert is not None and second.alert.name == "BooksBehindProvider"
+            [books] = [check for check in second.checks if check.rule == "BooksBehindProvider"]
+            assert books.firing and not first.checks[-1].firing and second.alert is not None
             assert "of the provider's webhooks up to it had not been acknowledged yet" in second.alert.summary
-            assert [check.rule for check in second.checks if check.breached] == ["BooksBehindProvider"]
+            assert not [check for check in second.checks if check.rule == "MoneyCheckFailed" and check.breached]
         finally:
             faults.get("secret-rotation").clear(fault_stack)
         result = check_live(timeout_seconds=90)  # each refused webhook is sent again within a minute of its last try
@@ -306,18 +309,24 @@ def test_a_deploy_with_the_money_unit_bug_charges_100_times_the_amount_and_the_r
         faults.get("money-unit").inject(fault_stack)
         try:
             assert stack.container_env("payments-api")["CHARGE_AMOUNT_UNIT"] == "dollars"
-            payment = pay(4_500).json()
+            # The traffic's noise loses 2% of the provider's answers, the test's own included: pay until one is not.
+            payment = until(lambda: (paid := pay(4_500)).status_code == 201 and paid, timeout=30).json()
             assert (payment["status"], payment["amount_cents"]) == ("succeeded", 4_500)
             assert provider_charge(payment["provider_payment_id"])["amount_cents"] == 450_000
             found = until(lambda: (seen := overcharged()) and payment["id"] in seen and seen, timeout=60, every=3)
             for item in found.values():
                 assert [charge["amount_cents"] for charge in item["provider_charges"]] == [100 * item["amount_cents"]]
-            report = check_live(timeout_seconds=60).report
-            assert report.invariant("matches_provider").passed  # the ledger booked what the provider charged
+            # The ledger booked what the provider charged, so it agrees with the provider about these charges (the
+            # duplicate-delivery test before this one leaves other payments' books wrong).
+            charged = {charge["id"] for item in found.values() for charge in item["provider_charges"]}
+            books_off = {
+                item["scope"] for item in check_live(timeout_seconds=60).report.invariant("matches_provider").evidence
+            }
+            assert not charged & books_off
         finally:
             faults.get("money-unit").clear(fault_stack)
         at_rollback = set(overcharged())
-        after = pay(4_501).json()
+        after = until(lambda: (paid := pay(4_501)).status_code == 201 and paid, timeout=30).json()
         assert provider_charge(after["provider_payment_id"])["amount_cents"] == 4_501
         time.sleep(10)
         still = set(overcharged())

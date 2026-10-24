@@ -282,7 +282,7 @@ def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6_and_new_c
     assert "rubric version 3, committed" in grading.BY[3] and "before any live run on faults 4 to 6" in grading.BY[3]
 
 
-V3_FINGERPRINT = "fb37dd634d2a60b12322899d395e714666b2909cad1e2ce1f8f78f3c37dd6639"  # pinned before any live run
+V3_FINGERPRINT = "6aa74ad7d553ef926774b17c110dd88249ba832f0c5be22a39ae7fceade8ab14"  # pinned before any live run
 
 
 @pytest.mark.parametrize(
@@ -322,10 +322,62 @@ V3_FINGERPRINT = "fb37dd634d2a60b12322899d395e714666b2909cad1e2ce1f8f78f3c37dd66
         ("pool-exhaustion", "The payments API's database pool is exhausted.", "partly"),
         ("pool-exhaustion", "Payments are slow and fail with 500s.", "misses the cause"),
         ("pool-exhaustion", "The provider is down, and our breaker is open.", "misses the cause"),
+        # The review's finding 3: plausible wrong causes the draft scored as right, and right ones it missed.
+        (
+            "pool-exhaustion",
+            "Slow database queries in payments-api are holding connections, so requests hit PoolTimeout.",
+            "misses the cause",
+        ),
+        (
+            "pool-exhaustion",
+            "The provider hangs; our API's worker threads hold their connections while they wait, the thread pool is"
+            " exhausted, and requests fail.",
+            "misses the cause",
+        ),
+        (
+            "pool-exhaustion",
+            "payments-api leaks Redis connections, until the Redis connection pool is exhausted.",
+            "partly",
+        ),
+        (
+            "secret-rotation",
+            "The provider rotated its webhook signing key and our webhook receiver still checks the old one, so it"
+            " rejects every webhook.",
+            "partly",
+        ),
+        ("secret-rotation", "The receiver is down; 400 of the provider's webhooks are pending.", "misses the cause"),
+        (
+            "secret-rotation",
+            "A deploy rotated our webhook secret on the receiver only; the provider still signs with the old one, so"
+            " every signature check fails.",
+            "names the cause",
+        ),
+        ("money-unit", "The payment confirmer converts amounts to dollars and fails a unit test.", "misses the cause"),
+        (
+            "money-unit",
+            "Since its deploy, payments-api sends amount_cents*100 to the provider, which charges customers more than"
+            " our records say.",
+            "names the cause",
+        ),
     ],
 )
 def test_version_3_hypotheses_written_for_the_test_get_the_expected_verdict(fault, hypothesis, expected):
     assert verdict(fault, hypothesis, version=3) == expected
+
+
+@pytest.mark.parametrize(
+    "words, named",
+    [
+        ("the receiver answers with a 400", True),
+        ("it returns 400 Bad Request", True),
+        ("HTTP 400", True),
+        ("400 of the provider's webhooks", False),
+        ("a 400 ms wait", False),
+    ],
+)
+def test_in_version_3_a_400_counts_only_as_an_answer(words, named):
+    how = grading.VERSIONS[3]["secret-rotation"].elements[2]
+    assert grading.names(how, words) is named
 
 
 @pytest.mark.parametrize(

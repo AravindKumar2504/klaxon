@@ -5,6 +5,8 @@ Everything here is made up for the tests: the money checks' reports, the provide
 and docker's containers. The first piece's own ledger (SQLite, klaxon.patient.ledger) plays the books in one test,
 to show for real why a correct rollback can still see an old event booked again."""
 
+from dataclasses import replace
+
 import httpx
 import pytest
 
@@ -457,23 +459,20 @@ def test_the_metric_rules_are_not_quiet_when_one_holds_or_cannot_be_read(series,
     assert found is not None and why in found
 
 
-@pytest.mark.parametrize(
-    "money, why",
-    [
-        (
-            {"outcome": "could not settle", "webhooks_not_acknowledged": 52},
-            "a rule's condition holds: BooksBehindProvider (the books)",
-        ),
-        ({"outcome": "could not run", "error": "ConnectError"}, "no data for BooksBehindProvider (the books)"),
-    ],
-    ids=["books behind", "no money check"],
-)
-def test_health_needs_the_books_caught_up_with_the_provider(money, why):
+def test_health_needs_the_books_caught_up_with_the_provider():
     """Week 4, item 4: a backlog the action freed must have drained, whatever the money says: the books rule is part
     of health, the money rule is not."""
-    found = verify.metrics_unwell(evaluation_of(Readings(money=money)))
-    assert found is not None and why in found
+    behind = {"outcome": "could not settle", "webhooks_not_acknowledged": 52}
+    found = verify.metrics_unwell(evaluation_of(Readings(money=behind)))
+    assert found == "a rule's condition holds: BooksBehindProvider (the books)"
     assert verify.BOOKS == ("BooksBehindProvider", "the books", "settled")
+
+
+def test_a_money_check_with_no_verdict_is_left_to_the_moneys_own_judgment():
+    """The review's finding 2: a money check that could not run gives the books rule no data. Counted as unwell, it
+    made health fail, so the verdict was "failed" and an undo was proposed, where nobody can say: "could not verify"."""
+    broken = {"outcome": "could not run", "error": "OSError"}
+    assert verify.metrics_unwell(evaluation_of(Readings(money=broken))) is None
 
 
 def row(service, state="running", health="healthy", code=0):
@@ -603,7 +602,8 @@ def test_a_rollback_that_removed_the_cause_but_left_old_damage_passes_and_says_b
     found, checks = verified(check(BOUNDARY, Records([old]), **failed), check(LATE, Records([old]), **failed))
     assert found.verdict == "passed"
     assert found.said == (
-        "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row.",
+        "Healthy: every container is healthy, and the metric rules and the books rule were quiet at 2 evaluations in"
+        " a row.",
         "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
         "The money is not right: 1 event counted more than once, 1 payment whose books differ from the provider's;"
         " our books $25.00 ahead of the provider's balance. A rollback repairs nothing: this damage stays until a"
@@ -636,6 +636,31 @@ def test_a_stack_that_is_not_healthy_in_time_fails_the_verification_whatever_the
     found, _ = verified(check(BOUNDARY), check(LATE), readings=Readings(p95_seconds=[({}, 9.4)]))
     assert found.verdict == "failed" and found.said[0].startswith("Not healthy within 180 s: a rule's condition holds")
     assert found.money.right is True  # said apart: the money can be right while the stack is not healthy
+
+
+def test_a_money_check_that_cannot_run_at_all_cannot_verify_and_proposes_nothing():
+    """The review's finding 2, end to end: health is read without the money's verdict; the money cannot be judged."""
+
+    def broken(wait, timeout_seconds):
+        raise OSError("x")
+
+    found, _ = verified(broken, broken, readings=Readings(money={"outcome": "could not run", "error": "OSError"}))
+    assert found.health.healthy and found.verdict == "could not verify"
+
+
+def test_the_health_sentence_names_the_books_rule_only_for_health_that_read_it():
+    """Week 4, item 4. Health saved before it read the books rule (the week 4 runs of item 2) says what it read."""
+    found, _ = verified(check(BOUNDARY), check(LATE))
+    assert found.health.books is True
+    assert found.said[0] == (
+        "Healthy: every container is healthy, and the metric rules and the books rule were quiet at 2 evaluations in"
+        " a row."
+    )
+    before = replace(found, health=verify.Health(True, None, found.health.rounds))
+    assert (
+        before.said[0]
+        == "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row."
+    )
 
 
 def test_a_money_check_that_cannot_run_after_the_action_cannot_verify():

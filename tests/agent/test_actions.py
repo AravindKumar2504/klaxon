@@ -3,6 +3,7 @@ planned from the deploy log and the running container, what makes it refuse, and
 Nothing here is approved by a person: these call plan() and run() directly. The gate's tests show who may."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -36,11 +37,12 @@ def test_the_services_a_rollback_may_name_are_those_the_deploy_log_knows():
     assert set(catalog.ROLLBACK_SERVICES) == set(SERVICES)
     schema = catalog.ROLLBACK_DEPLOY.input_schema
     assert schema["properties"]["service"]["enum"] == list(catalog.ROLLBACK_SERVICES)
-    # As the gated runs of item 2 were offered it, for a replay of theirs: only the two consumers, nothing else changed.
+    # As the gated runs of item 2 were offered it, for a replay of theirs: only the two consumers. A frozen copy (the
+    # review's finding 8): a change to today's action never changes it; the strict replay test pins it to those runs.
     first = catalog.FIRST_OFFERED["rollback_deploy"]
     assert first.input_schema["properties"]["service"]["enum"] == ["ledger-consumer", "payment-confirmer"]
-    assert (first.name, first.description) == (catalog.ROLLBACK_DEPLOY.name, catalog.ROLLBACK_DEPLOY.description)
-    assert set(catalog.FIRST_OFFERED) == set(catalog.CATALOG)
+    assert first.name == catalog.ROLLBACK_DEPLOY.name and set(catalog.FIRST_OFFERED) == set(catalog.CATALOG)
+    assert "def _rollback_deploy" not in Path(catalog.__file__).read_text()  # no shared builder: written out, frozen
 
 
 API_GOOD = {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned"}

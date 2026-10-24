@@ -1847,7 +1847,7 @@ MUTANTS = [
      ' metadata={"klaxon_refund_id": row.id}', False),
     ("the API charges in dollars unless told otherwise", S + "payments_api.py",
      '    unit = env_str("CHARGE_AMOUNT_UNIT", "cents")', '    unit = env_str("CHARGE_AMOUNT_UNIT", "dollars")', False),
-    ("an unknown charge unit in the settings stops nothing until a charge", S + "payments_api.py",
+    ("an unknown charge unit in the settings is not refused when they are read", S + "payments_api.py",
      '    unit = env_str("CHARGE_AMOUNT_UNIT", "cents")\n    charge_unit_setting(unit)\n',
      '    unit = env_str("CHARGE_AMOUNT_UNIT", "cents")\n', False),
     ("the API keeps its refund connections unless told otherwise", S + "payments_api.py",
@@ -1968,8 +1968,6 @@ MUTANTS = [
      "f\" newest first, with its image and its behavior settings: {', '.join(DEPLOY_SETTINGS)}. No other setting\"",
      '" newest first, with its image and its behavior settings: LEDGER_HANDLER, CONFIRMER_HANDLER, BAD_EVENTS. No other'
      ' setting"', False),
-    ("the action as first offered offers every service", A + "catalog.py",
-     '_rollback_deploy(("ledger-consumer", "payment-confirmer"))}', "_rollback_deploy(ROLLBACK_SERVICES)}", False),
     ("a run does not record the actions it offered", A + "loop.py",
      "                \"offered_action_specs\": [asdict(action) for action in self.actions],  # as offered: a replay's too\n",
      "", False),
@@ -1993,7 +1991,7 @@ MUTANTS = [
     ("a rehearsal is not said to be one", "src/klaxon/fault_runs.py",
      "    record.rehearsal = investigate is None\n", "    record.rehearsal = False\n", False),
     ("a rehearsal's evidence does not say no model was called", "src/klaxon/fault_runs.py",
-     "        said.append(REHEARSAL)\n", "", False),
+     "        said.append(REHEARSAL)\n", "        pass\n", False),
     ("a rehearsal that saw no alert exits 0", "src/klaxon/fault_runs.py",
      "    return code or (0 if record.alert is not None else 1)", "    return code", False),
     ("a stop signal ends a rehearsal with its fault in place", "src/klaxon/fault_runs.py",
@@ -2001,6 +1999,47 @@ MUTANTS = [
      "        run(fault, record, parts, settings, None)", False),
     ("make rehearse-fault pastes the fault into the shell", "Makefile",
      '$(PY) -m klaxon.fault_runs rehearse "$$FAULT"', "$(PY) -m klaxon.fault_runs rehearse '$(FAULT)'", False),
+    # Week 4, item 4: the independent review's fixes
+    ("a key first used with another request reads as a refusal: a charged payment marked failed", S + "provider_client.py",
+     '                    if error.get("code") == KEY_REUSED:  # its first request may have gone through: not a refusal\n'
+     '                        raise KeyReused(f"{path}: the provider says this key was first used with another request")\n',
+     "", False),
+    ("a key first used with another request is retried", S + "provider_client.py",
+     '                        raise KeyReused(f"{path}: the provider says this key was first used with another request")',
+     '                        problem = "key reused"\n                        continue', False),
+    ("health counts a money check with no verdict as unwell", A + "verify.py",
+     "        if (rule, subject, number) == BOOKS and check is not None and check.numbers.get(number) is None:\n"
+     "            continue  # the money check gave no verdict: the money's own judgment says so (could not verify)\n",
+     "", False),
+    ("health skips the books rule even when it read a verdict", A + "verify.py",
+     "        if (rule, subject, number) == BOOKS and check is not None and check.numbers.get(number) is None:",
+     "        if (rule, subject, number) == BOOKS:", False),
+    ("the health sentence never names the books rule", A + "verify.py",
+     "            return Health(True, None, tuple(rounds), books=True)",
+     "            return Health(True, None, tuple(rounds))", False),
+    ("the health sentence names the books rule for health saved before it", A + "verify.py",
+     '        rules = "the metric rules and the books rule were" if health.books else "the metric rules were"',
+     '        rules = "the metric rules and the books rule were"', False),
+    ("the action as first offered offers every service, as today's does", A + "catalog.py",
+     '                    "enum": ["ledger-consumer", "payment-confirmer"],',
+     '                    "enum": list(ROLLBACK_SERVICES),', False),
+    ("the action as first offered says what today's says", A + "catalog.py",
+     "        description=(\n            \"Roll one service back to the settings it ran before its latest deploy",
+     "        description=ROLLBACK + \" \" or (\n            \"Roll one service back to the settings it ran before its latest deploy",
+     False),
+    ("fault 6's where is any pool", "src/klaxon/grading.py",
+     '                    r"(?<!redis )connection[-_ ]?pool",', '                    r"pool",', False),
+    ("fault 6's what counts holding a connection as keeping it", "src/klaxon/grading.py",
+     '                    r"(keeps?|kept) (on to |onto )?(\\w+ ){0,2}connections?",',
+     '                    r"(keeps?|kept|held|holds?|holding) (on to |onto )?(\\w+ ){0,2}connections?",', False),
+    ("fault 5's what is any secret", "src/klaxon/grading.py",
+     '                    r"WEBHOOK_SECRET_VERSION",\n                    r"\\bv2\\b",',
+     '                    r"WEBHOOK_SECRET_VERSION",\n                    r"secret|rotat|signing key",', False),
+    ("any 400 is an answer", "src/klaxon/grading.py",
+     '                    r"\\b400 (bad|error|response|status)",', '                    r"\\b400\\b",', False),
+    ("fault 4's unit is any unit", "src/klaxon/grading.py",
+     '                    r"wrong units?\\b|\\bunits? (bug|error|mix|mismatch|confusion)",', '                    r"\\bunits?\\b",',
+     False),
     ("a restart fits fault 6's remedy", "src/klaxon/grading.py",
      '            Element("the deploy that brought it", (*DEPLOY, r"REFUND_CONNECTION"), required=False),\n        ),\n'
      '        fix_kinds=("rollback", "config_change"),',
@@ -2045,6 +2084,17 @@ def main() -> int:
     assert str(work) in check.stdout, f"the copy is not the code under test: {check.stdout}"
 
     selected = [m for m in MUTANTS if (with_stack or not m[4]) and (not only or m[1] in only)]
+    # A mutant that does not compile would be "caught" by any test that imports its module: say so, and stop.
+    broken = []
+    for name, file, old, new, _ in selected:
+        if file.endswith(".py"):
+            try:
+                compile((work / file).read_text().replace(old, new), file, "exec")
+            except SyntaxError as exc:
+                broken.append(f"{name} ({type(exc).__name__}: {exc.msg}, line {exc.lineno})")
+    if broken:
+        print("mutants that do not compile:\n  " + "\n  ".join(broken))
+        return 2
     for integration in sorted({m[4] for m in selected}):
         baseline = run_tests(work, python, integration)
         if baseline.returncode != 0:

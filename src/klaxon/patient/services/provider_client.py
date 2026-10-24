@@ -3,7 +3,10 @@
 Every call carries an idempotency key, so a retry after a timeout cannot charge
 twice: the provider answers a repeated key with the first result. Errors the
 provider will not change its mind about (4xx other than 409 and 429) are not
-retried.
+retried. One of them is no refusal: a 400 saying the key was first used with
+another request (KeyReused). That first request may have gone through (a deploy
+between two tries of one payment changed its amount, say), so the outcome is
+unknown, as with no answer (week 4, item 4: the review's finding 1).
 
 The circuit breaker (week 4, the provider-outage fault's remedy). Without one,
 when the provider hangs, every payment waits out 3 timed-out attempts, and the
@@ -71,6 +74,7 @@ from klaxon.patient.services.common import log
 logger = logging.getLogger("klaxon.provider_client")
 
 RETRYABLE_STATUSES = {409, 429}  # "a request with this key is still running" and "slow down"
+KEY_REUSED = "idempotency_key_reused"  # the provider's code for a key first used with another request
 OWN_ERRORS = {500, 501}  # 5xx that are the provider's own answer about one request; any other 5xx is no answer
 SLOW_SHARE = 0.5  # of the timeout: a 500 or 501 that took longer held a thread for most of a timeout: no answer
 BREAKER_FAILURES = 5  # failed calls in a row that open the breaker
@@ -96,6 +100,11 @@ class ProviderUnavailable(Exception):
 class CircuitOpen(ProviderUnavailable):
     """The circuit breaker refused the call: the provider failed too often, so it was not asked this time. An earlier
     attempt with the same key may have reached it, so the outcome is still unknown."""
+
+
+class KeyReused(ProviderUnavailable):
+    """The provider refused this request because its key was first used with another request, which may have gone
+    through: the outcome is unknown, so the payment or refund stays pending. Not retried: the answer would not change."""
 
 
 class ProviderRejected(Exception):
@@ -247,6 +256,8 @@ class ProviderClient:
                     return response.json()
                 if response.status_code < 500 and response.status_code not in RETRYABLE_STATUSES:
                     error = _error_of(response)
+                    if error.get("code") == KEY_REUSED:  # its first request may have gone through: not a refusal
+                        raise KeyReused(f"{path}: the provider says this key was first used with another request")
                     raise ProviderRejected(
                         response.status_code, error.get("code", "rejected"), error.get("message", "")
                     )
