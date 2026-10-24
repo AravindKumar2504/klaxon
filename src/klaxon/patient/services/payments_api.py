@@ -15,7 +15,8 @@ How a retried request is kept from charging twice, layer by layer:
 
 When the provider's answer never comes (timeouts, 5xx), the outcome is
 unknown: the payment stays pending and the client is told to retry with the
-same key. If the provider did charge, its webhook settles it: the payment
+same key. The same when the provider says the key was first used with another
+request (week 4): that first request may have gone through. If the provider did charge, its webhook settles it: the payment
 confirmer marks it succeeded (see payment_confirmer), so a retry finds it
 confirmed, and it does not stay pending when the client never retries. If the
 provider never charged, it stays pending: no money moved, and the money
@@ -92,6 +93,7 @@ from klaxon.patient.services.events import ID, MAX_AMOUNT_CENTS
 from klaxon.patient.services.idempotency import RedisIdempotency
 from klaxon.patient.services.payments_store import PaymentRow, PaymentsStore, PgPaymentsStore, RefundRow
 from klaxon.patient.services.provider_client import (
+    KeyReused,
     ProviderClient,
     ProviderRejected,
     ProviderUnavailable,
@@ -185,6 +187,14 @@ def _respond(outcome: Outcome, headers: dict[str, str] | None = None) -> JSONRes
     return JSONResponse(outcome.body, status_code=outcome.status, headers=headers or None)
 
 
+def left_pending(what: str, exc: ProviderUnavailable) -> str:
+    """The log line for an outcome we do not know: no answer we can trust, or a key the provider first saw with
+    another request (its first request may have gone through)."""
+    if isinstance(exc, KeyReused):
+        return f"the provider saw this {what}'s key first with another request; {what} left pending"
+    return f"provider unavailable; {what} left pending"
+
+
 def charge_unit_setting(value: str) -> int:
     """CHARGE_AMOUNT_UNIT: cents (the default), or dollars, known to be bad: each charge is 100 times the amount. What
     our amount is multiplied by in a charge."""
@@ -262,13 +272,7 @@ def create_app(
                     metadata={"klaxon_payment_id": row.id},
                 )
             except ProviderUnavailable as exc:
-                log(
-                    logger,
-                    logging.ERROR,
-                    "provider unavailable; payment left pending",
-                    payment_id=row.id,
-                    error=str(exc),
-                )
+                log(logger, logging.ERROR, left_pending("payment", exc), payment_id=row.id, error=str(exc))
                 return refused(503, "provider_unavailable", OUTCOME_UNKNOWN, final=False, payment=payment_view(row))
             except ProviderRejected as exc:
                 row = store.mark_payment(row.id, "failed", None)
@@ -349,9 +353,7 @@ def create_app(
                     payment.provider_payment_id, row.amount_cents, row.id, metadata={"klaxon_refund_id": row.id}
                 )
             except ProviderUnavailable as exc:
-                log(
-                    logger, logging.ERROR, "provider unavailable; refund left pending", refund_id=row.id, error=str(exc)
-                )
+                log(logger, logging.ERROR, left_pending("refund", exc), refund_id=row.id, error=str(exc))
                 return refused(503, "provider_unavailable", OUTCOME_UNKNOWN, final=False, refund=refund_view(row))
             except ProviderRejected as exc:
                 row = store.mark_refund(row.id, "failed", None)

@@ -319,7 +319,9 @@ def test_the_api_runs_its_breaker_unless_told_off(monkeypatch):
 # Week 4, item 4: two settings that stand for bad versions of this service (faults 4 and 6 in klaxon.faults)
 
 
-def test_a_retry_whose_key_the_provider_first_saw_with_another_amount_leaves_the_payment_pending(parts, tmp_path):
+def test_a_retry_whose_key_the_provider_first_saw_with_another_amount_leaves_the_payment_pending(
+    parts, tmp_path, telemetry
+):
     """The review's finding 1: a charge made under the money-unit bug, its answer lost, then retried after the
     rollback with the right amount. The provider refuses the key, first used with another request; that first one
     went through, so the outcome is unknown, never "failed". The real provider app and store, in this process."""
@@ -335,6 +337,8 @@ def test_a_retry_whose_key_the_provider_first_saw_with_another_amount_leaves_the
     assert (answer.status_code, answer.json()["error"]["code"]) == (503, "provider_unavailable")
     assert answer.json()["payment"]["status"] == "pending" and store.get_payment("pmt_000001").status == "pending"
     assert [charge["amount_cents"] for charge in books.list_payments()[0]] == [250_000]  # charged once, 100 times
+    said = [r.body for r in telemetry.log_records() if r.attributes.get("payment_id") == "pmt_000001"]
+    assert said == ["the provider saw this payment's key first with another request; payment left pending"]
 
 
 def test_with_the_money_unit_bug_the_provider_charges_100_times_the_amount_and_our_records_keep_it_right(parts):

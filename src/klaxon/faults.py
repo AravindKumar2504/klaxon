@@ -292,10 +292,13 @@ FAULTS = {
                 " than our payment's",
                 "the API stays fast and healthy, and its answers show the right amount",
                 "refunds send the right amount: a full refund gives back 1% of what was charged",
+                "a payment whose answer was lost during the fault stays pending for good: the confirmer refuses the"
+                " provider's 100 times amount as a conflict",
             ),
             remedy=(
                 "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the"
-                " deploy what was charged above the amount (a write, so it needs approval)"
+                " deploy what was charged above the amount, at the provider: our API refunds no more than our"
+                " recorded amount (a write, so it needs approval)"
             ),
             expected_money={"during": "failed", "after": "failed", "quiet": "failed"},  # the overcharges stay
             inject=_deploy_api(CHARGE_AMOUNT_UNIT="dollars"),

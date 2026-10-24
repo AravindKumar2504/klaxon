@@ -2004,6 +2004,8 @@ MUTANTS = [
      '                    if error.get("code") == KEY_REUSED:  # its first request may have gone through: not a refusal\n'
      '                        raise KeyReused(f"{path}: the provider says this key was first used with another request")\n',
      "", False),
+    ("a key the provider first saw with another request is logged as an outage", S + "payments_api.py",
+     "    if isinstance(exc, KeyReused):\n", "    if False:\n", False),
     ("a key first used with another request is retried", S + "provider_client.py",
      '                        raise KeyReused(f"{path}: the provider says this key was first used with another request")',
      '                        problem = "key reused"\n                        continue', False),
