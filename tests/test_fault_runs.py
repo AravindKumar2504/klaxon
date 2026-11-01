@@ -1702,6 +1702,108 @@ def test_the_action_as_first_offered_gives_each_gated_live_run_its_prompt_byte_f
     assert text_sha256(loop.system_prompt(specs, fault_runs.OFFERED)) != recorded[0]["system"]["sha256"]
 
 
+# The gated live runs of item 4, replayed: regression tests from evidence (STATUS, week 4 item 4)
+
+ITEM_4_RUNS = {
+    "money-unit, unanswered": "2026-10-24T081041Z_gated-run_money-unit",
+    "money-unit, approved": "2026-10-24T082544Z_gated-run_money-unit",
+    "secret-rotation, unanswered": "2026-10-24T083634Z_gated-run_secret-rotation",
+    "secret-rotation, approved": "2026-11-01T024929Z_gated-run_secret-rotation",
+    "pool-exhaustion, approved": "2026-11-01T030525Z_gated-run_pool-exhaustion",
+    "provider-outage, no action": "2026-11-01T031219Z_gated-run_provider-outage",
+}
+
+
+@pytest.mark.parametrize("name", sorted(ITEM_4_RUNS))
+def test_each_item_4_gated_run_replays_and_its_gate_and_verification_hold(name, tmp_path):
+    """Replies received from Claude on 2026-10-24 and 2026-11-01 UTC (claude-opus-5-5), the tool results of each
+    run, its gate's files and its verification's money checks, as the run saved them. Nothing is called. These runs
+    kept the actions they offered, whole, so each replays with the payments API and the receiver among the services,
+    as offered then."""
+    folder = loop.REPO / "evidence" / "week4" / ITEM_4_RUNS[name]
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    recorded = read_trace(folder / loop.TRACE)
+    kept = recorded[0]["extra"]["loop"]
+    assert kept["offered_actions"] == ["rollback_deploy"] and recorded[0]["model"] == "claude-opus-5-5"
+    offered = loop.offered_actions(kept)
+    assert offered[0].input_schema["properties"]["service"]["enum"] == list(catalog.ROLLBACK_SERVICES)
+    specs = loop.allowed_tools(mc.ReplayTools(folder / loop.TOOL_RESULTS).open())
+    if text_sha256(loop.system_prompt(specs, offered)) != recorded[0]["system"]["sha256"]:
+        pytest.skip("the system prompt changed since these runs: record new runs to replay")
+    result, whole, differences = loop.replay(folder, tmp_path / "replay.jsonl")
+    assert (whole, differences, result.reason) == (True, [], "diagnosed")
+    # The loop got exactly the alert the rules raised; the rule grades the kept diagnosis as the run did: by version 3.
+    fired = [e for e in saved["evaluations"] if e["phase"] == "during" and e["alert"] is not None]
+    assert recorded[0]["extra"]["alert"] == saved["alert"] == fired[0]["alert"]
+    assert saved["comparison"]["rubric"]["version"] == 3 and saved["comparison"]["verdict"] == "names the cause"
+    again = grading.compare(saved["fault"]["name"], recorded[-1]["diagnosis"], grading.version_of(saved["comparison"]))
+    kept_keys = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy")
+    assert {key: again[key] for key in kept_keys} == {key: saved["comparison"][key] for key in kept_keys}
+    assert saved["comparison"]["fix_fits_the_remedy"] is True
+    if name.endswith("no action"):  # the outage with the breaker: nothing to change on our side, so nobody is asked
+        assert result.diagnosis.fix_action is None and saved["gate"]["result"] == "no action"
+        assert not (folder / gate.REQUEST).exists() and saved["verification"] is None
+        assert saved["removed_by"] == "the harness's clearing: this fault's cause is not a deploy"
+        return
+    assert result.diagnosis.fix_action.name == "rollback_deploy"
+    request, decided = gate.read_request(folder), gate.read_decision(folder)
+    assert request["id"] == saved["gate"]["request_id"]
+    assert (decided["request_id"], decided["request_sha256"]) == (request["id"], request["sha256"])
+    if name.endswith("unanswered"):  # nobody answered: the run wrote the denial itself, and nothing ran
+        assert (
+            saved["gate"]["result"] == "expired" and decided["decision"] == "expired" and gate.decided(folder) is None
+        )
+        assert saved["verification"] is None and saved["removed_by"] == "the harness's clearing (klaxon.faults)"
+        return
+    assert saved["gate"]["result"] == "done" and request["plan"]["change"] == saved["gate"]["detail"]
+    assert decided["decision"] == "approved" and decided["how"] == gate.TYPED
+    assert gate.decided(folder)["written_by_make_approve"] is True
+    found = saved["verification"]
+    at_action, after = verify.Reading.from_dict(found["at_action"]), verify.Reading.from_dict(found["after"])
+    money = verify.judge(at_action, after)
+    assert asdict(money) == found["money"] and money.cause_removed is True
+    assert money.right is (not name.startswith("money-unit"))  # a rollback repairs no overcharge
+    health = found["health"]
+    again_found = verify.Verification(
+        found["verdict"],
+        verify.Health(health["healthy"], health["why"], tuple(health["rounds"]), health["books"]),
+        at_action,
+        after,
+        money,
+    )
+    assert list(again_found.said) == found["said"] and found["verdict"] == "passed" and health["books"] is True
+    assert saved["removed_by"].startswith(f"Klaxon: its rollback (Klaxon, approved request {request['id']})")
+    assert [line["by"] for line in saved["deploys"]] == ["klaxon.faults", f"Klaxon, approved request {request['id']}"]
+
+
+def test_the_money_unit_run_records_what_waiting_cost():
+    """Fault 4's approved run (STATUS, item 4): the overcharged payments at the request, at the action and after it."""
+    saved = json.loads(
+        (loop.REPO / "evidence" / "week4" / ITEM_4_RUNS["money-unit, approved"] / fault_runs.RUN_FILE).read_text()
+    )
+    damage = saved["damage"]
+    assert damage["at_alert"]["money_check"]["failed"] == {"payments_match_provider": 56}
+    counted = [
+        verify.Reading.from_dict(damage[key]).counts()[verify.PAYMENT]
+        for key in ("at_request", "at_action", "after_action")
+    ]
+    assert counted == [149, 1080, 1080]  # it grew while the request waited, and not after the rollback
+
+
+def test_the_secret_rotation_runs_verification_waited_for_the_books_to_catch_up():
+    """Fault 5's approved run: the books rule held at four rounds while the provider sent its backlog again, then was
+    quiet at two in a row; the money check right after the action could not settle, and the later one passed."""
+    saved = json.loads(
+        (loop.REPO / "evidence" / "week4" / ITEM_4_RUNS["secret-rotation, approved"] / fault_runs.RUN_FILE).read_text()
+    )
+    rounds = [r["unwell"] for r in saved["verification"]["health"]["rounds"]]
+    assert rounds == ["a rule's condition holds: BooksBehindProvider (the books)"] * 4 + [None, None]
+    assert (saved["damage"]["at_action"]["outcome"], saved["damage"]["after_action"]["outcome"]) == (
+        "could not settle",
+        "passed",
+    )
+
+
 def test_the_gated_live_runs_record_what_waiting_cost():
     """The damage the money check saw at the alert, at the request, at the action and after it (STATUS, item 2)."""
     saved = json.loads(
