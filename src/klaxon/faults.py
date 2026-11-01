@@ -323,7 +323,7 @@ FAULTS = {
                 "payments and refunds still go through, but one whose answer was lost cannot be confirmed: its"
                 " client's retries get 503 again, so the 5xx share of POST /payments about doubles and its p95 climbs"
                 " to about 0.6 s, both under their thresholds",
-                "after the rollback the books catch up within about two minutes: the provider sends each refused"
+                "after the rollback the books catch up within about three minutes: the provider sends each refused"
                 " webhook again within a minute of its last try, and one whose acknowledgement is then lost (the"
                 " traffic's noise) a minute later",
             ),
