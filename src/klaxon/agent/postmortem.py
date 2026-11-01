@@ -86,7 +86,7 @@ LATER = "outcome unknown, then confirmed later"
 PENDING = "outcome unknown, still pending at the client's last status check"
 OTHER = "outcome unknown, in another state at the client's status check"
 SILENT = "outcome unknown, no answer to the client's status check"
-NEVER = "outcome unknown, never checked: the answer named none to check"
+NEVER = "outcome unknown, with no status check of the clients on record"
 FOLLOWED = {LATER: "confirmed_later", PENDING: "still_pending", OTHER: "other", SILENT: "no_answer"}
 # How a request's time open ends, by the gate log's line that ends it.
 ANSWERED = {
@@ -601,7 +601,10 @@ def _unknown_said(counts: Mapping, what: str) -> str:
     if counts[SILENT]:
         parts.append(f"{counts[SILENT]} got no answer to the client's status check")
     if counts[NEVER]:
-        parts.append(f"{counts[NEVER]} were never checked, since their answer named no {what}")
+        parts.append(
+            f"{counts[NEVER]} have no status check of the clients on record (their answer named no {what} to check,"
+            " or the check was shed, or not sent before the traffic stopped)"
+        )
     return f"Of the {counts['outcome unknown']} {what}s whose outcome was left unknown, {', '.join(parts)}."
 
 
@@ -638,7 +641,7 @@ def _clients(saved: Mapping) -> dict:
         said.append(_unknown_said(refunds, "refund"))
     if n("shed"):
         said.append(
-            f"The clients shed {n('shed')} requests in all (payments, refunds and status checks), when"
+            f"The clients shed {n('shed')} requests in all, of every kind, when"
             f" {settings.get('max_in_flight')} were already in flight."
         )
     said.append(f"The clients retried {_n(n('retries'), 'time', 'times')}.")
@@ -864,9 +867,13 @@ def _left_unknown(clients: Mapping, last: Mapping | None) -> str | None:
             f"{payments[PENDING]} payments and {refunds[PENDING]} refunds were still pending at the client's last"
             " status check"
         )
+    if payments[SILENT] or refunds[SILENT]:
+        parts.append(
+            f"{payments[SILENT]} payments and {refunds[SILENT]} refunds got no answer to the client's status check"
+        )
     if payments[NEVER] or refunds[NEVER]:
         parts.append(
-            f"{payments[NEVER]} payments and {refunds[NEVER]} refunds were never checked, since their answer named none"
+            f"{payments[NEVER]} payments and {refunds[NEVER]} refunds have no status check of the clients on record"
         )
     if not parts:
         return None
@@ -1055,8 +1062,11 @@ class Checked:
 
 
 def _style(name: str, text: str) -> list[str]:
+    """What breaks the narrative's style in one section, as written: a dash (also one a line break hides, since the
+    page shows every line break as a space), a link or markup, other digits than 0 to 9, a mark over a digit."""
     problems = []
-    if any(ch in DASHES for ch in text) or re.search(r"[ \t]-[ \t]|--", text):
+    shown = " ".join(text.split())
+    if any(ch in DASHES for ch in text) or re.search(r"[ \t]-[ \t]|--", shown):
         problems.append(f"{name}: has a dash: write it without dashes")
     if LINK.search(text):
         problems.append(f"{name}: has a link or markup: plain sentences only")
@@ -1105,7 +1115,7 @@ def read_narrative(text: str, allowed: frozenset[tuple[str, object]]) -> Checked
                 flagged.append({"section": name, "said": number.said, "kind": number.kind})
                 problems.append(_flag(name, number))
         style += _style(name, written[name])
-    problems = list(dict.fromkeys(problems + style))  # each once, the numbers first
+    problems = list(dict.fromkeys(style + problems))  # each once, the style first: it alone discards a reply
     return Checked(sections, tuple(problems[:MAX_PROBLEMS]), count, tuple(flagged), tuple(dict.fromkeys(style)))
 
 

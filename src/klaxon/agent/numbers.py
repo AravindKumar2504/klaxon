@@ -5,13 +5,14 @@ Each run of the digits 0 to 9 is read as part of exactly one token, and each tok
 
     datetime  2026-10-21T09:06:47Z, 2026-10-21 09:06:47 UTC: read as a date and a time
     date      2026-10-21
-    time      09:06:47, 09:06:47 UTC, 9:06: to the second, or to the minute; its zone (Z, UTC, +00:00) is no number
+    time      09:06:47, 09:06:47 UTC, 9:06: to the second, or to the minute; its zone (Z, UTC, and +00:00 after a
+              datetime) is no number, and 09:06-23:59 is two times
     money     $1,531.87, $40, -$5.00: in cents, with its sign
     duration  96 s, 45.8 s, 10 minutes, a 10-minute wait, 200 ms, 5 min 23 s, 1 minute and 36 seconds: in seconds
     percent   92%, 4.2 percent
     id        r-e16d, evt_000251, pay_000230, p95, 5xx, v2, claude-opus-5-5: a word of letters and digits
-    number    1,080, 4 000, 0.85, -28, and 1/2 or 10^2 as one token: compared as written, with its sign and without
-              its thousands separators, so 4.000 is not 4
+    number    1,080, 4 000, 0.85, -28, and 1/2, 10^2 or 28-fold as one token: compared as written, with its sign and
+              without its thousands separators, so 4.000 is not 4
 
 A number written in words (two, ten, hundred, half, zero, tenfold) is a token too. "One", "once", "twice" and the
 ordinals are not read: prose uses them for much else, so they are a stated limit of the check.
@@ -27,18 +28,21 @@ from dataclasses import dataclass
 
 SIGN = r"(?:(?<![A-Za-z0-9_])[-+])?"  # a minus or a plus that starts a number, not a hyphen inside a word
 CLOCK = r"[0-9]{1,2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?"
-ZONE = r"(?:Z|[ ]?UTC\b|[+-][0-9]{2}:[0-9]{2})?"
+# A time's zone: Z or UTC, and after a whole date and time also a zero offset (+00:00, as Python writes UTC). Any
+# other offset is no zone: after a bare time, -23:59 is a second time (09:06-23:59), and is read as one.
+ZONE = r"(?:Z|[ ]?UTC\b)"
 GROUP = "[ '\u00a0\u2000-\u200a\u2019\u202f\u205f\u3000]"  # a space or an apostrophe between thousands: 4 000, 4'000
 TOKENS = re.compile(
     "|".join(
         f"(?P<{name}>{pattern})"
         for name, pattern in (
-            ("datetime", rf"[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}[T ]{CLOCK}{ZONE}"),
+            ("datetime", rf"[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}[T ]{CLOCK}(?:{ZONE}|[+-]00:00)?"),
             ("date", r"[0-9]{4}-[0-9]{2}-[0-9]{2}"),
-            ("time", rf"{CLOCK}{ZONE}"),
+            ("time", rf"{CLOCK}{ZONE}?"),
             ("money", rf"{SIGN}\$(?:[0-9]{{1,3}}(?:,[0-9]{{3}})+|[0-9]+)(?:\.[0-9]{{2}})?(?![0-9])"),
             ("grouped", rf"{SIGN}[0-9]{{1,3}}(?:{GROUP}[0-9]{{3}})+(?![0-9])"),
-            ("ratio", rf"{SIGN}[0-9]+(?:\.[0-9]+)?(?:[/^*\u00d7\u00f7][0-9]+(?:\.[0-9]+)?)+"),  # 1/2, 10^2, 3*4
+            # 1/2, 10^2, 3*4 and 28-fold: each one number, as written
+            ("ratio", rf"{SIGN}[0-9]+(?:\.[0-9]+)?(?:(?:[/^*\u00d7\u00f7][0-9]+(?:\.[0-9]+)?)+|-?fold\b)"),
             ("minutes", rf"{SIGN}[0-9]+ ?min(?:ute)?s?,?(?: and)? [0-9]+(?:\.[0-9]+)? ?s(?:ec(?:ond)?s?)?\b"),
             (
                 "duration",

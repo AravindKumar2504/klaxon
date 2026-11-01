@@ -67,6 +67,12 @@ def read(text):
         ("a 2-round wait", [("number", "2")]),
         ("deploy 21-22", [("number", "21"), ("number", "22")]),
         ("zero, tens and tenfold", [("word", "zero"), ("word", "tens"), ("word", "tenfold")]),
+        # The re-check's strings: an offset is a zone only after a whole datetime, and only +00:00.
+        ("It ran 09:06-23:59 UTC.", [("time", "09:06"), ("time", "23:59")]),
+        ("From 09:07:35-09:09:11", [("time", "09:07:35"), ("time", "09:09:11")]),
+        ("at 09:06:47+05:30", [("time", "09:06:47"), ("time", "05:30")]),
+        ("2026-10-21T09:05:13+05:30", [("date", "2026-10-21"), ("time", "09:05:13"), ("time", "05:30")]),
+        ("a 28-fold rise", [("number", "28-fold")]),
         ("two rounds, ten refunds, a hundred times, half", [("word", w) for w in ("two", "ten", "hundred", "half")]),
         ("Two", [("word", "two")]),
     ],

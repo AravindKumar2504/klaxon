@@ -414,11 +414,14 @@ def test_a_number_the_facts_do_not_hold_is_found_with_its_kind(fault_1, impact, 
 
 
 def test_a_value_the_facts_hold_only_as_another_kind_is_flagged(fault_1):
-    """The request was open 96 s: a duration. 96 alone, as a count, is not in the facts."""
+    """The request was open 96 s: a duration. 96 alone, as a count, or 96% are not in the facts."""
     allowed = evidence_numbers(fault_1)
-    assert ("duration", 96.0) in allowed and ("number", "96") not in allowed
-    checked = read_narrative(but(timeline="The request waited 96 before it was approved."), allowed)
-    assert checked.problems == ("timeline: '96' is not in the facts, as a number",)
+    assert ("duration", 96.0) in allowed and ("number", "96") not in allowed and ("percent", 96.0) not in allowed
+    checked = read_narrative(but(timeline="The request waited 96 before it was approved, 96% of it."), allowed)
+    assert checked.problems == (
+        "timeline: '96' is not in the facts, as a number",
+        "timeline: '96%' is not in the facts, as a percentage",
+    )
 
 
 def test_a_number_in_words_the_facts_write_so_passes():
@@ -828,13 +831,15 @@ def test_outcomes_the_clients_never_checked_are_said_and_owed():
     said = found["impact"]["clients"]["said"]
     assert (
         "Of the 234 payments whose outcome was left unknown, 0 were confirmed later, 0 were still pending at the"
-        " client's last status check, 234 were never checked, since their answer named no payment." in said
+        " client's last status check, 234 have no status check of the clients on record (their answer named no"
+        " payment to check, or the check was shed, or not sent before the traffic stopped)." in said
     )
     assert "112 of the payments that arrived got no answer the clients counted." in said
+    assert "The clients shed 117 requests in all, of every kind, when 64 were already in flight." in said
     owed = found["repairs"]["owed"]
     assert owed[1].startswith(
-        "Of the outcomes the synthetic clients left unknown, 234 payments and 2 refunds were never checked, since"
-        " their answer named none."
+        "Of the outcomes the synthetic clients left unknown, 234 payments and 2 refunds have no status check of the"
+        " clients on record."
     )
     assert owed[1].endswith("One still pending needs a decision: a retry with its key, or marking it failed.")
 
@@ -1031,7 +1036,11 @@ def test_a_draft_says_one_call_and_no_numbers_plainly(fault_1):
 def test_an_interrupted_draft_says_so_and_never_blocks_the_next_one_silently(drafting, tmp_path, capsys):
     """Finding 8 (low): an interrupt left only the recording, and the next draft said to replay it."""
     folder = copy_run("duplicate-delivery, approved", tmp_path)
-    assert drafting(folder, KeyboardInterrupt()) == 130
+    try:
+        code = drafting(folder, KeyboardInterrupt())
+    except KeyboardInterrupt:
+        pytest.fail("the draft let the interrupt through")
+    assert code == 130
     assert sorted(path.name for path in folder.iterdir() if path.name.startswith("postmortem")) == [
         postmortem.RECORDING
     ]
@@ -1056,3 +1065,52 @@ def test_a_replay_compares_the_whole_saved_postmortem(drafting, tmp_path, change
     assert drafting(folder, reply(GOOD)) == 0
     edit(folder, postmortem.SAVED, change)
     assert difference in postmortem.replay(folder)
+
+
+# The review's re-check (week 4, item 5).
+
+
+@pytest.mark.parametrize(
+    "timeline, problem",
+    [
+        ("It ran 09:06-23:59 UTC.", "'23:59 UTC' is not in the facts, as a time"),
+        ("From 09:07:35-09:09:58, it waited.", "'09:09:58' is not in the facts, as a time"),
+        ("It fired at 09:06:47+05:30.", "'05:30' is not in the facts, as a time"),
+        ("A 28-fold rise.", "'28-fold' is not in the facts, as a number"),
+    ],
+)
+def test_a_time_range_or_an_offset_hides_no_number(fault_1, timeline, problem):
+    """The re-check's finding 1 (medium): an offset after a bare time was read as its zone, so 09:06-23:59 hid 23:59."""
+    checked = read_narrative(but(timeline=timeline), evidence_numbers(fault_1))
+    assert any(problem in found for found in checked.problems), checked.problems
+
+
+@pytest.mark.parametrize("text", ["It ended -\nand nobody fixed the books.", "It ended\n-\nthere."])
+def test_a_dash_a_line_break_hides_is_a_dash(fault_1, text):
+    """The re-check's finding 2: the page shows each line break as a space, so this is a dash on the page."""
+    checked = read_narrative(but(cause=text), evidence_numbers(fault_1))
+    assert "cause: has a dash: write it without dashes" in checked.problems
+
+
+def test_the_problem_that_discards_a_reply_is_always_sent_back(fault_1):
+    """The re-check's finding 3: past the cap of 8, the dash was never named, though it alone discards the reply."""
+    wrong = " ".join(f"{n} payments." for n in range(4001, 4010)) + " It ended \u2014 badly."
+    model = ScriptedModel([but(impact=wrong)] * MAX_CALLS)
+    draft = postmortem.write(fault_1, model)
+    assert "- impact: has a dash: write it without dashes" in model.calls[1][1][-1].content
+    assert draft.outcome == "no narrative" and draft.problems[0] == "impact: has a dash: write it without dashes"
+
+
+def test_a_status_check_with_no_answer_is_owed_a_decision(tmp_path):
+    """The re-check's finding 4: payments whose status check got no answer were said, but not owed."""
+    folder = copy_run("secret-rotation, approved", tmp_path)
+    edit(
+        folder,
+        "run.json",
+        lambda run: run["traffic"]["counts"].update({"payments.unknown": 30, "unknown_payments.no_answer": 5}),
+    )
+    owed = postmortem.facts(folder)["repairs"]["owed"][1]
+    assert owed.startswith(
+        "Of the outcomes the synthetic clients left unknown, 23 payments and 3 refunds were still pending at the"
+        " client's last status check; 5 payments and 0 refunds got no answer to the client's status check."
+    )
