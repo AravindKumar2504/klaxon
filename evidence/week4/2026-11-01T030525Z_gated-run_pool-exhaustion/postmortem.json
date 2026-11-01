@@ -1,0 +1,394 @@
+{
+  "label": "A postmortem draft of one gated run: the facts, filled in by code from the run's saved evidence, and the narrative Claude drafted from them (recorded responses, in postmortem-recording.jsonl, with hidden characters dropped here), with what the check of its numbers found.",
+  "facts": {
+    "format": 1,
+    "label": "The facts of one incident, filled in by code (klaxon.agent.postmortem) from a gated run's saved evidence: its run.json, the gate's request, decision and log, and the loop's trace. Each fact says where it comes from. The incident: a fault injected on purpose into a payments system on one machine, with synthetic data and a simulated provider, so no real money.",
+    "run": {
+      "folder": "2026-11-01T030525Z_gated-run_pool-exhaustion",
+      "fault": "pool-exhaustion",
+      "title": "Payments fail: the payments API's database pool runs dry",
+      "what_it_was": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, pool-exhaustion, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, offered one write action (rollback_deploy), which runs only if a person approves it at the gate, and stopped on diagnosed after 9 steps; any reply it got is a recorded response, not a simulation. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Klaxon asked at the approval gate to act on its diagnosis; the request was approved with make approve (the request's id typed at a terminal), and the action ran: redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned. Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is right. The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-7b9d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "ran_at_utc": "2026-11-01T03:05:25+00:00",
+      "git_commit": "8dd2477",
+      "from": "run.json"
+    },
+    "timeline": [
+      {
+        "at_utc": "2026-11-01T03:06:41Z",
+        "since_the_fault": null,
+        "what": "The alert rules were quiet at 2 evaluations in a row, and the money check passed: the stack was ready for the fault.",
+        "from": "run.json: evaluations (before)"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "0 s",
+        "what": "The fault's injection began, on purpose (klaxon.faults): a deploy of payments-api with REFUND_CONNECTION=kept. It took 2.2 s. The deploy log has it as deploy 27, by klaxon.faults, at 2026-11-01T03:06:44Z.",
+        "from": "run.json: injected, timings, deploys"
+      },
+      {
+        "at_utc": "2026-11-01T03:07:31Z",
+        "since_the_fault": "49.1 s",
+        "what": "The alert PaymentsLatencyHigh fired, raised by klaxon.alerts from what the stack showed: Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.3 s, above the threshold of 2 s.",
+        "from": "run.json: alert"
+      },
+      {
+        "at_utc": "2026-11-01T03:07:32Z",
+        "since_the_fault": "50.1 s",
+        "what": "Klaxon's loop began to investigate the alert: claude-opus-5-5 through Claude Code on Aravind's seat, with read-only tools, offered one write action (rollback_deploy) that runs only if a person approves it.",
+        "from": "trace.jsonl: start"
+      },
+      {
+        "at_utc": "2026-11-01T03:08:16Z",
+        "since_the_fault": "94 s (1 min 34 s)",
+        "what": "The loop stopped: diagnosed (confidence 0.6), after 9 steps and 8 tool calls, in 43.9 s.",
+        "from": "trace.jsonl: stop; run.json: loop"
+      },
+      {
+        "at_utc": "2026-11-01T03:08:16Z",
+        "since_the_fault": "94.1 s",
+        "what": "The money check right before the request: no damage: the money check passed.",
+        "from": "run.json: damage.at_request"
+      },
+      {
+        "at_utc": "2026-11-01T03:08:17Z",
+        "since_the_fault": null,
+        "what": "Klaxon asked to act, at the approval gate: request r-7b9d, redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned. It was open until 2026-11-01T03:18:17Z. Its undo: going back to REFUND_CONNECTION=kept would deploy a known-bad setting: Klaxon will not; a person can, by hand.",
+        "from": "gate.jsonl: requested"
+      },
+      {
+        "at_utc": "2026-11-01T03:08:51Z",
+        "since_the_fault": null,
+        "what": "Request r-7b9d was approved with make approve: typed at a terminal.",
+        "from": "gate.jsonl: approved"
+      },
+      {
+        "at_utc": "2026-11-01T03:08:57Z",
+        "since_the_fault": null,
+        "what": "The action ran: deploy 28 of payments-api in the deploy log, by Klaxon, approved request r-7b9d, with PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=returned.",
+        "from": "gate.jsonl: done"
+      },
+      {
+        "at_utc": "2026-11-01T03:08:57Z",
+        "since_the_fault": null,
+        "what": "The money check right after the action: no damage: the money check passed.",
+        "from": "run.json: verification.at_action"
+      },
+      {
+        "at_utc": "2026-11-01T03:10:02Z",
+        "since_the_fault": null,
+        "what": "Health, by code: 5 rounds of the rules and the containers, from 2026-11-01T03:08:58Z to 2026-11-01T03:10:02Z: healthy.",
+        "from": "run.json: verification.health"
+      },
+      {
+        "at_utc": "2026-11-01T03:10:03Z",
+        "since_the_fault": null,
+        "what": "The later money check, at least a minute after the action: no damage: the money check passed.",
+        "from": "run.json: verification.after"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "202.1 s",
+        "what": "Verification, by code and not by the model: passed.",
+        "from": "run.json: verification"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "202.2 s",
+        "what": "The harness's clearing, its safety net, asked for the good settings of payments-api (PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=returned). The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-7b9d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+        "from": "run.json: cleared, removed_by, deploys"
+      },
+      {
+        "at_utc": "2026-11-01T03:11:34Z",
+        "since_the_fault": "292.2 s",
+        "what": "The rules read the stack again after the clearing: no alert fired; the money check passed.",
+        "from": "run.json: evaluations (after)"
+      }
+    ],
+    "durations": [
+      {
+        "what": "from the fault to the alert",
+        "said": "49.1 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "Klaxon's investigation",
+        "said": "43.9 s",
+        "from": "run.json: loop"
+      },
+      {
+        "what": "from the alert to the diagnosis",
+        "said": "44.9 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "the request's window: open until it expires",
+        "said": "600 s (10 min)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "the request was open until it was approved",
+        "said": "34 s",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "from the alert to the action",
+        "said": "86 s (1 min 26 s)",
+        "from": "run.json; gate.jsonl"
+      },
+      {
+        "what": "from the fault's deploy to Klaxon's rollback",
+        "said": "133 s (2 min 13 s)",
+        "from": "run.json: deploys; gate.jsonl"
+      },
+      {
+        "what": "the verification",
+        "said": "66.8 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "from the fault to the harness's clearing",
+        "said": "202.2 s",
+        "from": "run.json: timings"
+      }
+    ],
+    "impact": {
+      "alert": {
+        "name": "PaymentsLatencyHigh",
+        "fired_at": "2026-11-01T03:07:31Z",
+        "said": "Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.3 s, above the threshold of 2 s.",
+        "from": "run.json: alert (raised by klaxon.alerts from what the stack showed)"
+      },
+      "money": [
+        {
+          "when": "at the alert",
+          "at_utc": "2026-11-01T03:07:31Z",
+          "outcome": "passed",
+          "said": "the money check passed",
+          "lag": "ledger 0, payment-confirmer 0",
+          "from": "run.json: damage.at_alert (the alert's own evaluation of the rules)"
+        },
+        {
+          "when": "right before the request",
+          "at_utc": "2026-11-01T03:08:16Z",
+          "outcome": "passed",
+          "said": "no damage: the money check passed",
+          "from": "run.json: damage.at_request"
+        },
+        {
+          "when": "right after the action",
+          "at_utc": "2026-11-01T03:08:57Z",
+          "outcome": "passed",
+          "said": "no damage: the money check passed",
+          "from": "run.json: damage.at_action"
+        },
+        {
+          "when": "later, at least a minute after the action",
+          "at_utc": "2026-11-01T03:10:03Z",
+          "outcome": "passed",
+          "said": "no damage: the money check passed",
+          "from": "run.json: damage.after_action"
+        },
+        {
+          "when": "after the harness's clearing",
+          "at_utc": "2026-11-01T03:11:34Z",
+          "outcome": "passed",
+          "said": "the money check passed",
+          "from": "run.json: evaluations (after)"
+        }
+      ],
+      "clients": {
+        "from": "run.json: traffic and traffic_settings (klaxon.traffic, the synthetic clients' own counts)",
+        "payments": {
+          "arrived": 1076,
+          "succeeded": 730,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 234,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 0,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 234,
+          "answered": 964,
+          "never answered": 112
+        },
+        "refunds": {
+          "succeeded": 73,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 2,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 0,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 2
+        },
+        "shed": 117,
+        "retries": 811,
+        "said": [
+          "The synthetic clients sent 3 new payments per second, on average.",
+          "1076 payments arrived, and 964 got an answer: 730 succeeded, 0 were refused, 0 got an answer the clients did not expect, and 234 were left with their outcome unknown.",
+          "Of the 234 payments whose outcome was left unknown, 0 were confirmed later, 0 were still pending at the client's last status check, 234 have no status check of the clients on record (their answer named no payment to check, or the check was shed, or not sent before the traffic stopped).",
+          "112 of the payments that arrived got no answer the clients counted.",
+          "Refunds: 73 succeeded, 0 were refused, and 2 were left with their outcome unknown.",
+          "Of the 2 refunds whose outcome was left unknown, 0 were confirmed later, 0 were still pending at the client's last status check, 2 have no status check of the clients on record (their answer named no refund to check, or the check was shed, or not sent before the traffic stopped).",
+          "The clients shed 117 requests in all, of every kind, when 64 were already in flight.",
+          "The clients retried 811 times."
+        ]
+      }
+    },
+    "cause": {
+      "recorded": "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500",
+      "recorded_from": "run.json: fault (klaxon.faults): the fault was injected on purpose, so this is its cause",
+      "diagnosis": {
+        "by": "its loop, live: claude-opus-5-5 through Claude Code on Aravind's seat",
+        "stopped": "diagnosed (confidence 0.6), after 9 steps and 8 tool calls, in 43.9 s",
+        "confidence": 0.6,
+        "fix_kind": "rollback",
+        "named_action": {
+          "name": "rollback_deploy",
+          "arguments": {
+            "service": "payments-api"
+          }
+        },
+        "cited_calls": [
+          "c1 query_metrics",
+          "c2 recent_deploys",
+          "c3 query_metrics",
+          "c4 search_traces",
+          "c5 get_trace",
+          "c6 search_logs",
+          "c7 query_metrics",
+          "c8 query_metrics"
+        ],
+        "model_words": {
+          "note": "the loop's own words, from a model: data, not checked by code",
+          "hypothesis": "payments-api was redeployed at 03:06:42 with REFUND_CONNECTION=kept. Under that setting, each refund request most likely keeps its Postgres connection instead of returning it to the pool. Refunds have arrived at about 0.1-0.4/s since about 03:06, so the held connections build up. Within about 30 s the psycopg pool is empty. From then on every request that needs the database, POST /payments and refunds alike, waits for the pool's 5 s acquire timeout and fails with psycopg_pool.PoolTimeout as HTTP 500. That raised p95 for POST /payments from about 24 ms to 7.3 s. Provider calls stay fast, so the provider is not the cause. Traffic on POST /payments also grew, from 0.5/s to 5.8/s, which adds pressure on the pool, but the timeouts start after the deploy and after refunds begin.",
+          "fix_target": "payments-api",
+          "fix_summary": "Roll payments-api back to the settings it ran before the 03:06:42 deploy, presumably a REFUND_CONNECTION value that releases the connection after each refund. Recreating the container also frees the held connections. Afterwards, confirm that PoolTimeout errors stop and that p95 for POST /payments returns to about 25 ms. Then run money_check to see whether payments or refunds that failed with 500 left our books out of step with the provider.",
+          "blast_radius": "payments-api pauses while its container is recreated, so in-flight payment and refund requests fail and clients must retry; idempotency keys in Redis should make retries safe. The rollback restores all of the earlier settings, including PROVIDER_BREAKER and CHARGE_AMOUNT_UNIT, whose earlier values are not visible here. If one of them differed, for example the charge amount unit, the rollback could change charge behaviour. Check the deploy log before approving.",
+          "rollback_plan": "If the earlier settings behave worse, recreate payments-api with the 03:06:42 settings (REFUND_CONNECTION=kept, PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents). To stop pool exhaustion meanwhile, block or lower refund traffic, or raise the pool size, and restart the service periodically."
+        },
+        "from": "run.json: loop.diagnosis; trace.jsonl"
+      },
+      "graded": {
+        "by": "a rule (klaxon.grading, rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6): keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning.",
+        "verdict": "names the cause",
+        "elements": [
+          {
+            "element": "where: the payments API's database pool",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "what: its connections are never given back",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "how: with none left, requests wait for a connection and fail",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "the deploy that brought it",
+            "named": true,
+            "required": false
+          }
+        ],
+        "fix_fits_the_remedy": true,
+        "from": "run.json: comparison (klaxon.grading)"
+      }
+    },
+    "action": {
+      "result": "done",
+      "detail": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned",
+      "request": {
+        "id": "r-7b9d",
+        "made_at": "2026-11-01T03:08:17Z",
+        "open_until": "2026-11-01T03:18:17Z",
+        "change": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned",
+        "undoes": "deploy 27 of payments-api, at 2026-11-01T03:06:44Z, by klaxon.faults",
+        "undo": "going back to REFUND_CONNECTION=kept would deploy a known-bad setting: Klaxon will not; a person can, by hand",
+        "from": "approval-request.json (sealed with its own SHA-256, checked)"
+      },
+      "decision": {
+        "decision": "approved",
+        "at_utc": "2026-11-01T03:08:51Z",
+        "by": "make approve: typed at a terminal",
+        "rule": "Only Aravind approves Klaxon's actions, and Claude never does (DECISIONS.md, the week's plan). The gate's log records how a decision was made, not who made it.",
+        "from": "approval-decision.json (the file the run read, by its SHA-256 in gate.jsonl); gate.jsonl"
+      },
+      "ran": {
+        "deploy": 28,
+        "at_utc": "2026-11-01T03:08:57Z",
+        "service": "payments-api",
+        "by": "Klaxon, approved request r-7b9d",
+        "settings": "PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=returned",
+        "replaced": "PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=kept",
+        "from": "run.json: gate.deploy (the deploy log's line)"
+      },
+      "cause_removed": "The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-7b9d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "from": "run.json: gate, undo, removed_by"
+    },
+    "verification": {
+      "verdict": "passed",
+      "said": [
+        "Healthy: every container is healthy, and the metric rules and the books rule were quiet at 2 evaluations in a row.",
+        "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
+        "The money is right: the money check passed."
+      ],
+      "health": {
+        "healthy": true,
+        "rounds": 5,
+        "not_quiet": [
+          "a rule's condition holds: PaymentsLatencyHigh (payments-api), PaymentsErrorsHigh (payments-api) (3 of the 5 rounds)"
+        ]
+      },
+      "cause_removed": true,
+      "money_right": true,
+      "from": "run.json: verification (klaxon.agent.verify)"
+    },
+    "repairs": {
+      "last_money_check": {
+        "when": "later, at least a minute after the action",
+        "at_utc": "2026-11-01T03:10:03Z",
+        "outcome": "passed",
+        "said": "no damage: the money check passed",
+        "from": "run.json: damage.after_action"
+      },
+      "owed": [
+        "The last money check passed (later, at least a minute after the action): nothing in the books is left to repair.",
+        "Of the outcomes the synthetic clients left unknown, 234 payments and 2 refunds have no status check of the clients on record. The evidence does not say whether each settled since. The last money check passed: up to its cutoff, the provider held no charge or refund that our records did not show as succeeded, so any of them still pending had no money moved for it. One still pending needs a decision: a retry with its key, or marking it failed."
+      ],
+      "remedy": "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool",
+      "remedy_from": "run.json: fault (the remedy this fault records, klaxon.faults)"
+    }
+  },
+  "draft": {
+    "outcome": "passed",
+    "narrative": {
+      "summary": "On 2026-11-01, a fault was injected on purpose into the payments system on one machine, with synthetic data and no real money. The fault was a deploy of payments-api with REFUND_CONNECTION=kept, which leaked database connections. The alert PaymentsLatencyHigh fired 49.1 s later. Klaxon's loop diagnosed the cause with confidence 0.6. It asked at the approval gate to roll payments-api back. The request r-7b9d was approved, and deploy 28 restored REFUND_CONNECTION=returned. Verification by code passed. The money check passed at every point it was run. The synthetic clients left 234 payments and 2 refunds with their outcome unknown, and those still need a look.",
+      "timeline": "At 03:06:41 UTC the alert rules were quiet at 2 evaluations in a row, and the money check passed. The fault was then injected as deploy 27 of payments-api at 03:06:44 UTC, by klaxon.faults. The injection took 2.2 s. PaymentsLatencyHigh fired at 03:07:31 UTC. The loop began at 03:07:32 UTC and stopped at 03:08:16 UTC, diagnosed after 9 steps and 8 tool calls, in 43.9 s. Klaxon made request r-7b9d at 03:08:17 UTC, open until 03:18:17 UTC. It was approved at 03:08:51 UTC, after 34 s. Deploy 28 ran at 03:08:57 UTC, 86 s (1 min 26 s) after the alert and 133 s (2 min 13 s) after the fault's deploy. Health checks ran from 03:08:58 UTC to 03:10:02 UTC. A later money check passed at 03:10:03 UTC. Verification took 66.8 s and passed. The harness's clearing came 202.2 s after the fault and changed nothing. At 03:11:34 UTC no alert fired and the money check passed.",
+      "impact": "Customers saw slow payments. Over the last minute before the alert, the p95 latency of POST /payments was 7.3 s, above the threshold of 2 s. The money check passed at the alert, with lag of ledger 0 and payment-confirmer 0. It passed again right before the request, right after the action, at 03:10:03 UTC, and after the clearing. The synthetic clients sent 3 new payments per second, on average. Of 1076 payments that arrived, 964 got an answer: 730 succeeded, 0 were refused, and 234 were left with their outcome unknown. 112 got no answer the clients counted. Refunds: 73 succeeded, 0 were refused, and 2 were left unknown. The clients shed 117 requests and retried 811 times. The evidence does not split these counts by time, so it does not show how many fell inside the fault.",
+      "cause": "The recorded cause was deploy 27 of payments-api with REFUND_CONNECTION=kept. Reading a payment's refunds took a connection from the database pool of 10 and never gave it back. Once the pool was empty, every request waited until the pool's 5 s timeout and then failed with a 500. That waiting raised payment latency and fired PaymentsLatencyHigh. Klaxon's diagnosis named this cause. A keyword rule, klaxon.grading at rubric version 3, found that the diagnosis named every required element and the deploy that brought it, and that its fix fit the remedy. That rule reads words, not meaning. No person reviewed the diagnosis before this draft.",
+      "response": "Klaxon used tools that only read, and it was offered one write action, rollback_deploy. It asked to redeploy payments-api with PROVIDER_BREAKER on and CHARGE_AMOUNT_UNIT cents, both unchanged, and REFUND_CONNECTION changed from kept to returned. The request was approved with make approve, typed at a terminal. The rule says only Aravind approves, but the gate's log records how the decision was made, not who made it, so the evidence leaves the approver open. Deploy 28 ran by Klaxon under r-7b9d. Verification by code found every container healthy, the cause removed and the money right. In 3 of the 5 health rounds, PaymentsLatencyHigh and PaymentsErrorsHigh still had their conditions holding, before the rules went quiet.",
+      "repairs": "Nothing in the books is left to repair, since the last money check passed. Up to its cutoff, the provider held no charge or refund that our records did not show as succeeded. The 234 payments and 2 refunds left unknown have no status check of the clients on record. The evidence does not say whether each settled since. Any still pending needs a person to decide whether to retry it with its key or mark it failed. The evidence does not name who that person is. Going back to REFUND_CONNECTION=kept would deploy a known bad setting, and Klaxon will not do it."
+    },
+    "problems": [],
+    "flagged": [],
+    "numbers": 64,
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-01T19:33:32.666Z",
+      "sha256": "37ddfb595e79f0470bf6c6421237178699955f58b0cd6c1d4644e335b1918255"
+    },
+    "calls": [
+      {
+        "call": 1,
+        "reply_sha256": "37ddfb595e79f0470bf6c6421237178699955f58b0cd6c1d4644e335b1918255",
+        "problems": []
+      }
+    ]
+  }
+}

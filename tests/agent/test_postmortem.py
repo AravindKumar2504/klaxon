@@ -1134,3 +1134,37 @@ def test_a_status_check_with_no_answer_is_owed_a_decision(tmp_path):
         "Of the outcomes the synthetic clients left unknown, 23 payments and 3 refunds were still pending at the"
         " client's last status check; 5 payments and 0 refunds got no answer to the client's status check."
     )
+
+
+# The live drafts, replayed: regression tests from evidence (STATUS, week 4 item 5).
+
+LIVE = {  # each run's live draft, and how many calls it took (the check sent the first reply back in three)
+    "duplicate-delivery, approved": 1,
+    "poison-message, approved": 2,
+    "provider-outage, no action": 2,
+    "money-unit, approved": 1,
+    "secret-rotation, approved": 2,
+    "pool-exhaustion, approved": 1,
+}
+
+
+@pytest.mark.parametrize("name", sorted(LIVE))
+def test_each_live_draft_replays_exactly(name):
+    """Replies received from Claude on 2026-11-01 UTC (claude-opus-5-5, through Claude Code on Aravind's seat), recorded
+    before Klaxon used them. Nothing is called: the facts, built again from the run's evidence, are the ones the draft
+    saw; the recorded replies answer the same prompts; the checks find the same; the page comes out the same."""
+    folder = EVIDENCE / RUNS[name]
+    assert postmortem.replay(folder) == []
+    saved = json.loads((folder / postmortem.SAVED).read_text())
+    responses = [r for r in read_records(folder / postmortem.RECORDING) if r["kind"] != "prompt_part"][1:]
+    assert [(r["kind"], r["model"], r["source"], r["accepted"]) for r in responses] == [
+        ("response", "claude-opus-5-5", "claude-code", True)
+    ] * LIVE[name]
+    assert (saved["draft"]["outcome"], len(saved["draft"]["calls"])) == ("passed", LIVE[name])
+    assert saved["draft"]["reply"]["model"] == "claude-opus-5-5"
+
+
+def test_no_expired_run_has_a_live_draft():
+    """Aravind's choice (2026-11-01): the code handles the expired runs, tested offline; none had a live draft."""
+    for name in RUNS:
+        assert (EVIDENCE / RUNS[name] / postmortem.SAVED).exists() == (name in LIVE)

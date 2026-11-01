@@ -1,0 +1,396 @@
+{
+  "label": "A postmortem draft of one gated run: the facts, filled in by code from the run's saved evidence, and the narrative Claude drafted from them (recorded responses, in postmortem-recording.jsonl, with hidden characters dropped here), with what the check of its numbers found.",
+  "facts": {
+    "format": 1,
+    "label": "The facts of one incident, filled in by code (klaxon.agent.postmortem) from a gated run's saved evidence: its run.json, the gate's request, decision and log, and the loop's trace. Each fact says where it comes from. The incident: a fault injected on purpose into a payments system on one machine, with synthetic data and a simulated provider, so no real money.",
+    "run": {
+      "folder": "2026-11-01T024929Z_gated-run_secret-rotation",
+      "fault": "secret-rotation",
+      "title": "The books stop catching up: our webhook receiver refuses every webhook",
+      "what_it_was": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, secret-rotation, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, offered one write action (rollback_deploy), which runs only if a person approves it at the gate, and stopped on diagnosed after 4 steps; any reply it got is a recorded response, not a simulation. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Klaxon asked at the approval gate to act on its diagnosis; the request was approved with make approve (the request's id typed at a terminal), and the action ran: redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1. Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is right. The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-cc97) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "ran_at_utc": "2026-11-01T02:49:28+00:00",
+      "git_commit": "8dd2477",
+      "from": "run.json"
+    },
+    "timeline": [
+      {
+        "at_utc": "2026-11-01T02:50:45Z",
+        "since_the_fault": null,
+        "what": "The alert rules were quiet at 2 evaluations in a row, and the money check passed: the stack was ready for the fault.",
+        "from": "run.json: evaluations (before)"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "0 s",
+        "what": "The fault's injection began, on purpose (klaxon.faults): a deploy of webhook-receiver with WEBHOOK_SECRET_VERSION=v2. It took 2.2 s. The deploy log has it as deploy 25, by klaxon.faults, at 2026-11-01T02:50:48Z.",
+        "from": "run.json: injected, timings, deploys"
+      },
+      {
+        "at_utc": "2026-11-01T02:51:34Z",
+        "since_the_fault": "47.7 s",
+        "what": "The alert BooksBehindProvider fired, raised by klaxon.alerts from what the stack showed: Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 156 of the provider's webhooks up to it had not been acknowledged yet.",
+        "from": "run.json: alert"
+      },
+      {
+        "at_utc": "2026-11-01T02:51:50Z",
+        "since_the_fault": "63.7 s",
+        "what": "Klaxon's loop began to investigate the alert: claude-opus-5-5 through Claude Code on Aravind's seat, with read-only tools, offered one write action (rollback_deploy) that runs only if a person approves it.",
+        "from": "trace.jsonl: start"
+      },
+      {
+        "at_utc": "2026-11-01T02:52:09Z",
+        "since_the_fault": "83.4 s",
+        "what": "The loop stopped: diagnosed (confidence 0.85), after 4 steps and 3 tool calls, in 19.6 s.",
+        "from": "trace.jsonl: stop; run.json: loop"
+      },
+      {
+        "at_utc": "2026-11-01T02:52:09Z",
+        "since_the_fault": "83.5 s",
+        "what": "The money check right before the request: not known: the money check could not settle (not settled after 15.03 s: webhooks up to its cutoff not acknowledged by our receiver yet).",
+        "from": "run.json: damage.at_request"
+      },
+      {
+        "at_utc": "2026-11-01T02:52:25Z",
+        "since_the_fault": null,
+        "what": "Klaxon asked to act, at the approval gate: request r-cc97, redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1. It was open until 2026-11-01T03:02:25Z. Its undo: going back to WEBHOOK_SECRET_VERSION=v2 would deploy a known-bad setting: Klaxon will not; a person can, by hand.",
+        "from": "gate.jsonl: requested"
+      },
+      {
+        "at_utc": "2026-11-01T02:59:41Z",
+        "since_the_fault": null,
+        "what": "Request r-cc97 was approved with make approve: typed at a terminal.",
+        "from": "gate.jsonl: approved"
+      },
+      {
+        "at_utc": "2026-11-01T02:59:44Z",
+        "since_the_fault": null,
+        "what": "The action ran: deploy 26 of webhook-receiver in the deploy log, by Klaxon, approved request r-cc97, with WEBHOOK_SECRET_VERSION=v1.",
+        "from": "gate.jsonl: done"
+      },
+      {
+        "at_utc": "2026-11-01T02:59:44Z",
+        "since_the_fault": null,
+        "what": "The money check right after the action: not known: the money check could not settle (not settled after 60.01 s: webhooks up to its cutoff not acknowledged by our receiver yet).",
+        "from": "run.json: verification.at_action"
+      },
+      {
+        "at_utc": "2026-11-01T03:03:06Z",
+        "since_the_fault": null,
+        "what": "Health, by code: 6 rounds of the rules and the containers, from 2026-11-01T03:00:45Z to 2026-11-01T03:03:06Z: healthy.",
+        "from": "run.json: verification.health"
+      },
+      {
+        "at_utc": "2026-11-01T03:03:07Z",
+        "since_the_fault": null,
+        "what": "The later money check, at least a minute after the action: no damage: the money check passed.",
+        "from": "run.json: verification.after"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "742.1 s",
+        "what": "Verification, by code and not by the model: passed.",
+        "from": "run.json: verification"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "742.2 s",
+        "what": "The harness's clearing, its safety net, asked for the good settings of webhook-receiver (WEBHOOK_SECRET_VERSION=v1). The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-cc97) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+        "from": "run.json: cleared, removed_by, deploys"
+      },
+      {
+        "at_utc": "2026-11-01T03:04:38Z",
+        "since_the_fault": "832.2 s",
+        "what": "The rules read the stack again after the clearing: no alert fired; the money check passed.",
+        "from": "run.json: evaluations (after)"
+      }
+    ],
+    "durations": [
+      {
+        "what": "from the fault to the alert",
+        "said": "47.7 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "Klaxon's investigation",
+        "said": "19.6 s",
+        "from": "run.json: loop"
+      },
+      {
+        "what": "from the alert to the diagnosis",
+        "said": "35.7 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "the request's window: open until it expires",
+        "said": "600 s (10 min)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "the request was open until it was approved",
+        "said": "436 s (7 min 16 s)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "from the alert to the action",
+        "said": "490 s (8 min 10 s)",
+        "from": "run.json; gate.jsonl"
+      },
+      {
+        "what": "from the fault's deploy to Klaxon's rollback",
+        "said": "536 s (8 min 56 s)",
+        "from": "run.json: deploys; gate.jsonl"
+      },
+      {
+        "what": "the verification",
+        "said": "203.7 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "from the fault to the harness's clearing",
+        "said": "742.2 s",
+        "from": "run.json: timings"
+      }
+    ],
+    "impact": {
+      "alert": {
+        "name": "BooksBehindProvider",
+        "fired_at": "2026-11-01T02:51:34Z",
+        "said": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 156 of the provider's webhooks up to it had not been acknowledged yet.",
+        "from": "run.json: alert (raised by klaxon.alerts from what the stack showed)"
+      },
+      "money": [
+        {
+          "when": "at the alert",
+          "at_utc": "2026-11-01T02:51:34Z",
+          "outcome": "could not settle",
+          "said": "the money check could not settle: 156 of the provider's webhooks up to its cutoff were not acknowledged yet",
+          "lag": "ledger 0, payment-confirmer 0",
+          "from": "run.json: damage.at_alert (the alert's own evaluation of the rules)"
+        },
+        {
+          "when": "right before the request",
+          "at_utc": "2026-11-01T02:52:09Z",
+          "outcome": "could not settle",
+          "said": "not known: the money check could not settle (not settled after 15.03 s: webhooks up to its cutoff not acknowledged by our receiver yet)",
+          "why": "not settled after 15.03 s: webhooks up to its cutoff not acknowledged by our receiver yet",
+          "from": "run.json: damage.at_request"
+        },
+        {
+          "when": "right after the action",
+          "at_utc": "2026-11-01T02:59:44Z",
+          "outcome": "could not settle",
+          "said": "not known: the money check could not settle (not settled after 60.01 s: webhooks up to its cutoff not acknowledged by our receiver yet)",
+          "why": "not settled after 60.01 s: webhooks up to its cutoff not acknowledged by our receiver yet",
+          "from": "run.json: damage.at_action"
+        },
+        {
+          "when": "later, at least a minute after the action",
+          "at_utc": "2026-11-01T03:03:07Z",
+          "outcome": "passed",
+          "said": "no damage: the money check passed",
+          "from": "run.json: damage.after_action"
+        },
+        {
+          "when": "after the harness's clearing",
+          "at_utc": "2026-11-01T03:04:38Z",
+          "outcome": "passed",
+          "said": "the money check passed",
+          "from": "run.json: evaluations (after)"
+        }
+      ],
+      "clients": {
+        "from": "run.json: traffic and traffic_settings (klaxon.traffic, the synthetic clients' own counts)",
+        "payments": {
+          "arrived": 2721,
+          "succeeded": 2696,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 25,
+          "outcome unknown, then confirmed later": 2,
+          "outcome unknown, still pending at the client's last status check": 23,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 0,
+          "answered": 2721,
+          "never answered": 0
+        },
+        "refunds": {
+          "succeeded": 243,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 3,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 3,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 0
+        },
+        "shed": 0,
+        "retries": 139,
+        "said": [
+          "The synthetic clients sent 3 new payments per second, on average.",
+          "2721 payments arrived, and 2721 got an answer: 2696 succeeded, 0 were refused, 0 got an answer the clients did not expect, and 25 were left with their outcome unknown.",
+          "Of the 25 payments whose outcome was left unknown, 2 were confirmed later, 23 were still pending at the client's last status check.",
+          "Refunds: 243 succeeded, 0 were refused, and 3 were left with their outcome unknown.",
+          "Of the 3 refunds whose outcome was left unknown, 0 were confirmed later, 3 were still pending at the client's last status check.",
+          "The clients retried 139 times."
+        ]
+      }
+    },
+    "cause": {
+      "recorded": "a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff",
+      "recorded_from": "run.json: fault (klaxon.faults): the fault was injected on purpose, so this is its cause",
+      "diagnosis": {
+        "by": "its loop, live: claude-opus-5-5 through Claude Code on Aravind's seat",
+        "stopped": "diagnosed (confidence 0.85), after 4 steps and 3 tool calls, in 19.6 s",
+        "confidence": 0.85,
+        "fix_kind": "rollback",
+        "named_action": {
+          "name": "rollback_deploy",
+          "arguments": {
+            "service": "webhook-receiver"
+          }
+        },
+        "cited_calls": [
+          "c1 recent_deploys",
+          "c3 query_metrics",
+          "c2 search_logs"
+        ],
+        "model_words": {
+          "note": "the loop's own words, from a model: data, not checked by code",
+          "hypothesis": "webhook-receiver was redeployed at 02:50:46Z with WEBHOOK_SECRET_VERSION=v2. Since then it has rejected every provider webhook as bad_signature, at about 12/s and rising. The rate rises because the provider keeps resending webhooks that are not acknowledged. The provider seems to still sign with the earlier secret, so the receiver neither acknowledges these webhooks nor puts them on provider-events. Neither consumer books or confirms them. The money check cannot settle to its cutoff, and unacknowledged webhooks pile up (156 at the alert), which fires BooksBehindProvider.",
+          "fix_target": "webhook-receiver",
+          "fix_summary": "Roll webhook-receiver back to its settings before the 02:50:46Z deploy, which used the earlier webhook secret version, so it accepts the provider's signatures again. The provider keeps resending unacknowledged webhooks, so the backlog should drain without a replay. Afterwards, run money_check with wait=true to confirm all five invariants hold. Rotate to the v2 secret again only when the provider is known to sign with it, or when the receiver accepts both versions during the switch.",
+          "blast_radius": "The receiver pauses briefly while its container is recreated. Webhooks sent during that pause go unacknowledged and the provider resends them later. If the earlier secret was replaced because it leaked, rolling back reopens that exposure until the rotation is coordinated with the provider. The consumers are idempotent (LEDGER_HANDLER=idempotent, CONFIRMER_HANDLER=by_our_id), so the burst of resent webhooks should not double-book anything. The money check should confirm this.",
+          "rollback_plan": "Redeploy webhook-receiver with WEBHOOK_SECRET_VERSION=v2. Watch klaxon_webhooks_received_total by result, and keep the rollback only if bad_signature falls to zero and queued recovers."
+        },
+        "from": "run.json: loop.diagnosis; trace.jsonl"
+      },
+      "graded": {
+        "by": "a rule (klaxon.grading, rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6): keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning.",
+        "verdict": "names the cause",
+        "elements": [
+          {
+            "element": "where: the webhook receiver",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "what: our side moved it to a secret the provider does not sign with",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "how: it refuses every webhook, so nothing reaches the books",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "the deploy that brought it",
+            "named": true,
+            "required": false
+          }
+        ],
+        "fix_fits_the_remedy": true,
+        "from": "run.json: comparison (klaxon.grading)"
+      }
+    },
+    "action": {
+      "result": "done",
+      "detail": "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+      "request": {
+        "id": "r-cc97",
+        "made_at": "2026-11-01T02:52:25Z",
+        "open_until": "2026-11-01T03:02:25Z",
+        "change": "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+        "undoes": "deploy 25 of webhook-receiver, at 2026-11-01T02:50:48Z, by klaxon.faults",
+        "undo": "going back to WEBHOOK_SECRET_VERSION=v2 would deploy a known-bad setting: Klaxon will not; a person can, by hand",
+        "from": "approval-request.json (sealed with its own SHA-256, checked)"
+      },
+      "decision": {
+        "decision": "approved",
+        "at_utc": "2026-11-01T02:59:41Z",
+        "by": "make approve: typed at a terminal",
+        "rule": "Only Aravind approves Klaxon's actions, and Claude never does (DECISIONS.md, the week's plan). The gate's log records how a decision was made, not who made it.",
+        "from": "approval-decision.json (the file the run read, by its SHA-256 in gate.jsonl); gate.jsonl"
+      },
+      "ran": {
+        "deploy": 26,
+        "at_utc": "2026-11-01T02:59:44Z",
+        "service": "webhook-receiver",
+        "by": "Klaxon, approved request r-cc97",
+        "settings": "WEBHOOK_SECRET_VERSION=v1",
+        "replaced": "WEBHOOK_SECRET_VERSION=v2",
+        "from": "run.json: gate.deploy (the deploy log's line)"
+      },
+      "cause_removed": "The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-cc97) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "from": "run.json: gate, undo, removed_by"
+    },
+    "verification": {
+      "verdict": "passed",
+      "said": [
+        "Healthy: every container is healthy, and the metric rules and the books rule were quiet at 2 evaluations in a row.",
+        "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
+        "The money is right: the money check passed."
+      ],
+      "health": {
+        "healthy": true,
+        "rounds": 6,
+        "not_quiet": [
+          "a rule's condition holds: BooksBehindProvider (the books) (4 of the 6 rounds)"
+        ]
+      },
+      "cause_removed": true,
+      "money_right": true,
+      "from": "run.json: verification (klaxon.agent.verify)"
+    },
+    "repairs": {
+      "last_money_check": {
+        "when": "later, at least a minute after the action",
+        "at_utc": "2026-11-01T03:03:07Z",
+        "outcome": "passed",
+        "said": "no damage: the money check passed",
+        "from": "run.json: damage.after_action"
+      },
+      "owed": [
+        "The last money check passed (later, at least a minute after the action): nothing in the books is left to repair.",
+        "Of the outcomes the synthetic clients left unknown, 23 payments and 3 refunds were still pending at the client's last status check. The evidence does not say whether each settled since. The last money check passed: up to its cutoff, the provider held no charge or refund that our records did not show as succeeded, so any of them still pending had no money moved for it. One still pending needs a decision: a retry with its key, or marking it failed."
+      ],
+      "remedy": "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the provider sends every refused webhook again, and the books catch up by themselves",
+      "remedy_from": "run.json: fault (the remedy this fault records, klaxon.faults)"
+    }
+  },
+  "draft": {
+    "outcome": "passed",
+    "narrative": {
+      "summary": "On 2026-11-01 a fault was injected on purpose into a payments system running on one machine with synthetic data and no real money. A deploy of the webhook receiver moved it to a secret version the provider does not sign with. The receiver then refused every webhook, and our books could not catch up with the provider. The alert BooksBehindProvider fired 47.7 s after the fault. Klaxon diagnosed the cause in 19.6 s, with confidence 0.85. It asked at the approval gate to roll the receiver back to WEBHOOK_SECRET_VERSION v1. The request r-cc97 was approved, and the rollback ran as deploy 26. Code verified the result, and verification passed: the stack was healthy, the cause was removed, and the money check passed. The harness's clearing then found the good settings already running and changed nothing.",
+      "timeline": "At 02:50:45 UTC the alert rules were quiet at 2 evaluations in a row, and the money check passed. The fault's injection then began. It was deploy 25 of the webhook receiver, by klaxon.faults, at 02:50:48 UTC, with WEBHOOK_SECRET_VERSION=v2. It took 2.2 s. The alert BooksBehindProvider fired at 02:51:34 UTC, 47.7 s after the fault. Klaxon's loop began at 02:51:50 UTC. It stopped at 02:52:09 UTC as diagnosed, after 4 steps and 3 tool calls. At 02:52:25 UTC Klaxon asked at the gate for request r-cc97, which was open until 03:02:25 UTC. The request was approved at 02:59:41 UTC, after it had been open 436 s. The rollback ran at 02:59:44 UTC as deploy 26. Code then checked health in 6 rounds, from 03:00:45 UTC to 03:03:06 UTC, and found it healthy. The later money check at 03:03:07 UTC passed. Verification passed at 742.1 s after the fault. The harness's clearing came at 742.2 s and changed nothing. At 03:04:38 UTC the rules read the stack again. No alert fired, and the money check passed.",
+      "impact": "At the alert, at 02:51:34 UTC, the money check could not settle. 156 of the provider's webhooks up to its cutoff had not been acknowledged yet. Ledger lag and payment confirmer lag were both 0. Right before the request, at 02:52:09 UTC, the money check could not settle after 15.03 s. Right after the action, at 02:59:44 UTC, it still could not settle after 60.01 s. So the state of the money at those points is not known. The later check at 03:03:07 UTC passed with no damage, and so did the check at 03:04:38 UTC. The synthetic clients sent 3 new payments per second, on average. 2721 payments arrived, and all 2721 got an answer. 2696 succeeded, 0 were refused, 0 got an unexpected answer, and 25 were left with their outcome unknown. Of those 25, 2 were confirmed later, and 23 were still pending at the client's last status check. Refunds: 243 succeeded, 0 were refused, and 3 were left unknown, all 3 still pending at the last status check. The clients retried 139 times, and 0 requests were shed. The evidence does not say whether the pending payments and refunds settled since.",
+      "cause": "The recorded cause was a deploy of the webhook receiver with a rotated secret, WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1. Every webhook failed its signature check and was refused with a 400. No event reached Kafka, and the provider kept sending the webhooks again, with backoff. The books therefore could not settle up to the money check's cutoff, and unacknowledged webhooks piled up. That fired BooksBehindProvider. Klaxon's diagnosis said the receiver had been redeployed with v2 and was rejecting provider webhooks as bad signatures. It said the provider seemed to still sign with the earlier secret. A rule in klaxon.grading, not a person or a model, judged that the diagnosis named the cause. It named every required element and the deploy that brought the fault, and its fix fit the recorded remedy. The rule reads words, not meaning. The diagnosis gave the deploy a time that differs from the deploy log's time. The facts did not explain the difference. The facts held no text that told the reader what to do.",
+      "response": "Klaxon's loop ran with read only tools and was offered a single write action, rollback_deploy. It cited recent deploys, a metrics query and a log search. It asked at the gate for request r-cc97: redeploy the webhook receiver from WEBHOOK_SECRET_VERSION v2 to v1. The request's undo said that going back to v2 would deploy a known bad setting, so Klaxon would not do it, though a person could by hand. The request was approved with make approve, typed at a terminal. The rule is that only Aravind approves Klaxon's actions. The gate's log records how a decision was made, not who made it, so the evidence leaves the approver open. The action ran 490 s after the alert, as deploy 26 with WEBHOOK_SECRET_VERSION=v1. Code, not the model, verified it over 203.7 s. The BooksBehindProvider condition still held in 4 of the 6 health rounds. The rules were quiet at 2 evaluations in a row by the end, and every container was healthy. Nothing the provider made after the action was booked wrong, and the money check passed. Verification passed.",
+      "repairs": "The last money check passed, so nothing in the books is left to repair. 23 payments and 3 refunds were still pending at the client's last status check. The evidence does not say whether each of them settled since. Up to its cutoff, the provider held no charge or refund that our records did not show as succeeded. So no money moved for any that are still pending. Each payment or refund still pending needs a decision by a person: a retry with its key, or marking it failed. The evidence does not name who must decide. The receiver now runs the earlier secret version. A later rotation to v2 should wait until the provider signs with it, or until the receiver accepts both versions during the switch. That work is owed by a person, and the evidence does not name who."
+    },
+    "problems": [],
+    "flagged": [],
+    "numbers": 76,
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-01T19:33:05.698Z",
+      "sha256": "89c1f050873997a7569067cc8a09dae784e61e2b9c4a130bb540fb5c8b2477a4"
+    },
+    "calls": [
+      {
+        "call": 1,
+        "reply_sha256": "4719f76ac43f8d4e1b06df18c02eeb221cf0c7a51818b080366979c60dd5afd7",
+        "problems": [
+          "cause: 'three' is a number in words, and the facts do not write it so: write it in digits"
+        ]
+      },
+      {
+        "call": 2,
+        "reply_sha256": "89c1f050873997a7569067cc8a09dae784e61e2b9c4a130bb540fb5c8b2477a4",
+        "problems": []
+      }
+    ]
+  }
+}

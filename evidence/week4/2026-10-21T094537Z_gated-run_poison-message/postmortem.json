@@ -1,0 +1,393 @@
+{
+  "label": "A postmortem draft of one gated run: the facts, filled in by code from the run's saved evidence, and the narrative Claude drafted from them (recorded responses, in postmortem-recording.jsonl, with hidden characters dropped here), with what the check of its numbers found.",
+  "facts": {
+    "format": 1,
+    "label": "The facts of one incident, filled in by code (klaxon.agent.postmortem) from a gated run's saved evidence: its run.json, the gate's request, decision and log, and the loop's trace. Each fact says where it comes from. The incident: a fault injected on purpose into a payments system on one machine, with synthetic data and a simulated provider, so no real money.",
+    "run": {
+      "folder": "2026-10-21T094537Z_gated-run_poison-message",
+      "fault": "poison-message",
+      "title": "The ledger stops booking: a poison message",
+      "what_it_was": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, poison-message, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, offered one write action (rollback_deploy), which runs only if a person approves it at the gate, and stopped on diagnosed after 6 steps; any reply it got is a recorded response, not a simulation. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Klaxon asked at the approval gate to act on its diagnosis; the request was approved with make approve (the request's id typed at a terminal), and the action ran: redeploy ledger-consumer: LEDGER_HANDLER idempotent (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter. Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is right. The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-af6d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "ran_at_utc": "2026-10-21T09:45:37+00:00",
+      "git_commit": "22942cc",
+      "from": "run.json"
+    },
+    "timeline": [
+      {
+        "at_utc": "2026-10-21T09:46:53Z",
+        "since_the_fault": null,
+        "what": "The alert rules were quiet at 2 evaluations in a row, and the money check passed: the stack was ready for the fault.",
+        "from": "run.json: evaluations (before)"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "0 s",
+        "what": "The fault's injection began, on purpose (klaxon.faults): a deploy of ledger-consumer with LEDGER_BAD_EVENTS=retry, then one unreadable event from the provider, evt_000261: a payment.updated for pay_000239, with its amount_cents written as the text 104.31. It took 2.7 s. The deploy log has it as deploy 5, by klaxon.faults, at 2026-10-21T09:46:56Z.",
+        "from": "run.json: injected, timings, deploys"
+      },
+      {
+        "at_utc": "2026-10-21T09:48:13Z",
+        "since_the_fault": "78.9 s",
+        "what": "The alert ConsumerLagHigh fired, raised by klaxon.alerts from what the stack showed: The ledger consumer group is 250 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+        "from": "run.json: alert"
+      },
+      {
+        "at_utc": "2026-10-21T09:48:29Z",
+        "since_the_fault": "94.9 s",
+        "what": "Klaxon's loop began to investigate the alert: claude-opus-5-5 through Claude Code on Aravind's seat, with read-only tools, offered one write action (rollback_deploy) that runs only if a person approves it.",
+        "from": "trace.jsonl: start"
+      },
+      {
+        "at_utc": "2026-10-21T09:49:16Z",
+        "since_the_fault": "142.1 s",
+        "what": "The loop stopped: diagnosed (confidence 0.75), after 6 steps and 4 tool calls, in 47.2 s.",
+        "from": "trace.jsonl: stop; run.json: loop"
+      },
+      {
+        "at_utc": "2026-10-21T09:49:16Z",
+        "since_the_fault": "142.2 s",
+        "what": "The money check right before the request: not known: the money check could not settle (not settled after 15.11 s: messages up to its cutoff not handled yet: ledger 520, payment-confirmer 0).",
+        "from": "run.json: damage.at_request"
+      },
+      {
+        "at_utc": "2026-10-21T09:49:32Z",
+        "since_the_fault": null,
+        "what": "Klaxon asked to act, at the approval gate: request r-af6d, redeploy ledger-consumer: LEDGER_HANDLER idempotent (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter. It was open until 2026-10-21T09:59:32Z. Its undo: going back to LEDGER_BAD_EVENTS=retry would deploy a known-bad setting: Klaxon will not; a person can, by hand.",
+        "from": "gate.jsonl: requested"
+      },
+      {
+        "at_utc": "2026-10-21T09:53:16Z",
+        "since_the_fault": null,
+        "what": "Request r-af6d was approved with make approve: typed at a terminal.",
+        "from": "gate.jsonl: approved"
+      },
+      {
+        "at_utc": "2026-10-21T09:53:19Z",
+        "since_the_fault": null,
+        "what": "The action ran: deploy 6 of ledger-consumer in the deploy log, by Klaxon, approved request r-af6d, with LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter.",
+        "from": "gate.jsonl: done"
+      },
+      {
+        "at_utc": "2026-10-21T09:53:19Z",
+        "since_the_fault": null,
+        "what": "The money check right after the action: no damage: the money check passed.",
+        "from": "run.json: verification.at_action"
+      },
+      {
+        "at_utc": "2026-10-21T09:53:52Z",
+        "since_the_fault": null,
+        "what": "Health, by code: 3 rounds of the rules and the containers, from 2026-10-21T09:53:20Z to 2026-10-21T09:53:52Z: healthy.",
+        "from": "run.json: verification.health"
+      },
+      {
+        "at_utc": "2026-10-21T09:54:19Z",
+        "since_the_fault": null,
+        "what": "The later money check, at least a minute after the action: no damage: the money check passed.",
+        "from": "run.json: verification.after"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "446 s (7 min 26 s)",
+        "what": "Verification, by code and not by the model: passed.",
+        "from": "run.json: verification"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "446.1 s",
+        "what": "The harness's clearing, its safety net, asked for the good settings of ledger-consumer (LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter). The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-af6d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+        "from": "run.json: cleared, removed_by, deploys"
+      },
+      {
+        "at_utc": "2026-10-21T09:55:50Z",
+        "since_the_fault": "536.1 s",
+        "what": "The rules read the stack again after the clearing: no alert fired; the money check passed.",
+        "from": "run.json: evaluations (after)"
+      }
+    ],
+    "durations": [
+      {
+        "what": "from the fault to the alert",
+        "said": "78.9 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "Klaxon's investigation",
+        "said": "47.2 s",
+        "from": "run.json: loop"
+      },
+      {
+        "what": "from the alert to the diagnosis",
+        "said": "63.2 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "the request's window: open until it expires",
+        "said": "600 s (10 min)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "the request was open until it was approved",
+        "said": "224 s (3 min 44 s)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "from the alert to the action",
+        "said": "306 s (5 min 6 s)",
+        "from": "run.json; gate.jsonl"
+      },
+      {
+        "what": "from the fault's deploy to Klaxon's rollback",
+        "said": "383 s (6 min 23 s)",
+        "from": "run.json: deploys; gate.jsonl"
+      },
+      {
+        "what": "the verification",
+        "said": "61.3 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "from the fault to the harness's clearing",
+        "said": "446.1 s",
+        "from": "run.json: timings"
+      }
+    ],
+    "impact": {
+      "alert": {
+        "name": "ConsumerLagHigh",
+        "fired_at": "2026-10-21T09:48:13Z",
+        "said": "The ledger consumer group is 250 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+        "from": "run.json: alert (raised by klaxon.alerts from what the stack showed)"
+      },
+      "money": [
+        {
+          "when": "at the alert",
+          "at_utc": "2026-10-21T09:48:13Z",
+          "outcome": "could not settle",
+          "said": "the money check could not settle",
+          "lag": "ledger 250, payment-confirmer 0",
+          "from": "run.json: damage.at_alert (the alert's own evaluation of the rules)"
+        },
+        {
+          "when": "right before the request",
+          "at_utc": "2026-10-21T09:49:16Z",
+          "outcome": "could not settle",
+          "said": "not known: the money check could not settle (not settled after 15.11 s: messages up to its cutoff not handled yet: ledger 520, payment-confirmer 0)",
+          "why": "not settled after 15.11 s: messages up to its cutoff not handled yet: ledger 520, payment-confirmer 0",
+          "from": "run.json: damage.at_request"
+        },
+        {
+          "when": "right after the action",
+          "at_utc": "2026-10-21T09:53:19Z",
+          "outcome": "passed",
+          "said": "no damage: the money check passed",
+          "from": "run.json: damage.at_action"
+        },
+        {
+          "when": "later, at least a minute after the action",
+          "at_utc": "2026-10-21T09:54:19Z",
+          "outcome": "passed",
+          "said": "no damage: the money check passed",
+          "from": "run.json: damage.after_action"
+        },
+        {
+          "when": "after the harness's clearing",
+          "at_utc": "2026-10-21T09:55:50Z",
+          "outcome": "passed",
+          "said": "the money check passed",
+          "from": "run.json: evaluations (after)"
+        }
+      ],
+      "clients": {
+        "from": "run.json: traffic and traffic_settings (klaxon.traffic, the synthetic clients' own counts)",
+        "payments": {
+          "arrived": 1819,
+          "succeeded": 1819,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 0,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 0,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 0,
+          "answered": 1819,
+          "never answered": 0
+        },
+        "refunds": {
+          "succeeded": 170,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 0,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 0,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 0
+        },
+        "shed": 0,
+        "retries": 63,
+        "said": [
+          "The synthetic clients sent 3 new payments per second, on average.",
+          "1819 payments arrived, and 1819 got an answer: 1819 succeeded, 0 were refused, 0 got an answer the clients did not expect, and 0 were left with their outcome unknown.",
+          "Refunds: 170 succeeded, 0 were refused, and 0 were left with their outcome unknown.",
+          "The clients retried 63 times."
+        ]
+      }
+    },
+    "cause": {
+      "recorded": "a deploy of the ledger consumer that retries unreadable messages forever (BAD_EVENTS=retry), then one unreadable event from the provider (a payment.updated with its amount as a decimal string): the ledger consumer is stuck on it, and books nothing behind it",
+      "recorded_from": "run.json: fault (klaxon.faults): the fault was injected on purpose, so this is its cause",
+      "diagnosis": {
+        "by": "its loop, live: claude-opus-5-5 through Claude Code on Aravind's seat",
+        "stopped": "diagnosed (confidence 0.75), after 6 steps and 4 tool calls, in 47.2 s",
+        "confidence": 0.75,
+        "fix_kind": "rollback",
+        "named_action": {
+          "name": "rollback_deploy",
+          "arguments": {
+            "service": "ledger-consumer"
+          }
+        },
+        "cited_calls": [
+          "c1 query_metrics",
+          "c2 recent_deploys",
+          "c3 search_logs",
+          "c4 search_logs"
+        ],
+        "model_words": {
+          "note": "the loop's own words, from a model: data, not checked by code",
+          "hypothesis": "Ledger-consumer is stuck on a poison message. It was redeployed at 09:46:54 with BAD_EVENTS=retry. Seconds later it hit provider-events/1@114, whose amount is not positive integer cents. It cannot book it, so it retries the same message forever (attempt 11+, every 15s) and never commits past offset 114. Partition 1 stalls and ledger lag climbs from 0 to 332, past the threshold of 50. Payment-confirmer runs BAD_EVENTS=dead_letter: it dead-lettered the same event and another at 1@116, and kept going. The stall comes from the ledger's bad-event policy, not from Kafka or the producer. Still open: why the provider sent invalid amounts, and what settings ledger-consumer ran before 09:46:54. I did not run money_check, and I have not broken lag down by partition.",
+          "fix_target": "ledger-consumer",
+          "fix_summary": "Roll ledger-consumer back to the settings it ran before the 09:46:54 deploy. If those settings dead-letter bad events, it will skip 1@114 and 1@116 and drain the backlog. If they also retry, set BAD_EVENTS=dead_letter with a config change instead. Then check the dead-lettered events against the provider's records, repair them by hand, and run money_check. Separately, find out why the provider sent invalid amounts.",
+          "blast_radius": "Ledger-consumer pauses while its container is recreated, so lag grows briefly. Dead-lettered events are left out of the ledger until someone handles them by hand, and money_check will flag them as not posted. If the earlier settings used a non-idempotent LEDGER_HANDLER, redeliveries could book events twice. Check the deploy log's earlier settings before approving.",
+          "rollback_plan": "Redeploy ledger-consumer with the current settings (LEDGER_HANDLER=idempotent, BAD_EVENTS=retry, image sha256:5e1ee3c63089). Then watch klaxon_kafka_consumer_lag and the ledger-consumer error logs."
+        },
+        "from": "run.json: loop.diagnosis; trace.jsonl"
+      },
+      "graded": {
+        "by": "a rule (klaxon.grading, rubric version 1, committed in 95a64ab before the first live runs on the faults): keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning.",
+        "verdict": "names the cause",
+        "elements": [
+          {
+            "element": "where: the ledger consumer",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "what: one message it cannot read",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "how: it retries that message forever, so nothing behind it is booked",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "the deploy that brought it",
+            "named": true,
+            "required": false
+          }
+        ],
+        "fix_fits_the_remedy": true,
+        "from": "run.json: comparison (klaxon.grading)"
+      }
+    },
+    "action": {
+      "result": "done",
+      "detail": "redeploy ledger-consumer: LEDGER_HANDLER idempotent (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter",
+      "request": {
+        "id": "r-af6d",
+        "made_at": "2026-10-21T09:49:32Z",
+        "open_until": "2026-10-21T09:59:32Z",
+        "change": "redeploy ledger-consumer: LEDGER_HANDLER idempotent (unchanged), LEDGER_BAD_EVENTS retry -> dead_letter",
+        "undoes": "deploy 5 of ledger-consumer, at 2026-10-21T09:46:56Z, by klaxon.faults",
+        "undo": "going back to LEDGER_BAD_EVENTS=retry would deploy a known-bad setting: Klaxon will not; a person can, by hand",
+        "from": "approval-request.json (sealed with its own SHA-256, checked)"
+      },
+      "decision": {
+        "decision": "approved",
+        "at_utc": "2026-10-21T09:53:16Z",
+        "by": "make approve: typed at a terminal",
+        "rule": "Only Aravind approves Klaxon's actions, and Claude never does (DECISIONS.md, the week's plan). The gate's log records how a decision was made, not who made it.",
+        "from": "approval-decision.json (the file the run read, by its SHA-256 in gate.jsonl); gate.jsonl"
+      },
+      "ran": {
+        "deploy": 6,
+        "at_utc": "2026-10-21T09:53:19Z",
+        "service": "ledger-consumer",
+        "by": "Klaxon, approved request r-af6d",
+        "settings": "LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter",
+        "replaced": "LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=retry",
+        "from": "run.json: gate.deploy (the deploy log's line)"
+      },
+      "cause_removed": "The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-af6d) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "from": "run.json: gate, undo, removed_by"
+    },
+    "verification": {
+      "verdict": "passed",
+      "said": [
+        "Healthy: every container is healthy, and the metric rules were quiet at 2 evaluations in a row.",
+        "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
+        "The money is right: the money check passed."
+      ],
+      "health": {
+        "healthy": true,
+        "rounds": 3,
+        "not_quiet": [
+          "a rule's condition holds: ConsumerLagHigh (ledger) (1 of the 3 rounds)"
+        ]
+      },
+      "cause_removed": true,
+      "money_right": true,
+      "from": "run.json: verification (klaxon.agent.verify)"
+    },
+    "repairs": {
+      "last_money_check": {
+        "when": "later, at least a minute after the action",
+        "at_utc": "2026-10-21T09:54:19Z",
+        "outcome": "passed",
+        "said": "no damage: the money check passed",
+        "from": "run.json: damage.after_action"
+      },
+      "owed": [
+        "The last money check passed (later, at least a minute after the action): nothing in the books is left to repair."
+      ],
+      "remedy": "roll the ledger consumer back to dead-lettering: the poison goes to the dead-letter topic, the backlog drains, and the money check passes again",
+      "remedy_from": "run.json: fault (the remedy this fault records, klaxon.faults)"
+    }
+  },
+  "draft": {
+    "outcome": "passed",
+    "narrative": {
+      "summary": "On 2026-10-21, a fault was injected on purpose into a payments system on one machine, with synthetic data and no real money. A deploy set the ledger consumer to retry unreadable events, and then one unreadable event arrived from the simulated provider. The ledger consumer stuck on that event and booked nothing behind it. The alert ConsumerLagHigh fired at 09:48:13 UTC. Klaxon investigated and diagnosed the cause with confidence 0.75. It asked at the approval gate to redeploy the ledger consumer so that it would dead letter bad events. The request was approved at 09:53:16 UTC, and the action ran at 09:53:19 UTC. Code verified the result and it passed: the stack was healthy, the cause was removed, and the money check passed. No synthetic client lost a payment or a refund.",
+      "timeline": "At 09:46:53 UTC the alert rules were quiet and the money check passed. The fault was then injected. Deploy 5, by klaxon.faults at 09:46:56 UTC, set LEDGER_BAD_EVENTS=retry on the ledger consumer. Then the provider sent evt_000261, a payment.updated for pay_000239, with its amount_cents written as the text 104.31. ConsumerLagHigh fired at 09:48:13 UTC, 78.9 s after the fault. Klaxon's loop began at 09:48:29 UTC. It stopped at 09:49:16 UTC as diagnosed, after 6 steps and 4 tool calls, in 47.2 s. Klaxon made request r-af6d at 09:49:32 UTC. It was approved at 09:53:16 UTC, after it had been open for 224 s. The action ran at 09:53:19 UTC as deploy 6. Health checks ran from 09:53:20 UTC to 09:53:52 UTC. A later money check passed at 09:54:19 UTC. Verification passed 446 s after the fault. The harness's clearing found the good settings already running and changed nothing. At 09:55:50 UTC no alert fired and the money check passed.",
+      "impact": "At the alert, the ledger consumer group was 250 messages behind on the topic provider-events, and the threshold was 50. The money check could not settle at the alert. Right before the request, it still could not settle after 15.11 s, because the ledger had 520 messages up to its cutoff not handled yet. The evidence therefore does not show the state of the books during the stall. Right after the action, the money check passed. It passed again at 09:54:19 UTC and after the clearing at 09:55:50 UTC. The synthetic clients sent 3 new payments per second on average. 1819 payments arrived and all 1819 succeeded, with 0 refused and 0 left with their outcome unknown. Refunds: 170 succeeded and 0 were refused. No requests were shed. The clients retried 63 times.",
+      "cause": "The recorded cause was a deploy of the ledger consumer that retries unreadable messages forever, followed by one unreadable event from the provider whose amount was a decimal string. The ledger consumer stuck on that event and booked nothing behind it. Its lag grew past the threshold, and that raised ConsumerLagHigh. Klaxon's diagnosis said the ledger consumer was stuck on a poison message, retried it forever under a retry setting from a recent deploy, and stopped booking. A keyword rule, not a person or a model, graded the diagnosis as naming the cause. It named every required element and also named the deploy that brought the fault. The rule found that the fix fit the recorded remedy. The diagnosis left open why the provider sent invalid amounts. It also said it had not run the money check or broken the lag down by partition. Its rollback plan named the faulty retry setting as the state to return to. Its blast radius text told the approver to check the deploy log before approving. That text was data and not an instruction.",
+      "response": "Klaxon was offered one write action, rollback_deploy, which could run only if a person approved it. It made request r-af6d to redeploy the ledger consumer. LEDGER_HANDLER stayed idempotent, and LEDGER_BAD_EVENTS changed from retry to dead_letter. The request undid deploy 5. Its window was 600 s. Klaxon recorded that it would not go back to the retry setting, because that is known to be bad, though a person could do so by hand. The request was approved with make approve typed at a terminal. The gate's log records how the decision was made, not who made it, so the evidence does not show the approver. The rule says only Aravind approves. The action ran as deploy 6, 306 s after the alert and 383 s after the fault's deploy. Code then verified the result over 61.3 s and it passed. Every container was healthy, and the cause was removed. The money check passed. In 1 of the 3 health rounds the ConsumerLagHigh condition still held for the ledger.",
+      "repairs": "The last money check, at 09:54:19 UTC, passed, and the facts say nothing in the books is left to repair. Nothing is owed to the books. The facts do not say what became of evt_000261 after it went to dead lettering. The diagnosis had said that dead lettered events would need handling by hand, so a person should confirm this. The fault was injected on purpose, so the invalid amount from the provider needs no further hunt in this run. A person should review this narrative. Aravind should confirm that he was the one who approved request r-af6d, because the gate's log does not record who approved it."
+    },
+    "problems": [],
+    "flagged": [],
+    "numbers": 55,
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-01T19:31:12.794Z",
+      "sha256": "6e7f9d0c4cabd318452ac41dd639ebc1150ca4d46daab3f46befe3a87cf550cb"
+    },
+    "calls": [
+      {
+        "call": 1,
+        "reply_sha256": "99e482a9431a473bd93ba5a111660ab2d729fdd3e1593ab594b1e1acc7a75c45",
+        "problems": [
+          "cause: 'three' is a number in words, and the facts do not write it so: write it in digits"
+        ]
+      },
+      {
+        "call": 2,
+        "reply_sha256": "6e7f9d0c4cabd318452ac41dd639ebc1150ca4d46daab3f46befe3a87cf550cb",
+        "problems": []
+      }
+    ]
+  }
+}
