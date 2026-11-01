@@ -1,5 +1,6 @@
 """Klaxon's postmortem draft (week 4, item 5): the facts of one gated run, filled in by code from its saved evidence,
-and the narrative, drafted by Claude in one recorded call, with every number in it checked against the facts.
+and the narrative, drafted by Claude in one recorded call (two more at most, when a check fails), with every number in
+it checked against the facts.
 
 A gated run (klaxon.fault_runs) saves what it did in its folder: run.json, the gate's request, decision and log, and
 the loop's trace. From them, code fills in the facts, each with where it comes from:
@@ -14,8 +15,12 @@ the loop's trace. From them, code fills in the facts, each with where it comes f
     action        what Klaxon asked to do, how it was decided and how the gate's log says so, what ran, and who
                   removed the cause
     verification  what code, not the model, found after the action, in its own sentences
-    repairs       what the last money check still found wrong, which a rollback does not repair, and the remedy the
-                  fault records
+    repairs       what the last money check still found wrong, which a rollback does not repair, what the clients left
+                  unknown, and the remedy the fault records
+
+The evidence is checked as it is read: the request's own seal, a decision that names that request, whole, and is the
+very file the run read (its SHA-256, as the gate's log has it), and a run's record that agrees with them. Evidence that
+fails has no postmortem.
 
 Then Claude drafts the narrative, one paragraph per section, through the loop's own locked-down adapter
 (klaxon.agent.claude_code). Every call is recorded before it is used (postmortem-recording.jsonl), so a draft replays
@@ -23,15 +28,17 @@ offline. The facts reach it as one JSON document on one line, under a note that 
 they hold a model's own words (the diagnosis) and text from the system under investigation.
 
 Code then checks the reply. It must be one JSON object of the narrative's form, each section plain sentences: no
-dashes, no links, no markup, and numbers only in the digits 0 to 9. Every number in it must be one the facts hold, of
-the same kind: a number, an amount of money, a time, a date, a duration, a percentage, an id, or a number written in
-words. A number that only a model's own words hold (the diagnosis) does not count: a model wrote it, and code never
-checked it. A reply that fails is sent back with what was wrong, at most twice. If the last one still fails, it is
-kept, each number the facts do not hold marked, and the page says so (Aravind's choice, 2026-11-01). A reply that
-never fits the narrative's form leaves the facts alone on the page.
+dashes, no links, no markup, and numbers only in the digits 0 to 9, with no mark over a digit. Every number in it must
+be one the facts hold, of the same kind (klaxon.agent.numbers): a number, an amount of money, a time, a date, a
+duration, a percentage, an id, or a number written in words. A number that only a model's own words hold (the
+diagnosis) does not count: a model wrote it, and code never checked it. A reply that fails is sent back with what was
+wrong, at most twice. If the last one still fails on its numbers alone, it is kept, each number the facts do not hold
+marked, and the page says so (Aravind's choice, 2026-11-01). A reply that never fits the narrative's form, or fails on
+its dashes, links or markup, leaves the facts alone on the page.
 
 Its limit: the check finds a number the facts do not hold, not one put to another use. "28 payments" passes when the
-facts count 28 events. The facts sit beside each paragraph, so a reader can see what each number counts.
+facts count 28 events. The facts sit beside each paragraph, so a reader can see what each number counts. And "one",
+"once", "twice" and the ordinals are not read as numbers.
 
 Run: python -m klaxon.agent.postmortem facts FOLDER    the facts and the exact prompt; calls nothing
      python -m klaxon.agent.postmortem draft FOLDER    one live draft on Aravind's seat, with his OK each time
@@ -41,10 +48,12 @@ Run: python -m klaxon.agent.postmortem facts FOLDER    the facts and the exact p
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shlex
 import sys
+import unicodedata
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -56,7 +65,7 @@ from klaxon.agent.claude_code import DEFAULT_MODEL
 from klaxon.agent.contract import MAX_PROBLEMS, MAX_REPLY, check, parse_object
 from klaxon.agent.loop import find_live_model, one_line
 from klaxon.agent.model import Message, Model, ModelError, ModelTimeout, ReplayModel, Reply, text_sha256
-from klaxon.agent.numbers import KINDS, Number, numbers_in
+from klaxon.agent.numbers import KINDS, Number, as_number, numbers_in
 from klaxon.agent.tools import clean_text
 from klaxon.agent.trace import read_trace
 from klaxon.checks.money import format_cents
@@ -70,8 +79,15 @@ MAX_SECTION = 1500  # characters in one paragraph of the narrative
 MAX_FACT = 2000  # characters in one text of the facts
 MAX_EXAMPLES = 10  # findings of the last money check named in the repairs; run.json keeps them all
 MODEL_WORDS = "model_words"  # where the facts keep a model's own words: data, never evidence of a number
+NOT_EVIDENCE = ("format",)  # facts about the facts, not about the incident: their numbers are no evidence either
 FLAG = "[not in the evidence]"  # after each number of a kept narrative that the facts do not hold
-PENDING = "of those, still pending at the client's last status check"
+# The synthetic clients' outcomes left unknown, by what came of them (klaxon.traffic's counts).
+LATER = "outcome unknown, then confirmed later"
+PENDING = "outcome unknown, still pending at the client's last status check"
+OTHER = "outcome unknown, in another state at the client's status check"
+SILENT = "outcome unknown, no answer to the client's status check"
+NEVER = "outcome unknown, never checked: the answer named none to check"
+FOLLOWED = {LATER: "confirmed_later", PENDING: "still_pending", OTHER: "other", SILENT: "no_answer"}
 # How a request's time open ends, by the gate log's line that ends it.
 ANSWERED = {
     "approved": "until it was approved",
@@ -79,9 +95,10 @@ ANSWERED = {
     "expired": "until it expired",
     "stopped": "until the run stopped",
 }
+DONE = ("done", "not run", "failed")  # the gate's outcomes of a request that was approved
 RULE = (
-    "Only Aravind approves Klaxon's actions, and Claude never does (DECISIONS.md, 2026-10-19). The gate's log records"
-    " how a decision was made, not who made it."
+    "Only Aravind approves Klaxon's actions, and Claude never does (DECISIONS.md, the week's plan). The gate's log"
+    " records how a decision was made, not who made it."
 )
 FACTS_LABEL = (
     "The facts of one incident, filled in by code (klaxon.agent.postmortem) from a gated run's saved evidence: its"
@@ -133,21 +150,21 @@ LINK = re.compile(
 
 def evidence_numbers(facts: Mapping) -> frozenset[tuple[str, object]]:
     """The numbers the facts hold, each with its kind, as the check compares them: every number code read from the
-    evidence, and every one in its texts, but none that only a model's own words hold. A time to the second also stands
-    for its minute (09:09:11, written 09:09). A number in the facts' JSON is a number: a duration, an amount of money or
-    a time counts only as the facts write it, with its unit."""
+    evidence, and every one in its texts, but none that only a model's own words hold, and none of the facts about the
+    facts (NOT_EVIDENCE). A time to the second also stands for its minute (09:09:11, written 09:09). A number in the
+    facts' JSON is a number: a duration, an amount of money or a time counts only as the facts write it, with its unit."""
     found: set[tuple[str, object]] = set()
     stack: list[object] = [facts]
     while stack:
         value = stack.pop()
         if isinstance(value, Mapping):
-            stack.extend(item for key, item in value.items() if key != MODEL_WORDS)
+            stack.extend(item for key, item in value.items() if key != MODEL_WORDS and key not in NOT_EVIDENCE)
         elif isinstance(value, list | tuple):
             stack.extend(value)
         elif isinstance(value, bool) or value is None:
             continue
         elif isinstance(value, int | float):
-            found.add(("number", float(value)))
+            found.add(as_number(value))
         elif isinstance(value, str):
             for number in numbers_in(value):
                 found.add((number.kind, number.value))
@@ -193,6 +210,10 @@ def duration(seconds: float) -> str:
     return f"{seconds:.1f} s"
 
 
+def _n(count: int, one: str, many: str) -> str:
+    return f"{count} {one if count == 1 else many}"
+
+
 def _row(at: object, since: str | None, what: str, source: str) -> dict:
     return {"at_utc": _to_second(at), "since_the_fault": since, "what": _text(what), "from": source}
 
@@ -235,6 +256,21 @@ def removed_sentence(removed_by: object) -> str:
     return f"The fault's cause was removed by {text}."
 
 
+def _unsettled(numbers: Mapping) -> str | None:
+    """Why an evaluation's money check gave no verdict, from its numbers (klaxon.alerts): how far from settled it was,
+    or the error that stopped it."""
+    webhooks, behind = numbers.get("webhooks_not_acknowledged"), numbers.get("messages_behind")
+    if type(webhooks) is int and webhooks > 0:
+        return f"{webhooks} of the provider's webhooks up to its cutoff were not acknowledged yet"
+    if isinstance(behind, Mapping):
+        named = [f"{group} {count}" for group, count in behind.items() if type(count) is int and count > 0]
+        if named:
+            return f"messages up to its cutoff were not handled yet: {', '.join(named)}"
+    if numbers.get("error"):
+        return f"it could not run ({numbers['error']})"
+    return None
+
+
 def _rules_money(numbers: Mapping) -> str:
     """The money check of an evaluation of the rules (at the alert, or after the clearing), in a line."""
     outcome = numbers.get("outcome")
@@ -245,6 +281,8 @@ def _rules_money(numbers: Mapping) -> str:
         off = numbers.get("money_off_cents")
         if isinstance(off, int) and off:
             text += f"; our books {format_cents(abs(off))} {'ahead of' if off > 0 else 'behind'} the provider's"
+    elif _unsettled(numbers):
+        text += f": {_unsettled(numbers)}"
     return text
 
 
@@ -292,6 +330,8 @@ def _rules_reading(when: str, evaluation: Mapping, source: str) -> dict:
     fact["said"] = _rules_money(numbers)
     if numbers.get("failed"):
         fact["by_invariant"] = dict(numbers["failed"])
+    if _unsettled(numbers):
+        fact["why"] = _unsettled(numbers)
     fact["from"] = source
     return fact
 
@@ -370,10 +410,13 @@ def _timeline(saved: Mapping, start: Mapping, stop: Mapping, log: Sequence[Mappi
     injection = saved.get("injected") or {}
     by_faults = [line for line in deploys if line.get("by") == "klaxon.faults"]
     fault_deploy = by_faults[0] if by_faults and "redeployed" in injection else None
-    what = f"The fault was injected on purpose (klaxon.faults): {_injected(injection)}."
+    # The run's own clock dates the injection's start, which has no time in UTC: the deploy is logged once it is done.
+    what = f"The fault's injection began, on purpose (klaxon.faults): {_injected(injection)}."
+    if timings.get("injection_took") is not None:
+        what += f" It took {duration(timings['injection_took'])}."
     if fault_deploy is not None:
-        what += f" The deploy log has it as deploy {fault_deploy['seq']}, by klaxon.faults."
-    rows.append(_row(fault_deploy["at"] if fault_deploy else None, since(injected_at), what, "run.json: injected"))
+        what += f" The deploy log has it as deploy {fault_deploy['seq']}, by klaxon.faults, at {fault_deploy['at']}."
+    rows.append(_row(None, since(injected_at), what, "run.json: injected, timings, deploys"))
     alert = saved["alert"]
     rows.append(
         _row(
@@ -438,11 +481,12 @@ def _timeline(saved: Mapping, start: Mapping, stop: Mapping, log: Sequence[Mappi
     if after:
         fired = after[-1].get("alert")
         alerting = f"the alert {fired['name']} fired" if fired else "no alert fired"
+        money = _rules_money(_evaluation_money(after[-1]))
         rows.append(
             _row(
                 after[-1]["at_utc"],
                 since(after[-1].get("began")),
-                f"The rules read the stack again after the clearing: {alerting}; {_rules_money(_evaluation_money(after[-1]))}.",
+                f"The rules read the stack again after the clearing: {alerting}; {money}.",
                 "run.json: evaluations (after)",
             )
         )
@@ -467,8 +511,8 @@ def _verification_rows(found: Mapping, ended: str | None) -> list[dict]:
             _row(
                 rounds[-1]["at_utc"],
                 None,
-                f"Health, by code: {len(rounds)} rounds of the rules and the containers, from {rounds[0]['at_utc']} to"
-                f" {rounds[-1]['at_utc']}: {state}.",
+                f"Health, by code: {_n(len(rounds), 'round', 'rounds')} of the rules and the containers, from"
+                f" {rounds[0]['at_utc']} to {rounds[-1]['at_utc']}: {state}.",
                 "run.json: verification.health",
             )
         )
@@ -508,6 +552,12 @@ def _durations(saved: Mapping, log: Sequence[Mapping]) -> list[dict]:
     for line in log:
         events.setdefault(line.get("event"), line)
     asked = events.get("requested")
+    if asked:
+        add(
+            "the request's window: open until it expires",
+            _apart(asked.get("at"), asked.get("expires_at")),
+            "gate.jsonl",
+        )
     answer = next((e for e in ANSWERED if e in events), None)
     if asked and answer:
         add(f"the request was open {ANSWERED[answer]}", _apart(asked.get("at"), events[answer].get("at")), "gate.jsonl")
@@ -526,46 +576,76 @@ def _durations(saved: Mapping, log: Sequence[Mapping]) -> list[dict]:
     return out
 
 
+def _outcomes(n, kind: str, followed: str) -> dict[str, int]:
+    """The synthetic clients' outcomes of payments or refunds (kind), from klaxon.traffic's counts. An outcome left
+    unknown is followed by a status check only when the answer named what to check (followed: its counts' prefix): the
+    others were never checked."""
+    counts = {
+        "succeeded": n(f"{kind}.succeeded"),
+        "refused": n(f"{kind}.failed" if kind == "payments" else f"{kind}.refused"),
+        "unexpected answers": n(f"{kind}.error"),
+        "outcome unknown": n(f"{kind}.unknown"),
+    }
+    counts |= {name: n(f"{followed}.{key}") for name, key in FOLLOWED.items()}
+    counts[NEVER] = max(counts["outcome unknown"] - sum(counts[name] for name in FOLLOWED), 0)
+    return counts
+
+
+def _unknown_said(counts: Mapping, what: str) -> str:
+    parts = [
+        f"{counts[LATER]} were confirmed later",
+        f"{counts[PENDING]} were still pending at the client's last status check",
+    ]
+    if counts[OTHER]:
+        parts.append(f"{counts[OTHER]} were in another state at the client's status check")
+    if counts[SILENT]:
+        parts.append(f"{counts[SILENT]} got no answer to the client's status check")
+    if counts[NEVER]:
+        parts.append(f"{counts[NEVER]} were never checked, since their answer named no {what}")
+    return f"Of the {counts['outcome unknown']} {what}s whose outcome was left unknown, {', '.join(parts)}."
+
+
 def _clients(saved: Mapping) -> dict:
     """The synthetic clients' own counts (klaxon.traffic): what the customers saw."""
     counts = (saved.get("traffic") or {}).get("counts") or {}
+    settings = saved.get("traffic_settings") or {}
 
     def n(key: str) -> int:
         value = counts.get(key, 0)
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
-    payments = {
-        "arrived": n("payments.arrived"),
-        "succeeded": n("payments.succeeded"),
-        "refused": n("payments.failed"),
-        "outcome unknown": n("payments.unknown"),
-        "of those, confirmed later": n("unknown_payments.confirmed_later"),
-        PENDING: n("unknown_payments.still_pending"),
-    }
-    refunds = {
-        "succeeded": n("refunds.succeeded"),
-        "refused": n("refunds.refused"),
-        "outcome unknown": n("refunds.unknown"),
-        "of those, confirmed later": n("unknown_refunds.confirmed_later"),
-        PENDING: n("unknown_refunds.still_pending"),
-    }
-    said = [
-        f"{payments['arrived']} payments arrived from the synthetic clients: {payments['succeeded']} succeeded,"
-        f" {payments['refused']} were refused, and {payments['outcome unknown']} got an answer that left their outcome"
-        f" unknown ({payments['of those, confirmed later']} of those were confirmed later, and {payments[PENDING]}"
-        " were still pending at the client's last status check).",
+    payments = {"arrived": n("payments.arrived")} | _outcomes(n, "payments", "unknown_payments")
+    answered = sum(payments[name] for name in ("succeeded", "refused", "unexpected answers", "outcome unknown"))
+    payments |= {"answered": answered, "never answered": max(payments["arrived"] - answered, 0)}
+    refunds = _outcomes(n, "refunds", "unknown_refunds")
+    said = []
+    if isinstance(settings.get("rate"), int | float):
+        said.append(f"The synthetic clients sent {settings['rate']:g} new payments per second, on average.")
+    said.append(
+        f"{payments['arrived']} payments arrived, and {answered} got an answer: {payments['succeeded']} succeeded,"
+        f" {payments['refused']} were refused, {payments['unexpected answers']} got an answer the clients did not"
+        f" expect, and {payments['outcome unknown']} were left with their outcome unknown."
+    )
+    if payments["outcome unknown"]:
+        said.append(_unknown_said(payments, "payment"))
+    if payments["never answered"]:
+        said.append(f"{payments['never answered']} of the payments that arrived got no answer the clients counted.")
+    said.append(
         f"Refunds: {refunds['succeeded']} succeeded, {refunds['refused']} were refused, and"
-        f" {refunds['outcome unknown']} were left with their outcome unknown ({refunds['of those, confirmed later']}"
-        f" confirmed later, {refunds[PENDING]} still pending at the client's last status check).",
-    ]
+        f" {refunds['outcome unknown']} were left with their outcome unknown."
+    )
+    if refunds["outcome unknown"]:
+        said.append(_unknown_said(refunds, "refund"))
     if n("shed"):
-        in_flight = (saved.get("traffic_settings") or {}).get("max_in_flight")
-        said.append(f"{n('shed')} of the clients' requests were shed: they came while {in_flight} were in flight.")
-    said.append(f"The clients retried {n('retries')} times.")
-    if n("payments.error") or n("refunds.error"):
-        said.append(f"Unexpected answers: {n('payments.error')} to payments, {n('refunds.error')} to refunds.")
+        said.append(
+            f"The clients shed {n('shed')} requests in all (payments, refunds and status checks), when"
+            f" {settings.get('max_in_flight')} were already in flight."
+        )
+    said.append(f"The clients retried {_n(n('retries'), 'time', 'times')}.")
+    if n("generator_errors"):
+        said.append(f"The traffic generator itself failed {_n(n('generator_errors'), 'time', 'times')}.")
     return {
-        "from": "run.json: traffic (klaxon.traffic, the synthetic clients' own counts)",
+        "from": "run.json: traffic and traffic_settings (klaxon.traffic, the synthetic clients' own counts)",
         "payments": payments,
         "refunds": refunds,
         "shed": n("shed"),
@@ -654,15 +734,35 @@ def _cause(saved: Mapping, start: Mapping) -> dict:
     }
 
 
-def _decided_by(decision: Mapping | None, taken: Mapping | None, log: Sequence[Mapping]) -> str:
+def _decision(folder: Path, request: Mapping, log: Sequence[Mapping]) -> dict | None:
+    """The decision on file, checked: it names this request, whole, and it is the very file the run read (its SHA-256,
+    as the gate's log has it), or, with no such line, the run's own expiry. None when there is none."""
+    try:
+        raw = (folder / gate.DECISION).read_bytes()
+        decision = gate.read_decision(folder)
+    except FileNotFoundError:
+        return None
+    except (OSError, gate.GateError):
+        raise NoPostmortem("the decision on file cannot be read") from None
+    if (decision.get("request_id"), decision.get("request_sha256")) != (request["id"], request["sha256"]):
+        raise NoPostmortem("the decision on file does not name this folder's request, whole")
+    judged = [line for line in log if line.get("event") in ("decision taken", "decision not taken")]
+    if judged:
+        if judged[-1].get("decision_sha256") != hashlib.sha256(raw).hexdigest():
+            raise NoPostmortem("the decision on file is not the one the run read: the gate's log has another SHA-256")
+    elif not (
+        decision.get("decision") == "expired"
+        and any(line.get("event") == "expired" and line.get("how") == decision.get("how") for line in log)
+    ):
+        raise NoPostmortem("the run never read the decision on file, and it is not the run's own expiry")
+    return decision
+
+
+def _decided_by(decision: Mapping, taken: Mapping | None, log: Sequence[Mapping]) -> str:
     """How the request was decided, as the gate's files show it: never more than they show."""
-    if decision is None:
-        return "nobody: no decision was written"
     kind, how = decision.get("decision"), decision.get("how")
     if kind == "expired":
         return f"nobody: the request expired ({how}), which counts as denied"
-    if how == gate.STOPPED:
-        return "nobody: the run stopped before it took a decision, which counts as denied"
     if taken is None:  # the decision on file is not the one the run took: it counts for nothing, as a denial
         refused = any(line.get("event") == "decision not taken" for line in log)
         why = "that the run did not take (gate.jsonl: decision not taken)" if refused else "the run's log never took"
@@ -677,16 +777,17 @@ def _action(folder: Path, saved: Mapping, log: Sequence[Mapping]) -> dict:
     request = decision = taken = None
     if outcome.get("request_id") is not None:
         try:
-            request, decision, taken = gate.read_request(folder), gate.read_decision(folder), gate.decided(folder)
+            request, taken = gate.read_request(folder), gate.decided(folder)
         except gate.GateError as exc:
             raise NoPostmortem(f"the gate's files cannot be trusted: {exc}") from None
         if request["id"] != outcome["request_id"]:
             raise NoPostmortem("the run's record and the gate's request name different requests")
-        if decision is not None and (decision.get("request_id"), decision.get("request_sha256")) != (
-            request["id"],
-            request["sha256"],
-        ):
-            raise NoPostmortem("the decision on file does not name this folder's request, whole")
+        decision = _decision(folder, request, log)
+        approved = taken is not None and taken.get("decision") == "approved"
+        if (outcome["result"] in DONE) != approved:
+            raise NoPostmortem("the run's record and the gate's log disagree on whether the request was approved")
+        if (outcome["result"] == "expired") != (decision is not None and decision.get("decision") == "expired"):
+            raise NoPostmortem("the run's record and the decision on file disagree on whether the request expired")
     fact: dict = {"result": outcome["result"], "detail": _text(outcome["detail"])}
     if request is not None:
         plan = request["plan"]
@@ -706,7 +807,7 @@ def _action(folder: Path, saved: Mapping, log: Sequence[Mapping]) -> dict:
             "at_utc": decision.get("at"),
             "by": _decided_by(decision, taken, log),
             "rule": RULE,
-            "from": "approval-decision.json; gate.jsonl",
+            "from": "approval-decision.json (the file the run read, by its SHA-256 in gate.jsonl); gate.jsonl",
         }
     deploy = outcome.get("deploy")
     if deploy:
@@ -737,19 +838,54 @@ def _verification(saved: Mapping) -> dict:
         )
         return {"verdict": None, "said": [_text(why)], "from": "run.json: gate, verification"}
     health = found["health"]
+    rounds = len(health["rounds"])
     unwell = Counter(r["unwell"] for r in health["rounds"] if r.get("unwell"))
     return {
         "verdict": found["verdict"],
         "said": [_text(sentence) for sentence in found["said"]],
         "health": {
             "healthy": health["healthy"],
-            "rounds": len(health["rounds"]),
-            "not_quiet": [f"{why} (at {n} rounds)" for why, n in unwell.items()],
+            "rounds": rounds,
+            "not_quiet": [f"{why} ({count} of the {rounds} rounds)" for why, count in unwell.items()],
         },
         "cause_removed": found["money"]["cause_removed"],
         "money_right": found["money"]["right"],
         "from": "run.json: verification (klaxon.agent.verify)",
     }
+
+
+def _left_unknown(clients: Mapping, last: Mapping | None) -> str | None:
+    """What the synthetic clients left unknown, and what the last money check says of it: a repair still owed, or a
+    decision."""
+    payments, refunds = clients["payments"], clients["refunds"]
+    parts = []
+    if payments[PENDING] or refunds[PENDING]:
+        parts.append(
+            f"{payments[PENDING]} payments and {refunds[PENDING]} refunds were still pending at the client's last"
+            " status check"
+        )
+    if payments[NEVER] or refunds[NEVER]:
+        parts.append(
+            f"{payments[NEVER]} payments and {refunds[NEVER]} refunds were never checked, since their answer named none"
+        )
+    if not parts:
+        return None
+    said = f"Of the outcomes the synthetic clients left unknown, {'; '.join(parts)}. The evidence does not say whether"
+    said += " each settled since."
+    if last is None:
+        return f"{said} No money check was read after the fault to say whether money moved for them."
+    if last["outcome"] == "passed":
+        return (
+            f"{said} The last money check passed: up to its cutoff, the provider held no charge or refund that our"
+            " records did not show as succeeded, so any of them still pending had no money moved for it. One still"
+            " pending needs a decision: a retry with its key, or marking it failed."
+        )
+    if last["outcome"] == "failed":
+        return (
+            f"{said} The last money check still found damage (above): one it lists needs the repair the fault records,"
+            " not a retry or marking it failed."
+        )
+    return f"{said} Whether money moved for them is not known: the last money check {last['outcome']}."
 
 
 def _repairs(saved: Mapping, clients: Mapping) -> dict:
@@ -770,22 +906,14 @@ def _repairs(saved: Mapping, clients: Mapping) -> dict:
         owed.append(
             f"The last money check ({last['when']}) still found damage: {last['said']}. A rollback repairs nothing:"
             " the damage stays until a person repairs it. Repairs that move money are not among Klaxon's actions: a"
-            " person makes them (DECISIONS.md, 2026-10-19)."
+            " person makes them (DECISIONS.md)."
         )
     else:
-        owed.append(f"Not known: the last money check {last['outcome']} ({last.get('why')}).")
-    pending, pending_refunds = clients["payments"][PENDING], clients["refunds"][PENDING]
-    if pending or pending_refunds:
-        said = (
-            f"At their last status check, the synthetic clients still saw {pending} payments and {pending_refunds}"
-            " refunds pending, their outcome unknown; the evidence does not say whether each settled since."
-        )
-        if last is not None and last["outcome"] == "passed":
-            said += (
-                " The last money check passed: by its invariants 4 and 5, any of them still pending then had no charge"
-                " or refund at the provider, so no money had moved for it."
-            )
-        owed.append(f"{said} One still pending needs a decision: a retry with its key, or marking it failed.")
+        why = f" ({last['why']})" if last.get("why") else ""
+        owed.append(f"Not known: the last money check ({last['when']}) {last['outcome']}{why}.")
+    unknown = _left_unknown(clients, last)
+    if unknown:
+        owed.append(unknown)
     return {
         "last_money_check": last,
         "owed": owed,
@@ -916,22 +1044,26 @@ def retry_turn(problems: Sequence[str], call: int, max_calls: int) -> str:
 @dataclass(frozen=True)
 class Checked:
     """What the check found in one reply: the narrative (None when the reply does not fit its form), the problems that
-    make it fail, how many numbers it holds, and those the facts do not hold."""
+    make it fail, how many numbers it holds, those the facts do not hold, and the problems that are not about numbers
+    (its dashes, links, markup and digits)."""
 
     narrative: dict | None
     problems: tuple[str, ...] = ()
     numbers: int = 0
     flagged: tuple[dict, ...] = ()
+    style: tuple[str, ...] = ()
 
 
 def _style(name: str, text: str) -> list[str]:
     problems = []
-    if any(ch in DASHES for ch in text) or " - " in text or "--" in text:
+    if any(ch in DASHES for ch in text) or re.search(r"[ \t]-[ \t]|--", text):
         problems.append(f"{name}: has a dash: write it without dashes")
     if LINK.search(text):
         problems.append(f"{name}: has a link or markup: plain sentences only")
     if any(ch.isnumeric() and not ch.isascii() for ch in text):
         problems.append(f"{name}: has a number in other digits than 0 to 9: write it with 0 to 9")
+    if any(unicodedata.category(ch).startswith("M") and text[i - 1].isdigit() for i, ch in enumerate(text) if i):
+        problems.append(f"{name}: has a mark over a digit: write the digits alone")
     return problems
 
 
@@ -944,24 +1076,27 @@ def _flag(name: str, number: Number) -> str:
 
 def read_narrative(text: str, allowed: frozenset[tuple[str, object]]) -> Checked:
     """Read one reply as the narrative, and check it: its form, then each section's numbers against allowed (the
-    facts' numbers, evidence_numbers), its dashes, links and digits. Hidden characters are dropped first: what is
-    checked is what the page shows."""
+    facts' numbers, evidence_numbers), its dashes, links, markup and digits. Hidden characters are dropped and every run
+    of spaces and line breaks made one space first: what is checked is what the page shows. The style is checked on the
+    text as written, where a list still starts its line."""
     value, problem = parse_object(text)
     if value is None:
         return Checked(None, (problem,))
     wrong = check(SCHEMA, value)
     if wrong:
         return Checked(None, tuple(wrong[:MAX_PROBLEMS]))
-    sections = {name: clean_text(value[name], len(value[name])) for name in SECTIONS}
+    written = {name: clean_text(value[name], len(value[name])) for name in SECTIONS}
     blank = [
         f"{name}: says nothing: it is blank, or holds only characters that do not show"
         for name in SECTIONS
-        if not sections[name].strip()
+        if not written[name].strip()
     ]
     if blank:
         return Checked(None, tuple(blank))
+    sections = {name: " ".join(text.split()) for name, text in written.items()}
     problems: list[str] = []
     flagged: list[dict] = []
+    style: list[str] = []
     count = 0
     for name, section in sections.items():
         for number in numbers_in(section):
@@ -969,17 +1104,18 @@ def read_narrative(text: str, allowed: frozenset[tuple[str, object]]) -> Checked
             if (number.kind, number.value) not in allowed:
                 flagged.append({"section": name, "said": number.said, "kind": number.kind})
                 problems.append(_flag(name, number))
-        problems += _style(name, section)
-    problems = list(dict.fromkeys(problems))  # each once, in order
-    return Checked(sections, tuple(problems[:MAX_PROBLEMS]), count, tuple(flagged))
+        style += _style(name, written[name])
+    problems = list(dict.fromkeys(problems + style))  # each once, the numbers first
+    return Checked(sections, tuple(problems[:MAX_PROBLEMS]), count, tuple(flagged), tuple(dict.fromkeys(style)))
 
 
 @dataclass(frozen=True)
 class Draft:
-    """What came of asking for the narrative: passed, flagged (kept, though a check still fails), or no narrative."""
+    """What came of asking for the narrative: passed, flagged (kept, though some of its numbers are not in the facts),
+    or no narrative."""
 
     outcome: str
-    narrative: dict | None  # the sections of the reply kept, hidden characters dropped
+    narrative: dict | None  # the sections of the reply kept, as the page shows them
     problems: tuple[str, ...]  # what still fails in it; why there is none, for no narrative
     flagged: tuple[dict, ...]  # the numbers in it the facts do not hold
     numbers: int  # the numbers the check read in it
@@ -998,7 +1134,8 @@ def _as_turn(text: str) -> str:
 def write(found: Mapping, model: Model, max_calls: int = MAX_CALLS) -> Draft:
     """Ask for the narrative of these facts, check it, and send it back with what was wrong: max_calls calls at most,
     a failed call included. A refusal (a model Klaxon would not use, a reply it could not record) is never asked
-    again. The draft keeps the last reply that fits the narrative's form."""
+    again. The draft keeps the last reply that fits the narrative's form and fails, if at all, only on its numbers:
+    one with a dash, a link or markup is never shown."""
     system, allowed = system_prompt(), evidence_numbers(found)
     conversation = [Message("user", first_turn(found))]
     calls: list[dict] = []
@@ -1016,7 +1153,7 @@ def write(found: Mapping, model: Model, max_calls: int = MAX_CALLS) -> Draft:
         checked = read_narrative(reply.text, allowed)
         calls.append({"call": call, "reply_sha256": text_sha256(reply.text), "problems": list(checked.problems)})
         last = checked.problems
-        if checked.narrative is not None:
+        if checked.narrative is not None and not checked.style:
             kept = (checked, reply)
         if not checked.problems:
             break
@@ -1036,16 +1173,18 @@ def write(found: Mapping, model: Model, max_calls: int = MAX_CALLS) -> Draft:
 # The page.
 
 MARKUP = re.compile(r"([\\`*_\[\]<>|~#])")
+SCHEME = re.compile(r"\b([A-Za-z][A-Za-z0-9+.-]*):(?=//)")
 
 
 def md(text: object) -> str:
     """Text as Markdown shows it, never as markup: each character Markdown reads as markup escaped, every run of spaces
-    and line breaks one space, and nothing at its start read as a list or a heading."""
-    plain = " ".join(clean_text(str(text), len(str(text))).split()).replace("&", "&amp;")
+    and line breaks one space, nothing at its start read as a list, a heading or a rule, and nothing a site would make
+    a link of (https[:]//, www[.], an at sign as [@])."""
+    plain = " ".join(clean_text(str(text), len(str(text))).split())
+    plain = SCHEME.sub(r"\1[:]", plain)
+    plain = re.sub(r"(?i)\b(www)\.", r"\1[.]", plain).replace("@", "[@]").replace("&", "&amp;")
     plain = MARKUP.sub(r"\\\1", plain)
-    return re.sub(
-        r"^([-+=])(?=\s|$)|^([0-9]+)([.)])(?=\s|$)", lambda m: f"\\{m[1]}" if m[1] else f"{m[2]}\\{m[3]}", plain
-    )
+    return re.sub(r"^([-+=])|^([0-9]+)([.)])(?=\s|$)", lambda m: f"\\{m[1]}" if m[1] else f"{m[2]}\\{m[3]}", plain)
 
 
 def _marked(text: str, allowed: frozenset[tuple[str, object]]) -> str:
@@ -1085,13 +1224,15 @@ def _label(found: Mapping, draft: Draft) -> str:
     said += (
         f" The paragraphs are Claude's draft: {reply.get('model')}, a recorded response received"
         f" {reply.get('received_at')} (postmortem-recording.jsonl), drafted from those facts alone: its prompt held"
-        " nothing else."
+        " nothing else. Code checked every number in them against the facts, but for one, once, twice and the"
+        " ordinals, which it does not read"
     )
     if draft.outcome == "passed":
-        return f"{said} Code checked every number in them against the facts: all {draft.numbers} are there."
+        there = f"all {draft.numbers} are there" if draft.numbers else "they hold no other number"
+        return f"{said}: {there}."
     return (
-        f"{said} Code checked every number in them against the facts. After {len(draft.calls)} calls, the draft still"
-        f" fails the check: {'; '.join(draft.problems)}. Each number the facts do not hold is marked {FLAG}."
+        f"{said}. After {_n(len(draft.calls), 'call', 'calls')}, the draft still fails the check:"
+        f" {'; '.join(draft.problems)}. Each number the facts do not hold is marked {FLAG}."
     )
 
 
@@ -1106,7 +1247,8 @@ def render(found: Mapping, draft: Draft) -> str:
     lines += ["## Summary", "", *_paragraph(draft, "summary", allowed)]
     lines += ["## Timeline", "", *_paragraph(draft, "timeline", allowed)]
     lines += [
-        f"The facts. Times are UTC, on {day} unless a row says otherwise; since the fault: by the run's own clock.",
+        f"The facts. Times are UTC, on {day} unless a row says otherwise; since the fault: by the run's own clock, from"
+        " when the fault's injection began.",
         "",
     ]
     lines += ["| UTC | Since the fault | What happened | From |", "|---|---|---|---|"]
@@ -1191,7 +1333,7 @@ def _action_lines(action: Mapping, verification: Mapping) -> list[str]:
     lines += [f"- {md(sentence)}" for sentence in verification["said"]]
     health = verification.get("health")
     if health and health["not_quiet"]:
-        lines.append(f"- Health was not quiet at first: {md('; '.join(health['not_quiet']))}.")
+        lines.append(f"- Health rounds that were not quiet: {md('; '.join(health['not_quiet']))}.")
     return lines
 
 
@@ -1204,7 +1346,7 @@ def _made(draft: Draft) -> list[str]:
         f"call {item['call']}: " + (item["error"] if "error" in item else "; ".join(item["problems"]) or "passed")
         for item in draft.calls
     )
-    lines.append(f"- The narrative: {md(draft.outcome)}, after {len(draft.calls)} calls ({md(calls)}).")
+    lines.append(f"- The narrative: {md(draft.outcome)}, after {_n(len(draft.calls), 'call', 'calls')} ({md(calls)}).")
     lines.append(
         "- Each call's prompt and reply are in postmortem-recording.jsonl, recorded before Klaxon used them; make"
         " replay-postmortem replays them offline and checks this page comes out the same."
@@ -1216,25 +1358,39 @@ def _made(draft: Draft) -> list[str]:
     return lines
 
 
+def _record(found: Mapping, draft: Draft) -> dict:
+    return {"label": SAVED_LABEL, "facts": found, "draft": draft.to_dict()}
+
+
 def save(folder: Path, found: Mapping, draft: Draft) -> None:
-    """The postmortem, written next to the run's evidence: the facts and the draft as JSON, and the page."""
-    record = {"label": SAVED_LABEL, "facts": found, "draft": draft.to_dict()}
-    (folder / SAVED).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    (folder / MARKDOWN).write_text(render(found, draft), encoding="utf-8")
+    """The postmortem, written next to the run's evidence: the facts and the draft as JSON, and the page. Both are
+    made before either is written."""
+    record = json.dumps(_record(found, draft), indent=2, ensure_ascii=False) + "\n"
+    page = render(found, draft)
+    (folder / SAVED).write_text(record, encoding="utf-8")
+    (folder / MARKDOWN).write_text(page, encoding="utf-8")
 
 
 def replay(folder: Path | str) -> list[str]:
     """Draft the saved postmortem again, offline, from its recording: how it differs from the saved one ([] when it
     is reproduced). The facts are built again from the evidence too, and must be the ones the draft saw."""
     folder = Path(folder)
-    saved = json.loads((folder / SAVED).read_text(encoding="utf-8"))
+    try:
+        saved = json.loads((folder / SAVED).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise NoPostmortem(f"its folder holds no {SAVED}: no postmortem was saved there to replay") from None
     differences = []
     if facts(folder) != saved["facts"]:
         differences.append("the facts differ: the evidence, or the code that reads it, changed since the draft")
     model = ReplayModel(folder / RECORDING)
     again = write(saved["facts"], model)
-    for key, value in again.to_dict().items():
-        if saved["draft"].get(key) != value:
+    expected = _record(saved["facts"], again)
+    differences += [f"the saved postmortem differs in: {key}" for key in sorted(set(saved) ^ set(expected))]
+    if saved.get("label") != expected["label"]:
+        differences.append("the saved postmortem differs in: label")
+    drafted = saved.get("draft") if isinstance(saved.get("draft"), dict) else {}
+    for key in sorted(set(drafted) | set(expected["draft"])):
+        if drafted.get(key) != expected["draft"].get(key):
             differences.append(f"the draft differs in: {key}")
     if model.unused:
         differences.append(f"{model.unused} recorded call(s) were not asked for again")
@@ -1266,6 +1422,11 @@ def _draft(folder: Path, model_id: str, argv: Sequence[str]) -> int:
     try:  # before anything is written: a draft that cannot start leaves nothing behind
         found = facts(folder)
         there = [name for name in (MARKDOWN, SAVED, RECORDING) if (folder / name).exists()]
+        if there == [RECORDING]:
+            raise NoPostmortem(
+                f"its folder holds {RECORDING} from a draft that did not finish, and no postmortem: move the recording"
+                " aside (it keeps that draft's calls) to draft it again"
+            )
         if there:
             raise NoPostmortem(
                 f"its folder already holds {', '.join(there)}: replay it (make replay-postmortem), or move them aside"
@@ -1282,9 +1443,13 @@ def _draft(folder: Path, model_id: str, argv: Sequence[str]) -> int:
         **_provenance(),
     }
     adapter = ClaudeCode(Recording(folder / RECORDING, header), model=model_id, binary=binary)
-    draft = write(found, adapter)
+    try:
+        draft = write(found, adapter)
+    except KeyboardInterrupt:
+        print(f"Interrupted: {RECORDING} keeps the calls made, and no postmortem was saved", file=sys.stderr)
+        return 130
     save(folder, found, draft)
-    print(f"Draft: {draft.outcome}, after {len(draft.calls)} calls; {draft.numbers} numbers in it")
+    print(f"Draft: {draft.outcome}, after {_n(len(draft.calls), 'call', 'calls')}; {draft.numbers} numbers in it")
     for problem in draft.problems:
         print(f"  {clean_text(problem, 300)}")
     print(f"Saved in {clean_text(str(folder))}: {MARKDOWN}, {SAVED}, {RECORDING}")

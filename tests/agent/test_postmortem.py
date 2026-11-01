@@ -74,7 +74,9 @@ def but(**sections):
 
 
 def copy_run(name, tmp_path):
-    return Path(shutil.copytree(EVIDENCE / RUNS[name], tmp_path / RUNS[name]))
+    """A copy of a run's folder, as its gated run left it: without the postmortem a live draft added."""
+    ignore = shutil.ignore_patterns("postmortem*")
+    return Path(shutil.copytree(EVIDENCE / RUNS[name], tmp_path / RUNS[name], ignore=ignore))
 
 
 # The facts, from each gated run's saved evidence.
@@ -136,7 +138,8 @@ def test_each_runs_gate_and_how_long_its_request_waited(name, result, verdict, o
     waited = [
         f"{item['what']}: {item['said']}" for item in found["durations"] if item["what"].startswith("the request")
     ]
-    assert waited == ([open_for] if open_for else [])
+    window = ["the request's window: open until it expires: 600 s (10 min)"] if open_for else []
+    assert waited == window + ([open_for] if open_for else [])
 
 
 def test_fault_1s_damage_at_each_point_is_what_the_run_measured(fault_1):
@@ -163,7 +166,7 @@ def test_fault_1s_timeline_runs_from_the_quiet_stack_to_the_rules_after_the_clea
     rows = fault_1["timeline"]
     assert [row["from"] for row in rows] == [
         "run.json: evaluations (before)",
-        "run.json: injected",
+        "run.json: injected, timings, deploys",
         "run.json: alert",
         "trace.jsonl: start",
         "trace.jsonl: stop; run.json: loop",
@@ -179,11 +182,14 @@ def test_fault_1s_timeline_runs_from_the_quiet_stack_to_the_rules_after_the_clea
         "run.json: evaluations (after)",
     ]
     assert [row["at_utc"] for row in rows[1:4]] == [
-        "2026-10-21T09:06:32Z",  # the fault's deploy, as the deploy log has it
+        None,  # the injection's start: the run's own clock dates it, not UTC (the review's finding 9)
         "2026-10-21T09:06:47Z",  # the alert
         "2026-10-21T09:06:48Z",  # the loop's start, cut to the second
     ]
     assert [row["since_the_fault"] for row in rows[1:3]] == ["0 s", "17.5 s"]
+    assert rows[1]["what"].endswith(
+        "It took 2.5 s. The deploy log has it as deploy 1, by klaxon.faults, at 2026-10-21T09:06:32Z."
+    )
     assert "approved with make approve: typed at a terminal" in rows[7]["what"]
 
 
@@ -203,7 +209,7 @@ def test_fault_5s_verification_waited_for_the_books_and_says_what_the_clients_sa
     assert found["verification"]["health"] == {
         "healthy": True,
         "rounds": 6,
-        "not_quiet": ["a rule's condition holds: BooksBehindProvider (the books) (at 4 rounds)"],
+        "not_quiet": ["a rule's condition holds: BooksBehindProvider (the books) (4 of the 6 rounds)"],
     }
     owed = found["repairs"]["owed"]
     assert owed[0] == (
@@ -211,7 +217,11 @@ def test_fault_5s_verification_waited_for_the_books_and_says_what_the_clients_sa
         " repair."
     )
     # The clients' own count is from their last look, during the fault; the later money check says no money moved.
-    assert "still saw 23 payments and 3 refunds pending" in owed[1] and "invariants 4 and 5" in owed[1]
+    assert owed[1].startswith(
+        "Of the outcomes the synthetic clients left unknown, 23 payments and 3 refunds were still pending at the"
+        " client's last status check. The evidence does not say whether each settled since. The last money check"
+        " passed: up to its cutoff, the provider held no charge or refund that our records did not show as succeeded"
+    )
 
 
 def test_fault_3s_run_names_no_action_and_leaves_a_decision_on_the_pending_payments():
@@ -224,8 +234,10 @@ def test_fault_3s_run_names_no_action_and_leaves_a_decision_on_the_pending_payme
     )
     assert found["verification"]["said"] == ["Nothing was verified: no action ran."]
     assert found["repairs"]["last_money_check"]["when"] == "after the harness's clearing"
-    assert "still saw 299 payments and 9 refunds pending" in found["repairs"]["owed"][1]
-    assert "invariants 4 and 5" in found["repairs"]["owed"][1]  # the money check after the clearing passed
+    owed = found["repairs"]["owed"][1]
+    assert owed.startswith("Of the outcomes the synthetic clients left unknown, 299 payments and 9 refunds were still")
+    assert "The last money check passed: up to its cutoff" in owed  # the money check after the clearing passed
+    assert owed.endswith("One still pending needs a decision: a retry with its key, or marking it failed.")
 
 
 @pytest.mark.parametrize("name", [name for name in RUNS if name.endswith("unanswered")])
@@ -259,6 +271,7 @@ def test_a_decision_the_run_did_not_take_counts_as_a_denial(tmp_path):
     folder = copy_run("duplicate-delivery, approved", tmp_path)
     log = folder / gate.LOG
     log.write_text(log.read_text().replace('"event": "decision taken"', '"event": "decision not taken"'))
+    edit(folder, "run.json", lambda run: run["gate"].update(result="denied", deploy=None))
     decision = postmortem.facts(folder)["action"]["decision"]
     assert decision["by"] == (
         "a decision on file that the run did not take (gate.jsonl: decision not taken), so it counts as a denial"
@@ -350,15 +363,18 @@ def test_a_number_only_the_models_own_words_hold_is_not_evidence(fault_1):
     checked it, so a narrative may not use it."""
     assert "2456" in fault_1["cause"]["diagnosis"][MODEL_WORDS]["hypothesis"]
     allowed = evidence_numbers(fault_1)
-    assert ("number", 2456.0) not in allowed
-    assert ("number", 28.0) in allowed and ("money", 153_187) in allowed
+    assert ("number", "2456") not in allowed
+    assert ("number", "28") in allowed and ("money", 153_187) in allowed
 
 
 def test_a_number_in_the_facts_json_is_a_number_and_a_time_stands_for_its_minute():
-    found = evidence_numbers({"seconds": 96, "money_off_cents": 153_187, "at": "2026-10-21T09:09:11Z", "ok": True})
+    found = evidence_numbers(
+        {"seconds": 96, "money_off_cents": 153_187, "lag": 249.0, "at": "2026-10-21T09:09:11Z", "ok": True}
+    )
     assert found == {
-        ("number", 96.0),
-        ("number", 153_187.0),
+        ("number", "96"),
+        ("number", "153187"),
+        ("number", "249"),
         ("date", "2026-10-21"),
         ("time", "09:09:11"),
         ("time", "09:09"),
@@ -400,7 +416,7 @@ def test_a_number_the_facts_do_not_hold_is_found_with_its_kind(fault_1, impact, 
 def test_a_value_the_facts_hold_only_as_another_kind_is_flagged(fault_1):
     """The request was open 96 s: a duration. 96 alone, as a count, is not in the facts."""
     allowed = evidence_numbers(fault_1)
-    assert ("duration", 96.0) in allowed and ("number", 96.0) not in allowed
+    assert ("duration", 96.0) in allowed and ("number", "96") not in allowed
     checked = read_narrative(but(timeline="The request waited 96 before it was approved."), allowed)
     assert checked.problems == ("timeline: '96' is not in the facts, as a number",)
 
@@ -602,7 +618,7 @@ def test_the_page_shows_each_paragraph_and_the_facts_beside_it(fault_1):
         "## Repairs still owed",
         "## How this draft was made",
     ]
-    assert "Code checked every number in them against the facts: all 15 are there." in page
+    assert "but for one, once, twice and the ordinals, which it does not read: all 15 are there." in page
     assert "| 09:06:47 | 17.5 s | The alert MoneyCheckFailed fired" in page
     assert "- the request was open until it was approved: 96 s (1 min 36 s)" in page
     assert postmortem.md(GOOD["impact"]) in page
@@ -626,13 +642,18 @@ def test_a_page_with_no_narrative_holds_the_facts_alone(fault_1):
 @pytest.mark.parametrize(
     "text, shown",
     [
-        ("See [the log](http://x) now", r"See \[the log\](http://x) now"),
+        ("See [the log](http://x) now", r"See \[the log\](http\[:\]//x) now"),
+        (
+            "https://evil.example/fix, WWW.evil.example, ops@evil.example",
+            r"https\[:\]//evil.example/fix, WWW\[.\]evil.example, ops\[@\]evil.example",
+        ),
+        ("---", r"\---"),
         ("A <img src=x> tag", r"A \<img src=x\> tag"),
         ("1. A list?", r"1\. A list?"),
         ("- A list?", r"\- A list?"),
         ("# A heading?", r"\# A heading?"),
         ("17.5 s, not a list", "17.5 s, not a list"),
-        ("-5 s, not a list", "-5 s, not a list"),
+        ("-5 s, not a list", r"\-5 s, not a list"),
         ("LEDGER_HANDLER *naive* | `x` ~y~ &amp;", r"LEDGER\_HANDLER \*naive\* \| \`x\` \~y\~ &amp;amp;"),
         ("two\nlines   and\tspaces", "two lines and spaces"),
     ],
@@ -660,6 +681,7 @@ class RecordedScript:
         details = {"made_up": "a test's scripted reply, recorded as a live one would be"}
         if isinstance(entry, ModelError):
             self.recording.failure(system, turns, entry, 0.1, details, None)
+        if isinstance(entry, BaseException):  # an interrupt is not recorded: the call never ended
             raise entry
         found = Reply(
             text=entry,
@@ -788,5 +810,249 @@ def test_the_facts_command_prints_the_facts_and_the_prompt_and_writes_nothing(tm
 
 
 def test_a_folder_with_no_postmortem_cannot_be_replayed(capsys):
-    assert postmortem.main(["replay", str(FAULT_1)]) == 2
+    """An expired run: no live draft was made for one (Aravind's choice, 2026-11-01)."""
+    assert postmortem.main(["replay", str(EVIDENCE / RUNS["money-unit, unanswered"])]) == 2
     assert "Cannot replay" in capsys.readouterr().err
+
+
+# The independent review's findings (week 4, item 5; DECISIONS.md lists them by number).
+
+
+def test_outcomes_the_clients_never_checked_are_said_and_owed():
+    """Finding 1 (high): in fault 6's run, 234 payments got an answer that named no payment (a 500), so the clients
+    never checked them; the facts said "0 still pending" and the repairs left them out."""
+    found = postmortem.facts(EVIDENCE / RUNS["pool-exhaustion, approved"])
+    payments = found["impact"]["clients"]["payments"]
+    assert (payments["arrived"], payments["answered"], payments["never answered"]) == (1076, 964, 112)
+    assert (payments["outcome unknown"], payments[postmortem.NEVER], payments[postmortem.PENDING]) == (234, 234, 0)
+    said = found["impact"]["clients"]["said"]
+    assert (
+        "Of the 234 payments whose outcome was left unknown, 0 were confirmed later, 0 were still pending at the"
+        " client's last status check, 234 were never checked, since their answer named no payment." in said
+    )
+    assert "112 of the payments that arrived got no answer the clients counted." in said
+    owed = found["repairs"]["owed"]
+    assert owed[1].startswith(
+        "Of the outcomes the synthetic clients left unknown, 234 payments and 2 refunds were never checked, since"
+        " their answer named none."
+    )
+    assert owed[1].endswith("One still pending needs a decision: a retry with its key, or marking it failed.")
+
+
+def test_a_pending_payment_the_money_check_lists_is_owed_the_faults_repair():
+    """Finding 6: fault 4's 20 pending payments were charged 100 times over: marking them failed would be wrong."""
+    owed = postmortem.facts(EVIDENCE / RUNS["money-unit, approved"])["repairs"]["owed"]
+    assert owed[1] == (
+        "Of the outcomes the synthetic clients left unknown, 20 payments and 0 refunds were still pending at the"
+        " client's last status check. The evidence does not say whether each settled since. The last money check"
+        " still found damage (above): one it lists needs the repair the fault records, not a retry or marking it"
+        " failed."
+    )
+
+
+def test_a_money_check_with_no_verdict_says_why():
+    """Finding 7: "(None)" on a page, for the expired run of fault 5."""
+    owed = postmortem.facts(EVIDENCE / RUNS["secret-rotation, unanswered"])["repairs"]["owed"]
+    assert owed[0] == (
+        "Not known: the last money check (after the harness's clearing) could not settle (24 of the provider's"
+        " webhooks up to its cutoff were not acknowledged yet)."
+    )
+
+
+def test_a_narrative_that_fails_on_its_style_is_never_shown(fault_1):
+    """Finding 2 (medium): a reply that kept a dash, a link or another digit was kept and published. Aravind's choice
+    keeps a narrative whose numbers alone still fail; one that breaks the style rules leaves the facts alone."""
+    bad = but(cause="It ended \u2014 see https://evil.example/x, after \u0663 tries.")
+    draft = postmortem.write(fault_1, ScriptedModel([bad] * MAX_CALLS))
+    assert (draft.outcome, draft.narrative) == ("no narrative", None)
+    page = postmortem.render(fault_1, draft)
+    assert "\u2014" not in page and "evil.example" not in page and "\u0663" not in page
+
+
+def test_a_narrative_kept_for_its_numbers_alone_is_flagged(fault_1):
+    draft = postmortem.write(fault_1, ScriptedModel([but(impact="It cost $4,000.00.")] * MAX_CALLS))
+    assert draft.outcome == "flagged" and draft.problems == (
+        "impact: '$4,000.00' is not in the facts, as an amount of money",
+    )
+
+
+def hostile(tmp_path):
+    """A copy of fault 1's run whose texts try to become markup: links, an e-mail, HTML, a table's pipe, a rule."""
+    folder = copy_run("duplicate-delivery, approved", tmp_path)
+    nasty = "See https://evil.example/fix, www.evil.example and ops@evil.example | <img src=x> ![i](http://x)"
+
+    def change(run):
+        run["loop"]["diagnosis"].update(hypothesis=f"{nasty}\n---\n# heading", blast_radius="---")
+        run["loop"]["diagnosis"]["proposed_fix"]["summary"] = nasty
+        run["alert"]["summary"] += f" {nasty}"
+
+    edit(folder, "run.json", change)
+    return postmortem.facts(folder)
+
+
+def unescaped(pattern, text):
+    return re.findall(rf"(?<!\\){pattern}", text)
+
+
+def tables(page):
+    """Each table's rows, by its header: the timeline has 4 columns, the money check 3."""
+    found, header = {}, None
+    for line in page.splitlines():
+        if line.startswith("| ") and header is None:
+            header = line
+            found[header] = []
+        elif line.startswith("|") and header is not None:
+            found[header].append(line)
+        else:
+            header = None
+    return found
+
+
+@pytest.mark.parametrize("narrated", [False, True])
+def test_hostile_text_in_the_evidence_never_becomes_a_link_or_markup(tmp_path, narrated):
+    """Finding 3 (medium): the page made autolinks of URLs, www. and e-mail addresses in the evidence."""
+    found = hostile(tmp_path)
+    script = [reply(GOOD)] if narrated else ["not json"] * MAX_CALLS
+    page = postmortem.render(found, postmortem.write(found, ScriptedModel(script)))
+    assert "evil.example" in page  # shown, as text
+    assert "://" not in page and not re.search(r"(?i)www\.", page)
+    assert page.count("@") == page.count("\\[@\\]")
+    assert not unescaped("<", page) and not unescaped(r"\]\(", page)
+    headings = [line for line in page.splitlines() if line.startswith("#")]
+    assert len(headings) == 8 and not [line for line in page.splitlines() if line.strip() in ("---", "***")]
+    columns = {"| UTC | Since the fault | What happened | From |": 5, "| When | UTC | The money check |": 4}
+    for header, rows in tables(page).items():
+        assert rows and all(len(unescaped(r"\|", row)) == columns[header] for row in rows), header
+
+
+def test_a_decision_file_changed_after_the_run_read_it_has_no_postmortem(tmp_path):
+    """Finding 4 (medium): the decision was trusted as it is now; the gate's log names the SHA-256 the run read."""
+    folder = copy_run("duplicate-delivery, approved", tmp_path)
+    edit(folder, "approval-decision.json", lambda decision: decision.update(how="typed at a terminal by someone"))
+    with pytest.raises(NoPostmortem, match="not the one the run read"):
+        postmortem.facts(folder)
+
+
+def test_an_expiry_the_run_never_wrote_has_no_postmortem(tmp_path):
+    folder = copy_run("money-unit, unanswered", tmp_path)
+    edit(folder, "approval-decision.json", lambda decision: decision.update(how="no decision within 1 s"))
+    with pytest.raises(NoPostmortem, match="not the run's own expiry"):
+        postmortem.facts(folder)
+
+
+@pytest.mark.parametrize(
+    "name, change, why",
+    [
+        (
+            "duplicate-delivery, approved",
+            lambda folder: (folder / gate.LOG).write_text(
+                (folder / gate.LOG).read_text().replace('"decision": "approved"', '"decision": "denied"')
+            ),
+            "disagree on whether the request was approved",
+        ),
+        (
+            "money-unit, unanswered",
+            lambda folder: edit(folder, "run.json", lambda run: run["gate"].update(result="denied")),
+            "disagree on whether the request expired",
+        ),
+    ],
+)
+def test_a_runs_record_that_disagrees_with_the_gates_files_has_no_postmortem(tmp_path, name, change, why):
+    folder = copy_run(name, tmp_path)
+    change(folder)
+    with pytest.raises(NoPostmortem, match=why):
+        postmortem.facts(folder)
+
+
+@pytest.mark.parametrize(
+    "impact, problem",
+    [
+        ("In all, 4 000 payments were lost.", "'4 000' is not in the facts, as a number"),
+        ("In all, 4\u202f000 payments were lost.", "is not in the facts, as a number"),
+        ("1/2 of the events.", "'1/2' is not in the facts, as a number"),
+        ("A 10^2 rise.", "'10^2' is not in the facts, as a number"),
+        ("A change of -28 events.", "'-28' is not in the facts, as a number"),
+        ("It was -$1,531.87.", "'-$1,531.87' is not in the facts, as an amount of money"),
+        ("It was $1,531.875.", "'$1,531' is not in the facts, as an amount of money"),
+        ("It began at 00:00 UTC.", "'00:00 UTC' is not in the facts, as a time"),
+        ("Zero payments were refused.", "'Zero' is a number in words"),
+        ("Tenfold more.", "'Tenfold' is a number in words"),
+        ("In all, 4.000 payments.", "'4.000' is not in the facts, as a number"),
+        ("2\u03358 events.", "has a mark over a digit"),
+    ],
+)
+def test_the_reviews_wrong_numbers_are_found(fault_1, impact, problem):
+    """Finding 5 (medium): each of these passed against fault 1's facts."""
+    checked = read_narrative(but(impact=impact), evidence_numbers(fault_1))
+    assert any(problem in found for found in checked.problems), checked.problems
+
+
+def test_a_narrative_is_checked_as_the_page_shows_it(fault_1):
+    """Finding 5: "1 min\\t36 s" was checked as two durations, and shown as one."""
+    checked = read_narrative(but(timeline="The request was open for 1 min\t36 s."), evidence_numbers(fault_1))
+    assert checked.problems == () and checked.narrative["timeline"] == "The request was open for 1 min 36 s."
+
+
+def test_a_needless_refusal_of_the_review_now_passes(fault_1):
+    """Finding 5: "1 minute and 36 seconds", "a 10-minute window" and "2-round" were refused, though in the facts."""
+    text = "The request waited 1 minute and 36 seconds of its 10-minute window, after a 2-round health check."
+    assert read_narrative(but(timeline=text), evidence_numbers(fault_1)).problems == ()
+
+
+def test_facts_about_the_facts_are_no_evidence():
+    assert evidence_numbers({"format": 1, "run": {"folder": "x"}}) == frozenset()
+
+
+def test_a_datetime_with_both_parts_wrong_is_marked_once(fault_1):
+    """A nit of the review: a guard with no test."""
+    draft = postmortem.write(fault_1, ScriptedModel([but(impact="It ended at 2026-10-30T23:59:58Z.")] * MAX_CALLS))
+    page = postmortem.render(fault_1, draft)
+    assert page.count(postmortem.md(FLAG)) == 2  # once in the paragraph, once in the label
+
+
+def test_a_trace_that_does_not_stop_has_no_postmortem(tmp_path):
+    """A nit of the review: a guard with no test."""
+    folder = copy_run("duplicate-delivery, approved", tmp_path)
+    trace = folder / "trace.jsonl"
+    trace.write_text("".join(line + "\n" for line in trace.read_text().splitlines()[:-1]))
+    with pytest.raises(NoPostmortem, match="does not start and stop"):
+        postmortem.facts(folder)
+
+
+def test_a_draft_says_one_call_and_no_numbers_plainly(fault_1):
+    """Nits of the review: "after 1 calls" and "all 0 are there"."""
+    plain = {name: "It ended well." for name in postmortem.SECTIONS}
+    draft = postmortem.write(fault_1, ScriptedModel([reply(plain)]))
+    page = postmortem.render(fault_1, draft)
+    assert "which it does not read: they hold no other number." in page
+    assert "- The narrative: passed, after 1 call (call 1: passed)." in page
+
+
+def test_an_interrupted_draft_says_so_and_never_blocks_the_next_one_silently(drafting, tmp_path, capsys):
+    """Finding 8 (low): an interrupt left only the recording, and the next draft said to replay it."""
+    folder = copy_run("duplicate-delivery, approved", tmp_path)
+    assert drafting(folder, KeyboardInterrupt()) == 130
+    assert sorted(path.name for path in folder.iterdir() if path.name.startswith("postmortem")) == [
+        postmortem.RECORDING
+    ]
+    assert "no postmortem was saved" in capsys.readouterr().err
+    assert drafting(folder) == 2
+    assert "from a draft that did not finish, and no postmortem: move the recording aside" in capsys.readouterr().err
+    assert postmortem.main(["replay", str(folder)]) == 2
+    assert "no postmortem was saved there to replay" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "change, difference",
+    [
+        (lambda saved: saved.update(label="another"), "the saved postmortem differs in: label"),
+        (lambda saved: saved["draft"].update(extra=1), "the draft differs in: extra"),
+        (lambda saved: saved.update(extra=1), "the saved postmortem differs in: extra"),
+    ],
+)
+def test_a_replay_compares_the_whole_saved_postmortem(drafting, tmp_path, change, difference):
+    """A nit of the review: the label and keys the draft does not make were not compared."""
+    folder = copy_run("duplicate-delivery, approved", tmp_path)
+    assert drafting(folder, reply(GOOD)) == 0
+    edit(folder, postmortem.SAVED, change)
+    assert difference in postmortem.replay(folder)

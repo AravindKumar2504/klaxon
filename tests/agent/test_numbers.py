@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from klaxon.agent.numbers import KINDS, numbers_in
+from klaxon.agent.numbers import KINDS, as_number, numbers_in
 
 
 def read(text):
@@ -48,11 +48,25 @@ def read(text):
         ("WEBHOOK_SECRET_VERSION v2", [("id", "v2")]),
         ("claude-opus-5-5", [("id", "claude-opus-5-5")]),
         ("100x", [("id", "100x")]),
-        ("1,080 payments", [("number", 1080.0)]),
-        ("confidence 0.85.", [("number", 0.85)]),
-        ("7 events", [("number", 7.0)]),
-        ("3 steps", [("number", 3.0)]),
-        ("5 services", [("number", 5.0)]),
+        ("1,080 payments", [("number", "1080")]),
+        ("confidence 0.85.", [("number", "0.85")]),
+        ("7 events", [("number", "7")]),
+        ("3 steps", [("number", "3")]),
+        ("5 services", [("number", "5")]),
+        # The review's strings (week 4, item 5): each one token, as written, with its sign.
+        ("In all, 4 000 payments", [("number", "4000")]),
+        ("4\u202f000 and 4'000", [("number", "4000"), ("number", "4000")]),
+        ("4.000 is not 4", [("number", "4.000"), ("number", "4")]),
+        ("1/2 of them, a 10^2 rise, 3*4", [("number", "1/2"), ("number", "10^2"), ("number", "3*4")]),
+        ("a change of -28 events, +28", [("number", "-28"), ("number", "28")]),
+        ("-$1,531.87", [("money", -153_187)]),
+        ("$1,531.875", [("money", 153_100), ("number", "875")]),
+        ("t=-5 s", [("duration", -5.0)]),
+        ("2026-10-21T09:05:13+00:00", [("date", "2026-10-21"), ("time", "09:05:13")]),
+        ("1 minute and 36 seconds", [("duration", 96.0)]),
+        ("a 2-round wait", [("number", "2")]),
+        ("deploy 21-22", [("number", "21"), ("number", "22")]),
+        ("zero, tens and tenfold", [("word", "zero"), ("word", "tens"), ("word", "tenfold")]),
         ("two rounds, ten refunds, a hundred times, half", [("word", w) for w in ("two", "ten", "hundred", "half")]),
         ("Two", [("word", "two")]),
     ],
@@ -72,6 +86,7 @@ TRICKY = [
     "p95 7.3 s; 5xx share 9.6%; 1,080 payments; r-742c; 10-minute; 3.14.15; 1/2; #5; -5; 2.5 to 3 minutes; 100x",
     "2026-10-21T090513Z_gated-run_duplicate-delivery and t=76.3 s, 0.0 s, 99:99 and 2026-13-45",
     "v1,v2 and LEDGER_HANDLER=naive and 1st, 2nd; 12,34,567 and 1,2,3; $1,23 and $.5",
+    "4 000 and 4\u202f000; 1/2 and 10^2; -28 and -$1,531.87 and $1,531.875; 09:05:13+00:00; 2-round; 1 minute and 36 s",
 ]
 
 
@@ -93,16 +108,26 @@ def test_the_same_value_of_another_kind_is_another_number():
     kinds = {(kind, value) for text in ("$28.00", "28", "96 s", "96", "92%", "92") for kind, value in read(text)}
     assert kinds == {
         ("money", 2_800),
-        ("number", 28.0),
+        ("number", "28"),
         ("duration", 96.0),
-        ("number", 96.0),
+        ("number", "96"),
         ("percent", 92.0),
-        ("number", 92.0),
+        ("number", "92"),
     }
 
 
 def test_a_rounded_amount_is_another_amount():
     assert read("$1,532") != read("$1,531.87")
+
+
+def test_a_number_from_json_is_written_as_python_writes_it():
+    assert [as_number(value) for value in (7, 249.0, 0.85, 45.822, -5)] == [
+        ("number", "7"),
+        ("number", "249"),
+        ("number", "0.85"),
+        ("number", "45.822"),
+        ("number", "-5"),
+    ]
 
 
 def test_digits_other_than_0_to_9_are_not_read_as_numbers():
