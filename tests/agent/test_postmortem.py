@@ -1101,6 +1101,26 @@ def test_the_problem_that_discards_a_reply_is_always_sent_back(fault_1):
     assert draft.outcome == "no narrative" and draft.problems[0] == "impact: has a dash: write it without dashes"
 
 
+def test_a_status_check_answered_neither_succeeded_nor_pending_is_owed_a_decision(tmp_path):
+    """The last look's finding: klaxon.traffic counts a status check answered with an error (a 500, say) as "other",
+    so its outcome is still unknown: it was said as "another state", and not owed."""
+    folder = copy_run("secret-rotation, approved", tmp_path)
+    edit(
+        folder,
+        "run.json",
+        lambda run: run["traffic"]["counts"].update({"payments.unknown": 29, "unknown_payments.other": 4}),
+    )
+    found = postmortem.facts(folder)
+    assert (
+        "4 got an answer to the client's status check that was neither succeeded nor pending (an error, or another"
+        " state)" in " ".join(found["impact"]["clients"]["said"])
+    )
+    assert (
+        "; 4 payments and 0 refunds got a status check answer that was neither succeeded nor pending."
+        in (found["repairs"]["owed"][1])
+    )
+
+
 def test_a_status_check_with_no_answer_is_owed_a_decision(tmp_path):
     """The re-check's finding 4: payments whose status check got no answer were said, but not owed."""
     folder = copy_run("secret-rotation, approved", tmp_path)

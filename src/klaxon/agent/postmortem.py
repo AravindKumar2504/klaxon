@@ -84,7 +84,7 @@ FLAG = "[not in the evidence]"  # after each number of a kept narrative that the
 # The synthetic clients' outcomes left unknown, by what came of them (klaxon.traffic's counts).
 LATER = "outcome unknown, then confirmed later"
 PENDING = "outcome unknown, still pending at the client's last status check"
-OTHER = "outcome unknown, in another state at the client's status check"
+OTHER = "outcome unknown, neither succeeded nor pending at the client's status check"
 SILENT = "outcome unknown, no answer to the client's status check"
 NEVER = "outcome unknown, with no status check of the clients on record"
 FOLLOWED = {LATER: "confirmed_later", PENDING: "still_pending", OTHER: "other", SILENT: "no_answer"}
@@ -597,7 +597,10 @@ def _unknown_said(counts: Mapping, what: str) -> str:
         f"{counts[PENDING]} were still pending at the client's last status check",
     ]
     if counts[OTHER]:
-        parts.append(f"{counts[OTHER]} were in another state at the client's status check")
+        parts.append(
+            f"{counts[OTHER]} got an answer to the client's status check that was neither succeeded nor pending (an"
+            " error, or another state)"
+        )
     if counts[SILENT]:
         parts.append(f"{counts[SILENT]} got no answer to the client's status check")
     if counts[NEVER]:
@@ -870,6 +873,11 @@ def _left_unknown(clients: Mapping, last: Mapping | None) -> str | None:
     if payments[SILENT] or refunds[SILENT]:
         parts.append(
             f"{payments[SILENT]} payments and {refunds[SILENT]} refunds got no answer to the client's status check"
+        )
+    if payments[OTHER] or refunds[OTHER]:
+        parts.append(
+            f"{payments[OTHER]} payments and {refunds[OTHER]} refunds got a status check answer that was neither"
+            " succeeded nor pending"
         )
     if payments[NEVER] or refunds[NEVER]:
         parts.append(
