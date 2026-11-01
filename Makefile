@@ -27,7 +27,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
-	approve gate-demo rehearse-fault
+	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -123,6 +123,15 @@ rehearse-fault: ## a fault under traffic and the alert rules, no model: what the
 
 grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline: make grade-run RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.fault_runs grade "$$RUN"
+
+postmortem-facts: ## the facts of a gated run's postmortem, filled in by code, and the exact prompt; calls nothing: make postmortem-facts RUN=evidence/week4/<folder>
+	$(PY) -m klaxon.agent.postmortem facts "$$RUN"
+
+postmortem: ## draft a gated run's postmortem: the facts by code, the narrative by Claude in one recorded call, its numbers checked (his OK first): make postmortem RUN=...
+	$(PY) -m klaxon.agent.postmortem draft "$$RUN"
+
+replay-postmortem: ## replay a recorded postmortem draft offline, and check it reproduces: make replay-postmortem RUN=evidence/week4/<folder>
+	$(PY) -m klaxon.agent.postmortem replay "$$RUN"
 
 approve: ## approve or deny the action a run asks for, in your own terminal, by typing its request id: make approve RUN=<folder>
 	@test -n "$$RUN" || { echo "make approve RUN=<the run's folder>: RUN is missing" >&2; exit 2; }

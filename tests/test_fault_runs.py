@@ -761,6 +761,9 @@ def test_the_make_targets_pass_their_values_through_the_environment():
         ("alerts-under-traffic", "MINUTES=1' ; echo pwned", '"$MINUTES"'),
         ("rehearse-fault", "FAULT=x' ; echo pwned", '"$FAULT"'),  # week 4, item 4
         ("rehearse-fault", "RATE=1' ; echo pwned", '"$RATE"'),
+        ("postmortem-facts", "RUN=x' ; echo pwned", '"$RUN"'),  # week 4, item 5
+        ("postmortem", "RUN=x' ; echo pwned", '"$RUN"'),
+        ("replay-postmortem", "RUN=x' ; echo pwned", '"$RUN"'),
     ]:
         shown = subprocess.run(["make", "-n", target, value], cwd=loop.REPO, capture_output=True, text=True, check=True)
         assert "pwned" not in shown.stdout and name in shown.stdout, target
