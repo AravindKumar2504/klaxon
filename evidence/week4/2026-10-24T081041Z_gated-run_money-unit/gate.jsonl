@@ -1,0 +1,2 @@
+{"at": "2026-10-24T08:12:48Z", "event": "requested", "request": "r-7077", "action": {"name": "rollback_deploy", "arguments": {"service": "payments-api"}}, "change": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)", "undo": "going back to CHARGE_AMOUNT_UNIT=dollars would deploy a known-bad setting: Klaxon will not; a person can, by hand", "expires_at": "2026-10-24T08:22:48Z"}
+{"at": "2026-10-24T08:22:48Z", "event": "expired", "request": "r-7077", "how": "no decision within 600 s"}

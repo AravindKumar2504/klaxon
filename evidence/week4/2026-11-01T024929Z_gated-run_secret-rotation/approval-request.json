@@ -1,0 +1,69 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-cc97",
+  "created_at": "2026-11-01T02:52:25Z",
+  "expires_at": "2026-11-01T03:02:25Z",
+  "run": "2026-11-01T024929Z_gated-run_secret-rotation",
+  "alert": {
+    "name": "BooksBehindProvider",
+    "summary": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 156 of the provider's webhooks up to it had not been acknowledged yet.",
+    "fired_at": "2026-11-01T02:51:34Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "webhook-receiver"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "webhook-receiver"
+    },
+    "service": "webhook-receiver",
+    "container": "d45ab567489cb737f53865f84236ffc0841643eb66d9985bfc8c8f931cda9c61",
+    "from_settings": {
+      "WEBHOOK_SECRET_VERSION": "v2"
+    },
+    "to_settings": {
+      "WEBHOOK_SECRET_VERSION": "v1"
+    },
+    "undoes": {
+      "seq": 25,
+      "at": "2026-11-01T02:50:48Z",
+      "by": "klaxon.faults",
+      "container": "d45ab567489c"
+    },
+    "change": "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+    "undo": "going back to WEBHOOK_SECRET_VERSION=v2 would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "webhook-receiver was redeployed at 02:50:46Z with WEBHOOK_SECRET_VERSION=v2. Since then it has rejected every provider webhook as bad_signature, at about 12/s and rising. The rate rises because the provider keeps resending webhooks that are not acknowledged. The provider seems to still sign with the earlier secret, so the receiver neither acknowledges these webhooks nor puts them on provider-events. Neither consumer books or confirms them. The money check cannot settle to its cutoff, and unacknowledged webhooks pile up (156 at the alert), which fires BooksBehindProvider.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "recent_deploys",
+        "shows": "webhook-receiver is the only service changed after the 02:49:04Z stack start. It was recreated at 02:50:46Z with WEBHOOK_SECRET_VERSION=v2, about 50 s before the alert fired."
+      },
+      {
+        "call_id": "c3",
+        "tool": "query_metrics",
+        "shows": "No bad_signature series exists before 02:50:58. It then appears and climbs from 1.4/s to 12.4/s. Over the same window the queued rate stops rising at 2.24/s and falls to 1.52/s. Few or no new webhooks are being queued since the deploy."
+      },
+      {
+        "call_id": "c2",
+        "tool": "search_logs",
+        "shows": "The receiver logs no WARN or ERROR lines for these rejections. The failure produces no warnings, so only the metric shows it."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "webhook-receiver",
+      "summary": "Roll webhook-receiver back to its settings before the 02:50:46Z deploy, which used the earlier webhook secret version, so it accepts the provider's signatures again. The provider keeps resending unacknowledged webhooks, so the backlog should drain without a replay. Afterwards, run money_check with wait=true to confirm all five invariants hold. Rotate to the v2 secret again only when the provider is known to sign with it, or when the receiver accepts both versions during the switch."
+    },
+    "blast_radius": "The receiver pauses briefly while its container is recreated. Webhooks sent during that pause go unacknowledged and the provider resends them later. If the earlier secret was replaced because it leaked, rolling back reopens that exposure until the rotation is coordinated with the provider. The consumers are idempotent (LEDGER_HANDLER=idempotent, CONFIRMER_HANDLER=by_our_id), so the burst of resent webhooks should not double-book anything. The money check should confirm this.",
+    "rollback_plan": "Redeploy webhook-receiver with WEBHOOK_SECRET_VERSION=v2. Watch klaxon_webhooks_received_total by result, and keep the rollback only if bad_signature falls to zero and queued recovers."
+  },
+  "sha256": "fef6c91fcddafdaf560bd829585fe8306fe2cb6ac5b6cfdfd7139e46ccf2c287"
+}

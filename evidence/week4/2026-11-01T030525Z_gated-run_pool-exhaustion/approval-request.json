@@ -1,0 +1,98 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-7b9d",
+  "created_at": "2026-11-01T03:08:17Z",
+  "expires_at": "2026-11-01T03:18:17Z",
+  "run": "2026-11-01T030525Z_gated-run_pool-exhaustion",
+  "alert": {
+    "name": "PaymentsLatencyHigh",
+    "summary": "Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.3 s, above the threshold of 2 s.",
+    "fired_at": "2026-11-01T03:07:31Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "payments-api"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "payments-api"
+    },
+    "service": "payments-api",
+    "container": "49fd9db3ea914236736744491abc1f45498ead1cf83bfd1ba052fe83afcacfa0",
+    "from_settings": {
+      "PROVIDER_BREAKER": "on",
+      "CHARGE_AMOUNT_UNIT": "cents",
+      "REFUND_CONNECTION": "kept"
+    },
+    "to_settings": {
+      "PROVIDER_BREAKER": "on",
+      "CHARGE_AMOUNT_UNIT": "cents",
+      "REFUND_CONNECTION": "returned"
+    },
+    "undoes": {
+      "seq": 27,
+      "at": "2026-11-01T03:06:44Z",
+      "by": "klaxon.faults",
+      "container": "49fd9db3ea91"
+    },
+    "change": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned",
+    "undo": "going back to REFUND_CONNECTION=kept would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "payments-api was redeployed at 03:06:42 with REFUND_CONNECTION=kept. Under that setting, each refund request most likely keeps its Postgres connection instead of returning it to the pool. Refunds have arrived at about 0.1-0.4/s since about 03:06, so the held connections build up. Within about 30 s the psycopg pool is empty. From then on every request that needs the database, POST /payments and refunds alike, waits for the pool's 5 s acquire timeout and fails with psycopg_pool.PoolTimeout as HTTP 500. That raised p95 for POST /payments from about 24 ms to 7.3 s. Provider calls stay fast, so the provider is not the cause. Traffic on POST /payments also grew, from 0.5/s to 5.8/s, which adds pressure on the pool, but the timeouts start after the deploy and after refunds begin.",
+    "confidence": 0.6,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "query_metrics",
+        "shows": "Confirms the alert: payments-api p95 was 0.02-0.5 s, then 7.33 s at 03:07:34."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "payments-api was redeployed at 03:06:42, about 50 s before the spike, with REFUND_CONNECTION=kept, PROVIDER_BREAKER=on and CHARGE_AMOUNT_UNIT=cents. All other services were last created at 03:05:08."
+      },
+      {
+        "call_id": "c3",
+        "tool": "query_metrics",
+        "shows": "payments-api's calls to the provider stay at about 5 ms p95 throughout, so the provider is not the cause."
+      },
+      {
+        "call_id": "c4",
+        "tool": "search_traces",
+        "shows": "Slow POST /payments requests since 03:06:58 all last almost exactly 5.0 s, the length of a fixed timeout."
+      },
+      {
+        "call_id": "c5",
+        "tool": "get_trace",
+        "shows": "One slow request has no database or provider span. It ends with HTTP 500 and error.type psycopg_pool.PoolTimeout after 5003 ms: it waited 5 s for a Postgres connection and got none."
+      },
+      {
+        "call_id": "c6",
+        "tool": "search_logs",
+        "shows": "payments-api ERROR logs are a steady stream of PoolTimeout exceptions on POST /payments."
+      },
+      {
+        "call_id": "c7",
+        "tool": "query_metrics",
+        "shows": "Refund requests began at about 03:05:50 and continued at 0.1-0.4/s. POST /payments traffic rose from 0.5/s to 5.8/s."
+      },
+      {
+        "call_id": "c8",
+        "tool": "query_metrics",
+        "shows": "Successful refund latency creeps up after 03:06:56. From 03:07:11, both /payments and refunds return 500s at about 7.4 s p95, so every route that needs a database connection fails: the pool is empty."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "payments-api",
+      "summary": "Roll payments-api back to the settings it ran before the 03:06:42 deploy, presumably a REFUND_CONNECTION value that releases the connection after each refund. Recreating the container also frees the held connections. Afterwards, confirm that PoolTimeout errors stop and that p95 for POST /payments returns to about 25 ms. Then run money_check to see whether payments or refunds that failed with 500 left our books out of step with the provider."
+    },
+    "blast_radius": "payments-api pauses while its container is recreated, so in-flight payment and refund requests fail and clients must retry; idempotency keys in Redis should make retries safe. The rollback restores all of the earlier settings, including PROVIDER_BREAKER and CHARGE_AMOUNT_UNIT, whose earlier values are not visible here. If one of them differed, for example the charge amount unit, the rollback could change charge behaviour. Check the deploy log before approving.",
+    "rollback_plan": "If the earlier settings behave worse, recreate payments-api with the 03:06:42 settings (REFUND_CONNECTION=kept, PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents). To stop pool exhaustion meanwhile, block or lower refund traffic, or raise the pool size, and restart the service periodically."
+  },
+  "sha256": "9453f668fdec771133a8197ea5248f18f136d61131c28e7238b0d7e902d125df"
+}

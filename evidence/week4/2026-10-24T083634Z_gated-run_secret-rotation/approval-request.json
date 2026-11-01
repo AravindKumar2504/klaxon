@@ -1,0 +1,69 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-d955",
+  "created_at": "2026-10-24T08:39:39Z",
+  "expires_at": "2026-10-24T08:49:39Z",
+  "run": "2026-10-24T083634Z_gated-run_secret-rotation",
+  "alert": {
+    "name": "BooksBehindProvider",
+    "summary": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 155 of the provider's webhooks up to it had not been acknowledged yet.",
+    "fired_at": "2026-10-24T08:38:39Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "webhook-receiver"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "webhook-receiver"
+    },
+    "service": "webhook-receiver",
+    "container": "232541a58ffc68d515a94aa3607b0acd1428f667c9e02e4f7abdc28282746ffc",
+    "from_settings": {
+      "WEBHOOK_SECRET_VERSION": "v2"
+    },
+    "to_settings": {
+      "WEBHOOK_SECRET_VERSION": "v1"
+    },
+    "undoes": {
+      "seq": 23,
+      "at": "2026-10-24T08:37:53Z",
+      "by": "klaxon.faults",
+      "container": "232541a58ffc"
+    },
+    "change": "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+    "undo": "going back to WEBHOOK_SECRET_VERSION=v2 would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "webhook-receiver was recreated at 08:37:51Z with WEBHOOK_SECRET_VERSION=v2, 47 s before the alert. Since then it rejects every provider webhook with HTTP 400 'signature mismatch'. The provider is evidently still signing with the secret the receiver used before. So no webhook is acknowledged, and no event reaches Kafka (provider-events). The provider keeps resending, and the rejection rate climbs. The money check therefore cannot settle up to its cutoff: 155 unacknowledged webhooks at the last evaluation. The consumers and the ledger are not at fault; they are starved of input. Still open: the deploy log shows only the current v2 setting, so I have not seen the prior value, which is presumably v1. I also did not run money_check to see whether the books match for events handled before the deploy.",
+    "confidence": 0.9,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "recent_deploys",
+        "shows": "webhook-receiver was redeployed at 08:37:51Z with WEBHOOK_SECRET_VERSION=v2, the only service changed after the 08:36:17Z stack start and about 1 minute before the alert fired at 08:38:39Z."
+      },
+      {
+        "call_id": "c2",
+        "tool": "search_logs",
+        "shows": "Every recent webhook-receiver log line for POST /webhooks/provider is 'webhook refused: bad signature' (reason: signature mismatch), answered with status 400."
+      },
+      {
+        "call_id": "c4",
+        "tool": "query_metrics",
+        "shows": "Before the deploy, webhooks were 'queued', up to about 3.3/s. After it, 'queued' decays to about 1.2/s, which is the tail of the 1m rate window, and then disappears. 'bad_signature' appears at 08:38:08 and climbs from 4/s to 22/s as the provider retries the unacknowledged webhooks."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "webhook-receiver",
+      "summary": "Roll webhook-receiver back to its settings before the 08:37:51Z deploy, restoring the webhook secret version the provider signs with. The provider's retries will then be accepted and queued, and the consumers will catch up. Afterwards, check that bad_signature drops to zero, queued rises, and money_check (wait=true) passes. Coordinate any move to the v2 secret with the provider before redeploying it."
+    },
+    "blast_radius": "webhook-receiver is recreated and pauses briefly; webhooks during the pause fail and the provider resends them. Once accepted, the retry backlog arrives as a burst, raising Kafka and consumer load. Duplicates are expected, but the ledger (LEDGER_HANDLER=idempotent) and the confirmer should absorb them. If v2 was rolled out on purpose, for example for a secret rotation, rolling back delays that rotation.",
+    "rollback_plan": "Redeploy webhook-receiver with WEBHOOK_SECRET_VERSION=v2 once the provider is confirmed to sign with the v2 secret. If the rollback itself causes errors, the provider keeps retrying, so no webhooks are lost while the cause is investigated."
+  },
+  "sha256": "cb6be3becd4a360250a060793335f5ea9534c0ae30fc5f20fc75b85bda50d7a1"
+}

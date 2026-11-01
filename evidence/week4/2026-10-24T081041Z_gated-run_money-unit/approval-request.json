@@ -1,0 +1,78 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-7077",
+  "created_at": "2026-10-24T08:12:48Z",
+  "expires_at": "2026-10-24T08:22:48Z",
+  "run": "2026-10-24T081041Z_gated-run_money-unit",
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (56 findings).",
+    "fired_at": "2026-10-24T08:12:15Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "payments-api"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "payments-api"
+    },
+    "service": "payments-api",
+    "container": "3344895b3c4ebac59720c496104b1488d2fd3a301a43e09dfbcd71d8c240359c",
+    "from_settings": {
+      "PROVIDER_BREAKER": "on",
+      "CHARGE_AMOUNT_UNIT": "dollars",
+      "REFUND_CONNECTION": "returned"
+    },
+    "to_settings": {
+      "PROVIDER_BREAKER": "on",
+      "CHARGE_AMOUNT_UNIT": "cents",
+      "REFUND_CONNECTION": "returned"
+    },
+    "undoes": {
+      "seq": 19,
+      "at": "2026-10-24T08:12:00Z",
+      "by": "klaxon.faults",
+      "container": "3344895b3c4e"
+    },
+    "change": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)",
+    "undo": "going back to CHARGE_AMOUNT_UNIT=dollars would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "payments-api was redeployed at 08:11:58Z with CHARGE_AMOUNT_UNIT=dollars. Since then it sends each payment's amount to the provider in the wrong unit: we store amount_cents correctly, but the provider charges 100 times as much. For example, pmt_000230 is $12.91 in our records and was charged $1,291.00. Every payment from pmt_000230 on does this, which produces the payments_match_provider findings. The ledger books what the provider reports, so it stays balanced and matches the provider, while our payments table does not. pmt_000233 is pending on our side even though the provider charged it, possibly a request still in flight or one that failed after the charge. Still open: c4's trace does not record the amount we sent, and the deploy log does not show the setting's previous value.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "money_check",
+        "shows": "payments_match_provider failed with 66 findings, each a provider charge of exactly 100x our amount_cents, starting at pmt_000230. The ledger is balanced and matches the provider, and refunds all match."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "payments-api was redeployed at 08:11:58Z with CHARGE_AMOUNT_UNIT=dollars, the only deploy after the 08:10:26Z stack start."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "pmt_000230, the first overcharged payment, was logged as succeeded at 08:11:59.397Z with amount_cents=1291, one second after the deploy."
+      },
+      {
+        "call_id": "c4",
+        "tool": "get_trace",
+        "shows": "pmt_000230's request went straight from payments-api to fake-provider POST /v1/payments and got a 200. No other service touches the charge amount, so payments-api's request sets it."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "payments-api",
+      "summary": "Roll payments-api back to its settings before the 08:11:58Z deploy, so charges are sent in cents again. Then refund or correct the overcharged payments from pmt_000230 onward with the provider and fix the ledger entries that booked the inflated amounts. Check pmt_000233, which is pending here but charged at the provider."
+    },
+    "blast_radius": "payments-api pauses while its container is recreated, so payment and refund requests fail or are retried for a short time. The rollback stops new overcharges but does not repair existing ones: about 66 customers were charged 100x, and the ledger holds the inflated amounts. Those need a separate refund and data repair.",
+    "rollback_plan": "If the rolled-back payments-api misbehaves, redeploy the 08:11:58Z settings, but only after changing CHARGE_AMOUNT_UNIT to cents. Then rerun the money check to confirm new payments match the provider."
+  },
+  "sha256": "2ab37dba6d4a74cda8402445289b3087e54aadbab12599e1e8f1ba806236727a"
+}

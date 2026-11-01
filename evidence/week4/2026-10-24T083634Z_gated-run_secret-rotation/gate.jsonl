@@ -1,0 +1,2 @@
+{"at": "2026-10-24T08:39:39Z", "event": "requested", "request": "r-d955", "action": {"name": "rollback_deploy", "arguments": {"service": "webhook-receiver"}}, "change": "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1", "undo": "going back to WEBHOOK_SECRET_VERSION=v2 would deploy a known-bad setting: Klaxon will not; a person can, by hand", "expires_at": "2026-10-24T08:49:39Z"}
+{"at": "2026-10-24T08:49:39Z", "event": "expired", "request": "r-d955", "how": "no decision within 600 s"}
