@@ -10,7 +10,7 @@ Klaxon is an AI on-call engineer for a payments system. When an alert fires, it 
 
 - **First piece:** at-least-once delivery (why providers send duplicates), idempotency keys, double-entry ledgers, why a dashboard can be green while money is wrong, HMAC signature verification.
 - **Week 1-2:** Kafka topics, partitions, consumer groups and offsets; Redis as an idempotency store; Docker Compose networking; OpenTelemetry traces, metrics and logs; what Grafana shows; reconciling to a cutoff; poison messages and dead letters; circuit breakers and cascading failures; injecting faults with known causes.
-- **Week 3-4:** the agent loop (goal, state, action, observation, stop); the MCP protocol (JSON-RPC, tools, schemas); prompt contracts (validated output formats); bounded retries and budgets; tool output as untrusted data; replaying a recorded run as a regression test; approval gates; rollback; verification.
+- **Week 3-4:** the agent loop (goal, state, action, observation, stop); the MCP protocol (JSON-RPC, tools, schemas); prompt contracts (validated output formats); bounded retries and budgets; tool output as untrusted data; replaying a recorded run as a regression test; approval gates; rollback; verification (the cause removed is not the money right); a postmortem drafted by a model, with its numbers checked by code.
 - **Week 5-6:** evaluation design (known-cause faults, seeds, held-out cases, graders, cost); Kubernetes basics (pods, deployments, rollouts, `kubectl rollout undo`); LangGraph state, nodes, interrupts.
 - **Week 7-9:** multi-agent handoffs and their failure modes; prompt injection through logs; budgets and stop conditions; CI.
 
@@ -743,3 +743,66 @@ This is the stated limit, seen: code checks numbers; claims need you. The drafts
 - *Why check numbers and not claims?* Numbers can be checked by code, exactly. Claims need a reader: that is your review, with the facts beside each paragraph.
 - *Why a draft, not a report?* A postmortem is for people to learn from. Klaxon drafts; a person reviews and corrects it.
 - *Why not drop a narrative with one bad number?* Your choice: keep it, marked, so the reader sees what the model got wrong. A dash or a link is different: it breaks the publishing rule, so it is never shown.
+
+## Week 4 in one page (2026-11-03)
+
+**What week 4 added, in order, and why each needed the one before.**
+1. *An approval gate, and Klaxon's first write action* (item 1). Until then Klaxon only proposed. Now its diagnosis can name one action, `rollback_deploy`. Code plans it from a deploy log, and it runs only after you type the request's id with `make approve`, in your own terminal. Every later item acts through this gate.
+2. *Verification, and gated runs* (item 2). An action is not done until code checks it: the stack healthy again, the cause removed, the money right. A failed check proposes the undo, through the gate. And the fault runs now let Klaxon act before the harness clears the fault.
+3. *The patient's fixes* (item 3). A circuit breaker in the payments API's calls to the provider, a pending refund counted against its payment, and a check that no charge was refunded more than it charged. The breaker changed fault 3, so its recorded cause got a version 2: the right answer is now to change nothing on our side.
+4. *Faults 4 to 6, and the books rule* (item 4). A money-unit bug that charges 100 times the amount, a webhook secret rotated on our side only, and a database connection leak: each a bad deploy, fixed by a rollback. No rule saw fault 5, so a new one does: the books cannot catch up with the provider. The rollback now covers the payments API and the webhook receiver, and every recorded run still replays.
+5. *The postmortem draft* (item 5). Code fills in the facts from a gated run's saved evidence, Claude writes the narrative, and code checks every number in it against the facts. It needed the gated runs: their evidence is what it drafts from.
+
+**One run, in one breath (fault 4).** Traffic flowed, and a payments API deploy with `CHARGE_AMOUNT_UNIT=dollars` went in. The ledger copied what the provider charged, so four of the five money invariants passed. The fourth, our payments against the provider's charges, failed, and `MoneyCheckFailed` fired 17 s after the deploy: 56 payments charged 100 times their amount. The loop got that alert, and no word about the fault. Opus 5.5 ran the money check, then `recent_deploys`, a log search, a trace and another log search. In 32.5 s it named the deploy and the 100 times charge (confidence 0.85), and asked to roll the payments API back. The gate saved request `r-742c` and waited. You approved it 5 min 23 s later, by typing its id. The rollback ran, and code verified it: healthy, the cause removed, and the money not right. 1,080 payments stayed overcharged, 149 of them from before the request, and a rollback repairs none. The rule found all three elements of the recorded cause. Later, a postmortem draft told the story. Every number in it passed the check, but two of its sentences were wrong: code checks numbers, not claims.
+
+**The six faults, gated** (2026-10-21 to 11-01 UTC; recorded responses, labeled as such; every approval typed at a terminal with `make approve`, by you):
+
+| Fault | The alert | Klaxon asked to | Your answer | Verification, by code |
+|---|---|---|---|---|
+| 1, a deploy without dedupe | `MoneyCheckFailed`: 7 events counted more than once | roll back the ledger consumer | approved | the cause removed; the money not right: 28 events, $1,531.87 |
+| 2, a poison message | `ConsumerLagHigh`: 250 messages behind | roll back the ledger consumer | approved, on a second run | the cause removed; the money right |
+| 3, an outage, with the breaker | `PaymentsErrorsHigh`: 92% of answers 5xx | change nothing: escalate to the provider | not asked | nothing ran: the right answer |
+| 4, a money-unit bug | `MoneyCheckFailed`: 56 payments overcharged | roll back the payments API | approved, on a second run | the cause removed; the money not right: 1,080 payments |
+| 5, a rotated secret | `BooksBehindProvider`: 156 webhooks not acknowledged | roll back the webhook receiver | approved, on a second run | the books caught up in about 3 minutes; the money right |
+| 6, a connection leak | `PaymentsLatencyHigh`: p95 7.3 s | roll back the payments API | approved | healthy; the money right |
+
+On faults 2, 4 and 5 the first request went unanswered and expired after ten minutes: nothing ran, and the harness's clearing removed the cause. All nine diagnoses named their fault's recorded cause, by the rule (rubric versions 1 and 3, each committed before its runs; a rule, not a person). The loop made 58 calls and the postmortems 9: $4.05 at API prices, by Claude Code's own estimate (the seat is not billed per call). Each run and each draft replays offline, exactly, as a test.
+
+**The ideas to be able to explain** (each has its own section above):
+- A gate is a rule plus a log, not a lock. The model names an action, code plans it, and you approve the exact change by typing its id at a terminal. The request is sealed, the decision is written once, and no answer in ten minutes means no (items 1 and 2).
+- Plan, then check again right before acting: the "time of check to time of use" gap (item 1).
+- Never deploy a known-bad value. So "undo the latest deploy" cannot put a fault back, and undoing Klaxon's rollback is your call (items 1 and 2).
+- The cause removed is not the money right. Verification answers the two apart, and says what damage remains (item 2).
+- Waiting costs money. Fault 1's damage went from 12 events to 28, and fault 4's from 149 payments to 1,080, while each request waited (items 2 and 4).
+- Graceful degradation: a circuit breaker fails fast, so one slow dependency cannot take the API down. And an agent must know when not to act (fault 3; items 3 and 4).
+- Alert on what the business sees: "the books cannot catch up" fires whatever the cause (item 4).
+- An idempotency key protects you only if the request it names never changes (item 4's review).
+- A recorded run must replay as it ran: keep what it was offered, not only what it was told (item 4).
+- Facts by code, words by the model, numbers checked. The model's own words are data, not evidence (item 5).
+- Test a checker, and a rubric, with what a careful liar would write, and with right answers in other words (items 4 and 5).
+
+**For the courses.** CSYE 7374 asks for an agent that works in a real project with approval, rollback and verification, and its week 13 covers irreversible actions, human review and incident response. Week 4 built approval, rollback and verification, and ran them live; the money repairs, which no rollback can undo, stay with a person. INFO 7375 grades approval gates and asks for "a failure, a reviewed recovery, and an independently verified result" (lesson 15). Fault 4's run is one: customers overcharged, a rollback you reviewed and approved, and a result checked by code, not by the model that proposed it.
+
+**What else ran** (STATUS has each command and commit). Offline tests: from 1,302 passed at the end of week 3 to 2,135 passed, 1 skipped and 9 xfailed at `d712602` (the 9 are the grading rule's known limits, kept as tests). On each item's final code, every offline mutant of every file it changed was caught: 138, 122, 222, 399 and 102 of them. On the real stack, with your OK: `make e2e` (22 passed; then 25, on a second run, after the first found two bugs in the new tests), `make test-integration` (85, then 86), two 5-minute quiet runs under traffic with no alert at 19 evaluations each, and the stack mutants of `money.py` and `payments_store.py`.
+
+**What it does not show.**
+- That Klaxon is right in general. One gated run per fault, besides the three whose requests expired; one seed; one model. Week 5's evaluation will run many.
+- That the verdicts are right. The rule reads words, not meaning, and its known limits are tests. Claude's reading of the nine diagnoses agreed with it.
+- That Klaxon can repair money. A rollback repairs nothing: fault 1's 28 events counted more than once and fault 4's 1,080 overcharges stay for a person to reverse or refund.
+- That the gate stops a process that wants to approve. Any process running as you could write the decision file or fake a terminal. That Claude never approves is a rule; each approval's log line says it came from `make approve`, typed at a terminal.
+- That a postmortem's claims are right. Code checks only its numbers: three sentences in the drafts of faults 4 and 6 were wrong, and you kept them as received.
+- That the faults are hard. `recent_deploys` names each bad setting, and five of the six faults are a deploy.
+- That it resists an instruction planted in a log. No live run met one (week 9).
+- That every mutant is still caught today. The full list (867) has not run in one go since week 3, item 2; each item ran the mutants of the files it changed.
+
+**What comes next: week 5.** The plan: an evaluation harness and first results. Each fault will be injected many times, with seeds, and graded on the diagnosis, the time, the cost, the right fix and the unsafe actions blocked. Week 3 left it the grading rule's known limits, for a better grader; the plan adds a start on Kubernetes. Week 4 leaves it two questions: how soon Klaxon should act, given what waiting cost; and how a person's corrections to a postmortem draft are recorded.
+
+**Likely questions.**
+- *Walk me through one incident.* Fault 4, above: the alert, the diagnosis, your approval, the rollback, and verification saying the cause is gone but 1,080 payments are still overcharged.
+- *What stops Klaxon from doing something dangerous?* The model has no tool that writes. It can only name an action from a catalog. Code plans it, you approve the exact change, code checks again before acting, and it never deploys a known-bad value. Every step is logged.
+- *How do you know a fix worked?* Code checks, not the model: every container healthy, the metric rules and the books rule quiet twice in a row, and two money checks, right after the action and a minute later.
+- *What if the dashboard is green but the money is wrong?* That is fault 1 and fault 4. Only the money check sees them, and verification says the money is not right even when the cause is gone.
+- *What did waiting for approval cost?* In fault 4, about 930 more payments were overcharged while the request waited 5 min 23 s. Safety has a price, and the evidence measures it.
+- *Did Klaxon ever choose not to act?* Yes, fault 3. The provider hung and our breaker was doing its job, so it asked for nothing and said to escalate.
+- *Would you trust its postmortem?* Its numbers, yes: code checks each one. Its claims, no: three sentences were wrong, which is why a person reviews each draft.
+- *What did the reviews catch that the tests did not?* A retry across a deploy marked a charged payment failed (fault 4), and 234 payments with no status check were reported as "0 still pending" (fault 6). Both are fixed, each with a test.

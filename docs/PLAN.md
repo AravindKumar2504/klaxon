@@ -14,9 +14,9 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
    - duplicate webhook delivery with idempotency broken: a ledger deploy without its dedupe -> payments counted twice in the books (built in week 2; first planned as "Redis down -> double charge", which our design prevents; see DECISIONS, 2026-10-14)
    - poison message stalls the ledger consumer (a deploy that retries it forever) -> the books stop, the money check cannot settle (built in week 2)
    - payment provider outage with no circuit breaker -> cascading timeouts (built in week 2; the breaker is its fix, week 4)
-   - bad deploy with a 100x money-unit bug (cents vs dollars)
-   - HMAC secret rotation mismatch -> webhooks rejected, payments never confirmed
-   - database connection pool exhaustion -> latency spike and errors
+   - bad deploy with a 100x money-unit bug (cents vs dollars) -> the provider charges 100 times our amount (built in week 4)
+   - HMAC secret rotation mismatch -> webhooks rejected, the books stop catching up (built in week 4: a receiver deployed with a secret the provider does not sign with; first planned as "payments never confirmed", but only a payment whose answer was lost waits for its webhook)
+   - database connection pool exhaustion -> latency spike and errors (built in week 4, as a deploy that never gives its connections back; see DECISIONS, 2026-10-23)
 3. **Klaxon itself:**
    - A plain-Python agent loop first (CSYE teaches this), then a LangGraph version, then a multi-agent version (triage, investigator, fixer, verifier).
    - Tools exposed through an MCP server built from scratch (INFO teaches this): query metrics, search logs, read traces, list recent deploys, check ledger invariants (read-only database role), search runbooks and past incidents.
