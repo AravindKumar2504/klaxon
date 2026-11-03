@@ -653,3 +653,12 @@ Written on the branch `claude/week-4-docs`, cut from `main` at `d712602` (items 
 - **The review list** (Claude): `make test`; one approved run no review list had replayed (fault 5's, the books rule) and its gate log; one postmortem draft not replayed in a review (fault 1's); and, optional, the grade of fault 3's run, where the right answer was to do nothing. Each ran first, offline, at `d712602`; STATUS has what each printed.
 - **Found, left for later** (Claude; code, not docs): the Makefile's help for `make e2e` still says about five minutes, and `scripts/mutation_check.py --help` stops with an `IndexError`. This item changes no code.
 - **Nothing live** (Claude): no model call and no stack command; this item needed neither.
+
+## 2026-11-03 (Aravind's review of week 4)
+
+In item 6's session, at his request ("lets review week 4 now"). He ran the review list's three commands himself, in the session's chat (the app's bash input), and each printed what Claude's run had: `make test`, "2135 passed, 1 skipped, 111 deselected, 9 xfailed in 21.02s"; `make replay-run` on his approved run of fault 5, "Reproduced"; and `make replay-postmortem` on fault 1's draft, "Reproduced". Claude opened that run's gate log for him in the file pane. Then his answers, in one multiple-choice batch:
+
+- **Week 4: "Accept"** (Aravind). Week 4 is done, on the first day of its planned week (Nov 3 to 9). STATUS marks it so.
+- **The two shorter texts: "Both"** (Aravind). The STATUS header (9,164 characters) and the README's status line (2,961) are replaced by Claude's drafts, each updated for his answers (the week accepted, merged and pushed): now 991 and 1,102 characters. One claim of the header's draft was wrong, found by Claude before applying it: that each week 4 item was built in a session of its own (item 1 was built in week 3's last session, at his choice). It was left out. The long texts stay in git history (`c9057b8`), and each item's section in STATUS still tells its part.
+- **"Merge and push"** (Aravind): `main` fast-forwarded to the branch's tip, with this review's docs, and pushed; `main` only. The branch is kept, like the others. CLAUDE.md's rule still holds: Claude asks before every push.
+- **Claude's final check before the merge** (2026-11-03): `make test` on these docs, and a privacy scan of the two commits. Nothing private found; STATUS has the numbers. Not run, as before: `make e2e`, the full `make mutants` and `make test-integration` (the stack is shared, and this item changed no code).
