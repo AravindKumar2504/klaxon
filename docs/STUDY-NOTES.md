@@ -806,3 +806,17 @@ On faults 2, 4 and 5 the first request went unanswered and expired after ten min
 - *Did Klaxon ever choose not to act?* Yes, fault 3. The provider hung and our breaker was doing its job, so it asked for nothing and said to escalate.
 - *Would you trust its postmortem?* Its numbers, yes: code checks each one. Its claims, no: three sentences were wrong, which is why a person reviews each draft.
 - *What did the reviews catch that the tests did not?* A retry across a deploy marked a charged payment failed (fault 4), and 234 payments with no status check were reported as "0 still pending" (fault 6). Both are fixed, each with a test.
+
+## Week 5, the plan (decided 2026-11-03)
+
+**What week 5 will add.** An evaluation: the same incidents many times, graded. A harness will run each case with a seed and a model on a fresh stack, and record the verdict, the time, the cost, the fix it names and the damage. A better grader: a stricter rule, and Claude as a judge, both checked against your verdicts. First results: 48 runs on Opus 5.5 and Sonnet 5.5. Your corrections to a postmortem draft, recorded. And a start on Kubernetes. Nothing is built yet; STATUS has the six items.
+
+**The ideas behind your four choices.**
+- *Why the cases come first.* A grader can grade only what it knows the right answer to. The false alarm and the missing-evidence case get their right answers in item 1, so item 2's grader can grade them.
+- *Why a false alarm and missing evidence.* A good on-call engineer says "nothing is wrong" when nothing is, and "I could not check this" when a tool fails. Week 3's first live run, on a false alarm, got it wrong. And five of the six faults are a deploy that `recent_deploys` names: taking that list away makes one case harder.
+- *Why seeds.* The traffic's seed changes the amounts, the timing and which answers get lost. Three seeds per case test whether Klaxon's answer holds beyond one lucky run.
+- *Why Opus and Sonnet.* Sonnet costs half as much per token and uses your seat's limits more slowly. If it diagnoses as well, bulk runs can use it. Each runs at Claude Code's default effort, which may differ by model; the results will say so.
+- *Why a judge, and why you check it.* A rule reads words; a judge reads meaning. But the judge is Claude grading Claude. So it never sees which model wrote a diagnosis, and its verdicts are checked against yours. A grader nobody has checked measures nothing.
+- *Why nobody approves in these runs.* The evaluation measures the diagnosis, the fix it names, and what the planner would refuse. Week 4 measured the gate and verification with your approvals; 48 approvals would measure your attention, not Klaxon.
+
+**One idea to own before item 1: an evaluation measures the system and its grader together.** If the grader is wrong, so is the score. That is why the grader is tested first, on sentences whose right verdict is known; why it is committed before the runs; and why its agreement with you sits next to every result. And 3 runs per case can show a case that often fails, not which of two close models is better.

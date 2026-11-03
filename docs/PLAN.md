@@ -34,7 +34,7 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
 | 2 | Oct 20-26 | Monitoring (OpenTelemetry, Prometheus/Grafana, traces); a traffic generator; the first 3 faults | CSYE 10/21: reflection |
 | 3 | Oct 27-Nov 2 | MCP server with read-only ops tools; Klaxon's first loop diagnosing faults 1-3; trace recorder | CSYE 10/28: planning and OpenHands; INFO MCP week |
 | 4 | Nov 3-9 | Approval gate, rollback, verification (health plus money checks); faults 4-6; postmortem draft; the circuit breaker and two stuck-refund fixes | CSYE 11/4: retrieval and memory |
-| 5 | Nov 10-16 | Evaluation harness and first results; start Kubernetes | |
+| 5 | Nov 10-16 | Evaluation harness (faults 1-6, a false alarm, missing evidence; seeds) and first results on Opus and Sonnet; Claude as a judge beside the rule, checked by Aravind; his corrections to a postmortem recorded; start Kubernetes | |
 | 6 | Nov 17-23 | LangGraph version; Klaxon runs on Kubernetes and can undo a bad rollout | CSYE 11/18: LangGraph |
 | 7 | Nov 24-30 | Web control panel; CI pipeline (light week, Thanksgiving 11/26) | |
 | 8 | Dec 1-7 | Multi-agent version; the Go service; comparison runs | CSYE 12/2: multi-agent |
