@@ -5,10 +5,11 @@ replaces one piece of code with a plausible mistake (commit before booking, answ
 Kafka did not confirm, trust Redis alone, ...). The copy lives in WORKDIR, so the repo itself
 is never touched. A mutant is "caught" when at least one test fails.
 
-Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack] [--only FILE ...]    (or: make mutants)
+Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--only FILE ...]    (or: make mutants)
 Offline mutants run the offline suite. --with-stack also runs the mutants that need the
-stack's PostgreSQL, Redis and Kafka (pytest -m integration; make up first). --only, last,
-runs just the mutants of the files named, as the list names them (src/klaxon/agent/model.py).
+stack's PostgreSQL, Redis and Kafka (pytest -m integration; make up first); --stack-only runs
+those alone. --only, last, runs just the mutants of the files named, as the list names them
+(src/klaxon/agent/model.py).
 Exit 0 when every mutant is caught, 1 when one survives, 2 when the unbroken copy fails.
 """
 
@@ -2490,7 +2491,7 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
         return subprocess.CompletedProcess(args, 1, "FAILED (the tests did not end within 600 s)", "")
 
 
-USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack] [--only FILE ...]"
+USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--only FILE ...]"
 
 
 def main() -> int:
@@ -2501,7 +2502,8 @@ def main() -> int:
         print(USAGE, file=sys.stderr)
         return 2
     repo, work = Path(sys.argv[1]), Path(sys.argv[2])
-    with_stack = "--with-stack" in sys.argv
+    stack_only = "--stack-only" in sys.argv  # week 5: the stack's mutants alone, once the offline ones have run
+    with_stack = stack_only or "--with-stack" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1 :] if "--only" in sys.argv else []
     unknown = sorted(set(only) - {m[1] for m in MUTANTS})
     if unknown:
@@ -2522,7 +2524,7 @@ def main() -> int:
     )
     assert str(work) in check.stdout, f"the copy is not the code under test: {check.stdout}"
 
-    selected = [m for m in MUTANTS if (with_stack or not m[4]) and (not only or m[1] in only)]
+    selected = [m for m in MUTANTS if (with_stack or not m[4]) and (m[4] or not stack_only) and (not only or m[1] in only)]
     # A mutant that does not compile would be "caught" by any test that imports its module: say so, and stop.
     broken = []
     for name, file, old, new, _ in selected:

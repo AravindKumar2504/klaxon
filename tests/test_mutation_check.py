@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "mutation_check.py"
-USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack] [--only FILE ...]"
+USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--only FILE ...]"
 
 
 def run(*args):
@@ -21,7 +21,8 @@ def test_help_prints_what_the_runner_does_and_how_to_call_it(flag):
     done = run(flag)
     assert done.returncode == 0
     assert done.stdout.startswith("Break the code on purpose, one way at a time")
-    assert "Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack] [--only FILE ...]" in done.stdout
+    assert USAGE.replace("usage", "Usage", 1) in done.stdout
+    assert "--stack-only runs" in done.stdout
 
 
 @pytest.mark.parametrize("args", [[], ["/a/repo"], ["--only", "Makefile"], ["/a/repo", "--with-stack"]])
@@ -30,3 +31,10 @@ def test_without_a_repo_and_a_work_folder_first_it_says_how_to_call_it(args):
     assert done.returncode == 2
     assert done.stderr.strip() == USAGE
     assert "Traceback" not in done.stderr
+
+
+def test_the_stack_only_runs_leave_out_every_offline_mutant(tmp_path):
+    # evaluation.py has offline mutants only: with --stack-only, none is run, and no suite either (no stack needed).
+    done = run(str(SCRIPT.parents[1]), str(tmp_path / "work"), "--stack-only", "--only", "src/klaxon/evaluation.py")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert done.stdout.strip() == "0 of 0 deliberate breaks caught"
