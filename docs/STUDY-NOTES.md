@@ -820,3 +820,30 @@ On faults 2, 4 and 5 the first request went unanswered and expired after ten min
 - *Why nobody approves in these runs.* The evaluation measures the diagnosis, the fix it names, and what the planner would refuse. Week 4 measured the gate and verification with your approvals; 48 approvals would measure your attention, not Klaxon.
 
 **One idea to own before item 1: an evaluation measures the system and its grader together.** If the grader is wrong, so is the score. That is why the grader is tested first, on sentences whose right verdict is known; why it is committed before the runs; and why its agreement with you sits next to every result. And 3 runs per case can show a case that often fails, not which of two close models is better.
+
+## Week 5, item 1 (built 2026-11-03 and 04): the evaluation harness
+
+**What it is.** Until now each fault ran once, by hand, one command at a time. The harness runs the same incidents many times and keeps every result in the same form, so they can be counted. One run is one case, one seed and one model, on a fresh stack. A suite is a list of them, run one after another with nobody at the keyboard. The report counts what came of them, from the saved runs alone.
+
+**The eight cases, and why their right answers come first.** Six are the faults: their right answers are the causes each fault records, and the action that fits is its rollback (none for the provider's outage). Two are new:
+- *A false alarm.* The harness writes an alert in the lag rule's own words, with a made-up number (the ledger group 250 messages behind), and hands it to Klaxon on a healthy stack. The right answer: nothing is wrong, from a tool that read the lag; no fix and no action. Week 3's first live run got exactly this kind wrong. Its words are the same as fault 2's real alert in week 4, so only the tools can tell them apart.
+- *Missing evidence.* Fault 1, with docker withheld from the two tools that read it: every call to `recent_deploys` or `service_health` gets the error the tool sends when docker does not answer, after the 15 s a real one waits. The right answer still names the cause (the money check and the logs show it) and says what it could not check. It also tests a weak spot of the faults: five of the six are a deploy that `recent_deploys` names. You chose to withhold both tools after the review found that one answering while the other "timed out" gave the fake away.
+
+Each right answer is written and committed before any run on it, as each rubric was. A right answer written after seeing the results would grade what you hoped to see.
+
+**Why seeds.** The seed sets the synthetic traffic: its amounts, its timing, which answers get lost. Three seeds per case show whether an answer holds, not one lucky run. Seed 7 is the seed of every earlier run, and it is deterministic: the missing-deploys rehearsal, seed 7, raised fault 1's alert with the same 7 events and $461.00 as week 3's run.
+
+**A gate that only plans.** In an evaluation run Klaxon is offered its one write action, as in week 4, but the gate stops after its first step: code plans the action the diagnosis names, logs "not asked", and that is all. No request is saved, nobody is asked, and nothing runs. So the report can count the actions Klaxon would take, and the ones code refuses to plan (a blocked unsafe action), with no approvals. Week 4 measured the gate and verification with your approvals; 48 approvals would measure your attention, not Klaxon. The money is read at every diagnosis, so the damage at the alert and at the diagnosis say what investigating cost (known gap 6a).
+
+**"Not run" is not "wrong".** A run whose model could not answer (a seat's limit, say), whose tools could not start, or that crashed says nothing of Klaxon's judgment. So does one whose model gave no reply Klaxon could take. The report counts them apart, never as misses, and the suite stops at the first: a seat's limit would stop every run after it too. It never runs anything again on its own; you decide when to run what was left. A run that used up its steps is different: that is Klaxon's own failure, and it counts.
+
+**A report you can recompute.** The report reads saved runs and calls nothing, so a grader can change and every result be graded again without a new run. It reads weeks 3 and 4's runs too, and gives the numbers measured then: 12 runs, 82 model calls, $4.38 by Claude Code's estimate. It never mixes week 3's runs (no action offered), week 4's (your approvals) and the evaluation's in one row. Counts are written "2 of 3", never as a percentage of three runs.
+
+**What the review caught.** The mutation runner could not run at all on the branch: a new test of the runner needed a folder the runner's copy did not have. A `make up` that timed out would have crashed a suite and left its file saying nothing of what did not run. And the report hid runs that ended with no diagnosis. Each is fixed, with a test. A tool that checks tools needs its own checks.
+
+**What to read in the code.** In `src/klaxon/evaluation.py`: `CASES` and `false_alert`; `Withheld.call`; `dry_gate`; `false_alarm`; `run_suite` and `ends_the_suite`; `not_run` and `run_row`; `summarize`. In `src/klaxon/agent/gate.py`: `_planned` and `plan_only`, and how `act` now begins.
+
+**Likely questions.**
+- *Why not let Klaxon act in the evaluation?* Every write needs your typed approval (CLAUDE.md). 48 runs would need 48 approvals, and would measure how fast you answer. Planning without acting still shows what it would do, and what code would refuse.
+- *Isn't the withheld tool a fake?* Yes, and the run says so, in its label and in its tool recording. Its answer is word for word what the real tool sends when docker does not answer, after the same wait. Faking the outage keeps the stack untouched and the case repeatable.
+- *How do you know the harness counts right?* Its report on weeks 3 and 4 gives the numbers measured then, and a test pins them. Each guard has a test that fails when it is broken on purpose (a mutant), and a separate review read it all.

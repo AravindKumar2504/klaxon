@@ -1,0 +1,20 @@
+{
+  "label": "A probe of Klaxon's tools through this case's own client, after the rehearsal, with no model: each tool called once with no arguments. The withheld ones never reach their source (klaxon.evaluation).",
+  "results": [
+    {
+      "tool": "recent_deploys",
+      "is_error": true,
+      "text": "docker did not answer within 15 s: is Docker Desktop running?"
+    },
+    {
+      "tool": "service_health",
+      "is_error": true,
+      "text": "docker did not answer within 15 s: is Docker Desktop running?"
+    },
+    {
+      "tool": "list_metrics",
+      "is_error": false,
+      "text": "{\"match\": \"\", \"metrics\": [{\"name\": \"db_client_operation_duration_seconds_bucket\"}, {\"name\": \"db_client_operation_duration_seconds_count\"}, {\"name\": \"db_client_operation_duration_seconds_sum\"}, {\"name\": \"db_client_response_returned_rows_bucket\"}, {\"name\": \"db_client_response_returned_rows_count\"}, {\"name\": \"db_client_response_returned_rows_sum\"}, {\"name\": \"http_client_request_duration_seconds_bucket\"}, {\"name\": \"http_client_request_duration_seconds_count\"}, {\"name\": \"http_client_request_duration_seconds_sum\"}, {\"name\": \"http_server_active_requests\"}, {\"name\": \"http_server_request_duration_seconds_bucket\"}, {\"name\": \"http_server_request_duration_seconds_count\"}, {\"name\": \"http_server_request_duration_seconds_sum\"}, {\"name\": \"klaxon_consumer_dead_letters_total\"}, {\"name\": \"klaxon_consumer_events_total\"}, {\"name\": \"klaxon_consumer_retries_total\"}, {\"name\": \"klaxon_kafka_consumer_lag\"}, {\"name\": \"klaxon_payments_pending\"}, {\"name\": \"klaxon_provider_attempts_total\"}, {\"name\": \"klaxon_webhooks_received_total\"}, {\"name\": \"otelcol_exporter_in_flight_requests\"}, {\"name\": \"otelcol_exporter_queue_capacity\"}, {\"name\": \"otelcol_exporter_queue_size\"}, {\"name\": \"otelcol_exporter_sent_log_records_total\"}, {\"name\": \"otelcol_exporter_sent_metric_points_total\"}, {\"name\": \"otelcol_exporter_sent_spans_total\"}, {\"name\": \"otelcol_process_cpu_seconds_total\"}, {\"name\": \"otelcol_process_memory_rss\"}, {\"name\": \"otelcol_process_runtime_alloc_bytes_total\"}, {\"name\": \"otelcol_process_runtime_heap_alloc_bytes\"}, {\"name\": \"otelcol_process_runtime_total_sys_memory_bytes\"}, {\"name\": \"otelcol_process_uptime_total\"}, {\"name\": \"otelcol_processor_batch_batch_send_size_bucket\"}, {\"name\": \"otelcol_processor_batch_batch_send_size_count\"}, {\"name\": \"otelcol_processor_batch_batch_send_size_sum\"}, {\"name\": \"otelcol_processor_batch_metadata_cardinality\"}, {\"name\": \"otelcol_processor_batch_timeout_trigger_send_total\"}, {\"name\": \"otelcol_receiver_accepted_log_records_total\"}, {\"name\": \"otelcol_receiver_accepted_m...[1390 more characters]"
+    }
+  ]
+}
