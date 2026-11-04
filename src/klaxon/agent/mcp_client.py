@@ -83,6 +83,7 @@ class ToolSpec:
 class ToolResult:
     text: str
     is_error: bool
+    simulated_by: str | None = None  # a harness that answered in place of the tool server (week 5), never the server
 
 
 class ToolClient(Protocol):
@@ -399,7 +400,8 @@ class McpClient:
 
 LABEL = (
     "Tool results as Klaxon's loop received them from its MCP server, each written here before the model saw it."
-    " They come from the system under investigation (synthetic data on this Mac), or from fakes in a test."
+    " They come from the system under investigation (synthetic data on this Mac), or from fakes in a test. A result"
+    " with simulated_by was not asked of the server: the harness it names answered in its place."
 )
 
 
@@ -457,6 +459,8 @@ class RecordedTools:
             raise
         seconds = round(time.monotonic() - started, 3)
         record |= {"outcome": "result", "is_error": result.is_error, "text": result.text, "seconds": seconds}
+        if result.simulated_by is not None:  # the server was not asked: say who answered
+            record["simulated_by"] = result.simulated_by
         _append(self.path, [record | {"at": utc_now()}])  # before the loop, and so the model, sees it
         return result
 

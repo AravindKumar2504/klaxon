@@ -859,12 +859,11 @@ def test_a_request_that_could_not_even_be_announced_is_closed(tmp_path):
 def test_an_evaluation_runs_gate_plans_the_action_saves_no_request_and_runs_nothing(tmp_path, monkeypatch):
     docker, deployer = after_a_bad_deploy()
     monkeypatch.setattr(gate.actions, "run", lambda *args, **kwargs: pytest.fail("an evaluation run ran an action"))
-    heard = []
-    outcome = gate.plan_only(tmp_path, made_up_diagnosis(), deployer, before_asking=lambda: heard.append(True))
+    outcome = gate.plan_only(tmp_path, made_up_diagnosis(), deployer)
     assert outcome.result == "not asked" and outcome.request_id is None and outcome.deploy is None
     assert outcome.detail.startswith("redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent")
     assert not (tmp_path / gate.REQUEST).exists() and not (tmp_path / gate.DECISION).exists()
-    assert docker.settings(LEDGER) == NAIVE and heard == [True]  # nothing ran; told once, as a plan was made
+    assert docker.settings(LEDGER) == NAIVE  # nothing ran
     [line] = [json.loads(text) for text in (tmp_path / gate.LOG).read_text().splitlines()]
     assert line["event"] == "not asked" and line["why"] == gate.NOT_ASKED
     assert line["action"] == {"name": "rollback_deploy", "arguments": {"service": LEDGER}}
@@ -873,17 +872,15 @@ def test_an_evaluation_runs_gate_plans_the_action_saves_no_request_and_runs_noth
     assert gate.approve(tmp_path, lambda: ScriptedTerminal("r-0000")) == 2
 
 
-def test_an_evaluation_runs_gate_asks_nobody_and_hears_nothing_for_no_action_or_a_refused_plan(tmp_path):
+def test_an_evaluation_runs_gate_asks_nobody_for_no_action_or_a_refused_plan(tmp_path):
     _, deployer = after_a_bad_deploy()
     nothing_deployed = FakeDocker().deployer(DeployLog(tmp_path / "empty.jsonl"))
-    heard = []
     cases = [
         ("no action", made_up_diagnosis(fix_action=None), deployer, "the diagnosis names no action"),
         ("refused", made_up_diagnosis(), nothing_deployed, "has no deploy of"),
     ]
     for name, diagnosis, planned_on, why in cases:
         (tmp_path / name).mkdir()
-        outcome = gate.plan_only(tmp_path / name, diagnosis, planned_on, before_asking=lambda: heard.append(True))
+        outcome = gate.plan_only(tmp_path / name, diagnosis, planned_on)
         assert outcome.result == name and why in outcome.detail
         assert events(tmp_path / name) == [name] and not (tmp_path / name / gate.REQUEST).exists()
-    assert heard == []

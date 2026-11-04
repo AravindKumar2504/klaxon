@@ -8,10 +8,11 @@ cases, each with its right answer committed before any run on it (CASES, below; 
     false-alarm         an alert written by the harness in the lag rule's own words, with a made-up number (the ledger
                         consumer group 250 messages behind), given to Klaxon on a healthy stack under traffic: the right
                         answer is that nothing is wrong, and no action (Aravind's choice, 2026-11-03)
-    missing-deploys     fault 1 with the deploy list withheld: every call to recent_deploys gets the error docker gives
-                        when it does not answer, after the 15 s a real one waits, and never reaches docker. An outage
-                        the harness fakes, said in the run's evidence; the stack is not touched. The right answer names
-                        the cause and says the deploy history could not be checked (his choice, 2026-11-03)
+    missing-deploys     fault 1 with docker withheld from the two tools that read it: every call to recent_deploys or
+                        service_health gets the error the tool gives when docker does not answer, after the 15 s a real
+                        one waits, and never reaches docker. An outage the harness fakes, said in the run's evidence;
+                        the stack is not touched. The right answer names the cause and says what it could not check
+                        (his choices, 2026-11-03 and 04)
 
 A run is one case, one seed and one model, on a fresh stack (make reset, then make up), as week 4's runs were. The seed
 is the traffic's: its amounts, its timing, which answers get lost. Klaxon gets the budgets of weeks 3 and 4 (10 steps,
@@ -31,13 +32,13 @@ what came of each run, and the report is written there at the end.
 The report is worked out from saved runs, offline, so a grader can change and every result be graded again without a
 new run: per run, the verdict, the fix and the action, the gate, the times, the model calls, the cost, the damage; per
 case and model, counts ("2 of 3") and medians, never a percentage of three runs. It reads week 3's and week 4's runs
-too. The grading rule (klaxon.grading, rubric version 3) grades the six faults; for missing-deploys it grades the cause
-only. Whether a false alarm was called false, and whether a diagnosis said what it could not check, wait for week 5's
-grader (item 2).
+too. The grading rule (klaxon.grading, rubric version 3) grades the six faults, and missing-deploys as fault 1 (its
+cause and its fix). Whether a false alarm was called false, and whether a diagnosis said what it could not check, wait
+for week 5's grader (item 2).
 
 Rehearsals (no model): a case's steps without the loop, as `make rehearse-fault` does for a fault. For the false alarm,
 the quiet stack, the alert it would give, and the rules read for a minute more. For missing-deploys, fault 1's
-rehearsal, then a probe of the tools through the case's own client: recent_deploys withheld, service_health answering.
+rehearsal, then a probe of the tools through the case's own client: the two docker tools withheld, the others answering.
 
 Run: python -m klaxon.evaluation cases                                      calls nothing
      python -m klaxon.evaluation run --model ID [--cases A,B] [--seeds 7,8,9]  live, with Aravind's OK for each batch
@@ -49,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import statistics
 import sys
@@ -82,7 +84,8 @@ REHEARSAL_EVALUATIONS = 4  # a false alarm's rehearsal reads the rules this many
 # What a docker-backed tool answers when docker does not (klaxon.agent.tools._docker_view's own words), and how long
 # a real one takes to say it: docker's first read times out.
 DOCKER_SILENT = f"docker did not answer within {DOCKER_TIMEOUT:.0f} s: is Docker Desktop running?"
-OUTAGES = {"recent_deploys": (DOCKER_SILENT, DOCKER_TIMEOUT)}
+OUTAGES = {name: (DOCKER_SILENT, DOCKER_TIMEOUT) for name in ("recent_deploys", "service_health")}  # both read docker
+SIMULATED = "klaxon.evaluation.Withheld: an outage simulated for an evaluation case; the tool server was not asked"
 # The loop's stops that say nothing of Klaxon's judgment: its run is "not run". The first three also stop a suite.
 STOPS_A_SUITE = ("model_error", "tools_failed", "crashed")
 NOT_RUN = (*STOPS_A_SUITE, "interrupted")
@@ -141,14 +144,15 @@ CASES: dict[str, Case] = {
         Case(
             "missing-deploys",
             MISSING,
-            "Payments counted twice in the books, with the deploy list withheld",
+            "Payments counted twice in the books, with docker withheld from the tools",
             "The ledger consumer books a second time every webhook the provider sends again: its dedupe is gone (fault"
-            " 1's recorded cause, which a deploy brought). The deploy list could not be read, so a right diagnosis says"
-            " the deploy history could not be checked, and claims no deploy it did not see. Rolling the ledger consumer"
-            " back still fits the remedy: code plans a rollback from the deploy log, not from the tool.",
+            " 1's recorded cause, which a deploy brought). Docker did not answer the two tools that read it, so the"
+            " deploy list and the containers' health could not be read: a right diagnosis says what it could not check,"
+            " and claims no deploy it has no evidence for. Rolling the ledger consumer back still fits the remedy: code"
+            " plans a rollback from the deploy log, not from the tools.",
             (ROLLBACK, faults.LEDGER),
             fault="duplicate-delivery",
-            withheld=("recent_deploys",),
+            withheld=("recent_deploys", "service_health"),
         ),
     )
 }
@@ -202,7 +206,7 @@ class Withheld:
             return self.inner.call(name, arguments, timeout)
         text, seconds = self.outages[name]
         self.sleep(min(seconds, timeout))
-        return ToolResult(text, True)
+        return ToolResult(text, True, simulated_by=SIMULATED)
 
     def close(self) -> None:
         self.inner.close()
@@ -293,7 +297,7 @@ def false_alarm(
             outcome = gated.act(alert, result.diagnosis, lambda: None)
             record.timings["gate_ended_at"] = since()
             record.gate = asdict(outcome) | {"decided": None}
-        evaluate("after")  # once the loop is done: still quiet, so the alert was false
+        evaluate("after")  # once the loop is done: what the rules read then, kept with the run
     finally:
         generator.close()
         generator.join()
@@ -325,15 +329,16 @@ def false_alarm_label(record: fault_runs.Record) -> str:
     if "loop_started_at" in record.timings:
         if record.loop is None:
             said.append(
-                f"Klaxon's loop started live on it, through Claude Code on Aravind's seat{fault_runs.EVALUATION_OFFERED},"
-                f" and did not finish: {record.stopped}."
+                f"Klaxon's loop started live on it, through Claude Code on Aravind's seat, and did not finish:"
+                f" {record.stopped}."
             )
         else:
             said.append(
-                f"Klaxon's loop ran live on it, through Claude Code on Aravind's seat{fault_runs.EVALUATION_OFFERED}, and"
-                f" stopped on {record.loop['reason']} after {record.loop['steps']} steps; any reply it got is a recorded"
-                " response, not a simulation."
+                f"Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on"
+                f" {record.loop['reason']} after {record.loop['steps']} steps; any reply it got is a recorded response,"
+                " not a simulation."
             )
+        said.append(fault_runs.EVALUATION_OFFERED)
     if record.gated:
         said += fault_runs._gated_label(record)
     return " ".join(said)
@@ -511,41 +516,45 @@ def run_suite(
     run_one: Callable[[Case, int], dict],
 ) -> dict:
     """The planned runs, one after another, each on a fresh stack, with the suite's file written after each. It stops
-    at the first run ends_the_suite names, when the stack cannot be made fresh, when a run cannot even start, and at
-    an interrupt: the runs left are said as not run, and nothing is run again on its own."""
+    at the first run ends_the_suite names, when the stack cannot be made fresh, when a run breaks off outside its own
+    handling (in its setup, or while its evidence is saved), and at an interrupt anywhere. The planned runs with no
+    outcome are then listed as not run, and nothing is run again on its own."""
     suite["runs"], suite["not_run"], suite["stopped"] = [], [], None
-    write(suite)
-    for n, (case, seed) in enumerate(planned):
-        left = [{"case": c.name, "seed": s} for c, s in planned[n:]]
-        try:
-            fresh_stack()
-        except (StackError, OSError) as exc:
-            suite["stopped"] = f"the stack could not be reset and started: {clean_text(str(exc), 300)}"
-            suite["not_run"] = left
-            break
-        except KeyboardInterrupt:
-            suite["stopped"], suite["not_run"] = "interrupted while the stack was made fresh", left
-            break
-        try:
-            outcome = run_one(case, seed)
-        except Exception as exc:  # before its run could begin (docker gone, say): nothing of it to keep
-            suite["stopped"] = (
-                f"{case.name}, seed {seed}, could not start: {type(exc).__name__}: {clean_text(str(exc), 300)}"
-            )
-            suite["not_run"] = left
-            break
-        except KeyboardInterrupt:
-            suite["stopped"], suite["not_run"] = f"interrupted as {case.name}, seed {seed}, was starting", left
-            break
-        suite["runs"].append(outcome)
-        why = ends_the_suite(outcome)
-        if why is not None:
-            suite["stopped"] = f"after {outcome['folder']}, because {why}"
-            suite["not_run"] = [{"case": c.name, "seed": s} for c, s in planned[n + 1 :]]
-            write(suite)
-            break
+    where = "before the first run"
+    try:
         write(suite)
-    write(suite)
+        for case, seed in planned:
+            where = f"while the stack was made fresh for {case.name}, seed {seed}"
+            try:
+                fresh_stack()
+            except Exception as exc:  # docker gone, or a compose command that timed out: no run of it
+                suite["stopped"] = (
+                    f"the stack could not be made fresh for {case.name}, seed {seed}: {type(exc).__name__}:"
+                    f" {clean_text(str(exc), 300)}"
+                )
+                break
+            where = f"while {case.name}, seed {seed}, ran"
+            try:
+                outcome = run_one(case, seed)
+            except Exception as exc:  # outside the run's own handling: its setup, or the saving of its evidence
+                suite["stopped"] = (
+                    f"{case.name}, seed {seed}, broke off outside its run: {type(exc).__name__}:"
+                    f" {clean_text(str(exc), 300)}"
+                )
+                break
+            suite["runs"].append(outcome)
+            where = f"after {case.name}, seed {seed}"
+            why = ends_the_suite(outcome)
+            if why is not None:
+                suite["stopped"] = f"after {outcome['folder']}, because {why}"
+                break
+            write(suite)
+    except KeyboardInterrupt:
+        suite["stopped"] = f"interrupted {where}"
+    finally:
+        if suite["stopped"] is not None:
+            suite["not_run"] = [{"case": c.name, "seed": s} for c, s in planned[len(suite["runs"]) :]]
+        write(suite)
     return suite
 
 
@@ -567,13 +576,16 @@ def _mode(saved: Mapping) -> str:
 
 
 def usage(folder: Path) -> dict:
-    """The run's model calls, from its recording: how many, how many accepted, which models answered, and Claude
-    Code's cost estimate at API prices (the seat is not billed per call)."""
+    """The run's model calls, from its recording: how many (the failed ones too), how many replies Klaxon accepted,
+    which models answered, and Claude Code's cost estimate at API prices (the seat is not billed per call)."""
     path = folder / loop.RECORDING
-    responses = [r for r in read_records(path) if r.get("kind") == "response"] if path.exists() else []
+    records = [r for r in read_records(path) if r.get("kind") in ("response", "failure")] if path.exists() else []
+    responses = [r for r in records if r["kind"] == "response"]
     costs = [r.get("cost_usd") for r in responses]
     return {
-        "calls": len(responses),
+        "recorded": path.exists(),
+        "calls": len(records),
+        "failed": len(records) - len(responses),
         "accepted": sum(1 for r in responses if r.get("accepted") is True),
         "models": sorted({r["model"] for r in responses if isinstance(r.get("model"), str)}),
         "cost_usd": round(sum(c for c in costs if isinstance(c, int | float) and not isinstance(c, bool)), 4),
@@ -592,15 +604,22 @@ def _findings(entry: Mapping | None) -> dict | None:
     return {"outcome": entry.get("outcome"), "findings": dict(counted)}
 
 
-def not_run(saved: Mapping) -> str | None:
+def not_run(saved: Mapping, used: Mapping | None = None) -> str | None:
     """Why this run says nothing of Klaxon's judgment, or None: its loop never ran (the stack was not quiet, no alert
-    fired, an error), or stopped in a way that is not Klaxon's (the model could not answer, the tools could not start,
-    an interrupt, a crash)."""
+    fired, an error before it); it started and did not finish (an interrupt, a crash); it stopped in a way that is not
+    Klaxon's (the model could not answer, the tools could not start); or the model gave no reply Klaxon could take
+    (every call failed or was refused), whatever stop the loop then reached."""
     found = saved.get("loop")
     if found is None:
+        if "loop_started_at" in (saved.get("timings") or {}):
+            return f"the loop started and did not finish: {saved.get('stopped')}"
         return f"the loop never ran: {saved.get('stopped')}"
     if found.get("reason") in NOT_RUN:
         return f"the loop stopped on {found['reason']}: {clean_text(str(found.get('detail')), 200)}"
+    if used is not None and used["recorded"] and used["calls"] and not used["accepted"]:
+        return (
+            f"the model gave no reply Klaxon could take in {used['calls']} calls; the loop stopped on {found['reason']}"
+        )
     return None
 
 
@@ -625,6 +644,7 @@ def run_row(folder: Path) -> dict:
     if "alert_evaluation_began" in timings and "injected_at" in timings:
         alert_after = round(timings["alert_evaluation_began"] - timings["injected_at"], 1)
     used = usage(folder)
+    asked_for = case.get("model")
     damage = saved.get("damage") or {}
     return {
         "folder": folder.name,
@@ -632,9 +652,11 @@ def run_row(folder: Path) -> dict:
         "kind": case.get("kind") or (known.kind if known else FAULT),
         "mode": _mode(saved),
         "seed": (saved.get("traffic_settings") or {}).get("seed"),
-        "model": case.get("model") or (used["models"][0] if len(used["models"]) == 1 else None),
+        "model": asked_for or (used["models"][0] if len(used["models"]) == 1 else None),
         "answered_by": used["models"],
-        "not_run": not_run(saved),
+        # The adapter refuses a reply from another model; a dated snapshot of the one asked for is the same model.
+        "answered_by_another_model": bool(asked_for) and any(not m.startswith(asked_for) for m in used["models"]),
+        "not_run": not_run(saved, used),
         "loop": found.get("reason"),
         "diagnosed": diagnosis is not None,
         "confidence": None if diagnosis is None else diagnosis.get("confidence"),
@@ -653,6 +675,7 @@ def run_row(folder: Path) -> dict:
         "steps": found.get("steps"),
         "tool_calls": found.get("tool_calls"),
         "calls": used["calls"],
+        "failed_calls": used["failed"],
         "accepted_calls": used["accepted"],
         "cost_usd": used["cost_usd"],
         "calls_without_cost": used["calls_without_cost"],
@@ -661,20 +684,57 @@ def run_row(folder: Path) -> dict:
     }
 
 
-def run_folders(paths: Iterable[Path]) -> tuple[list[Path], list[str]]:
-    """The run folders in these paths, in order: a run's own folder, or a folder of them (a suite's, a week's).
-    Rehearsals are left out, and said: no model ran in them."""
-    found, left_out = [], []
+def _subfolders(path: Path) -> list[Path]:
+    return sorted(child for child in path.iterdir() if child.is_dir())
+
+
+def run_folders(paths: Iterable[Path]) -> tuple[list[Path], list[str], list[Path]]:
+    """The run folders in these paths, each once, in order: a run's own folder; a suite's folder, with its runs; or a
+    folder of either (a week's). Rehearsals, and folders that hold no run, are left out, and said. Also the suites
+    found, whose files say what they planned and did not run."""
+    found: list[Path] = []
+    left_out: list[str] = []
+    suites: list[Path] = []
+    seen: set[Path] = set()
+
+    def visit(path: Path, container: bool) -> None:
+        key = path.resolve()
+        if key in seen:
+            return
+        seen.add(key)
+        if (path / fault_runs.RUN_FILE).is_file():
+            if "_rehearsal_" in path.name:
+                left_out.append(f"{path.name}: a rehearsal, with no model")
+            else:
+                found.append(path)
+        elif (path / SUITE_FILE).is_file():
+            suites.append(path)
+            for child in _subfolders(path):
+                visit(child, False)
+        elif container:
+            for child in _subfolders(path):
+                visit(child, False)
+        else:
+            left_out.append(f"{path.name}: it holds no {fault_runs.RUN_FILE}")
+
     for path in paths:
-        folders = [path] if (path / fault_runs.RUN_FILE).is_file() else sorted(p for p in path.iterdir() if p.is_dir())
-        for folder in folders:
-            if not (folder / fault_runs.RUN_FILE).is_file():
-                continue
-            if "_rehearsal_" in folder.name:
-                left_out.append(f"{folder.name}: a rehearsal, with no model")
-                continue
-            found.append(folder)
-    return found, left_out
+        visit(path, True)
+    return found, left_out, suites
+
+
+def suite_summary(folder: Path) -> dict:
+    """What a suite planned, and what its own file says of the runs it did not run."""
+    saved = json.loads((folder / SUITE_FILE).read_text())
+    if not isinstance(saved, dict):
+        raise ValueError(f"{folder.name}'s {SUITE_FILE} is not an object")
+    return {
+        "folder": folder.name,
+        "model": saved.get("model"),
+        "planned": len(saved.get("planned") or []),
+        "with_an_outcome": len(saved.get("runs") or []),
+        "not_run": list(saved.get("not_run") or []),
+        "stopped": saved.get("stopped"),
+    }
 
 
 def _median(values: Iterable[object]) -> float | None:
@@ -683,13 +743,13 @@ def _median(values: Iterable[object]) -> float | None:
 
 
 def summarize(rows: Sequence[Mapping]) -> list[dict]:
-    """Per model and case: what ran, and counts of what came of it. A run that says nothing of Klaxon's judgment
-    (not_run) is counted apart, never as wrong."""
+    """Per model, case and mode (week 3's runs, week 4's and the evaluation's are never mixed): what ran, and counts
+    of what came of it. A run that says nothing of Klaxon's judgment (not_run) is counted apart, never as wrong."""
     groups: dict[tuple, list[Mapping]] = {}
     for row in rows:
-        groups.setdefault((row["model"] or "unknown", row["case"]), []).append(row)
+        groups.setdefault((row["model"] or "unknown", row["case"], row["mode"]), []).append(row)
     out = []
-    for (model, name), group in groups.items():
+    for (model, name, mode), group in groups.items():
         ran = [row for row in group if row["not_run"] is None]
         graded = [row for row in ran if row["verdict"] is not None]
         acted = [row for row in ran if row["action_right"] is not None]
@@ -697,8 +757,8 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
             {
                 "model": model,
                 "case": name,
+                "mode": mode,
                 "kind": group[0]["kind"],
-                "modes": sorted({row["mode"] for row in group}),
                 "runs": len(group),
                 "not_run": len(group) - len(ran),
                 "ran": len(ran),
@@ -720,8 +780,15 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
                 "cost_usd": round(sum(row["cost_usd"] for row in group), 4),
             }
         )
-    order = list(CASES)
-    out.sort(key=lambda e: (e["model"], order.index(e["case"]) if e["case"] in order else len(order), e["case"]))
+    order, modes = list(CASES), ["diagnosis only, week 3", "gated, week 4", "evaluation"]
+    out.sort(
+        key=lambda e: (
+            e["model"],
+            order.index(e["case"]) if e["case"] in order else len(order),
+            e["case"],
+            modes.index(e["mode"]) if e["mode"] in modes else len(modes),
+        )
+    )
     return out
 
 
@@ -734,7 +801,7 @@ def shown(path: Path) -> str:
 
 
 def report(paths: Sequence[Path]) -> dict:
-    folders, left_out = run_folders(paths)
+    folders, left_out, suites = run_folders(paths)
     rows = [run_row(folder) for folder in folders]
     return {
         "label": (
@@ -745,6 +812,7 @@ def report(paths: Sequence[Path]) -> dict:
         "made_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "from": [shown(path) for path in paths],
         "left_out": left_out,
+        "suites": [suite_summary(folder) for folder in suites],
         "runs": rows,
         "summary": summarize(rows),
     }
@@ -763,39 +831,57 @@ def _cell(text: object) -> str:
 
 
 def markdown(found: Mapping) -> str:
-    """The report as a page: per model, a table of the cases; then every run, and the runs that did not run."""
+    """The report as a page: the suites; per model, a table of its cases; then every run, and the runs that did not
+    run."""
     lines = ["# Klaxon evaluation report", "", found["label"], ""]
     lines.append(f"Made {found['made_at_utc']} from {len(found['runs'])} runs in: {', '.join(found['from'])}.")
     if found["left_out"]:
         lines.append(f"Left out: {'; '.join(found['left_out'])}.")
+    if found["suites"]:
+        lines += ["", "## Suites", ""]
+        for suite in found["suites"]:
+            said = f"- {_cell(suite['folder'])}: {_cell(suite['model'])}, {suite['planned']} runs planned,"
+            said += f" {suite['with_an_outcome']} with an outcome"
+            if suite["stopped"]:
+                said += f"; it stopped {_cell(suite['stopped'])}"
+            if suite["not_run"]:
+                said += "; not run: " + ", ".join(
+                    f"{_cell(r.get('case'))} seed {r.get('seed')}" for r in suite["not_run"]
+                )
+            lines.append(said + ".")
     for model in sorted({entry["model"] for entry in found["summary"]}):
         lines += [
             "",
             f"## {model}",
             "",
-            "| Case | Runs | Named the cause | Fix fits | Action right | Named where none fits | Refused by code"
-            " | Median s, fault to alert | Median s to diagnose | Median calls | Cost |",
-            "|---|---|---|---|---|---|---|---|---|---|---|",
+            "| Case | Mode | Runs | Diagnosed | Named the cause | Fix fits | Action right | Named where none fits"
+            " | Refused by code | Median s, fault to alert | Median s to diagnose | Median calls | Cost |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         entries = [e for e in found["summary"] if e["model"] == model]
         for entry in entries:
             graded = entry["graded"]
             named = _of(entry["names_the_cause"], graded) if graded else NOT_GRADED.split(":")[0]
             lines.append(
-                f"| {_cell(entry['case'])} | {entry['ran']} ran, {entry['not_run']} not run | {named} |"
-                f" {_of(entry['fix_fits'], graded)} | {_of(entry['action_right'], entry['action_judged'])} |"
-                f" {entry['action_where_none_fits']} | {entry['refused_by_code']} |"
-                f" {_number(entry['median_alert_after_fault_seconds'])} | {_number(entry['median_diagnosis_seconds'])} |"
-                f" {_number(entry['median_calls'])} | ${entry['cost_usd']:.2f} |"
+                f"| {_cell(entry['case'])} | {entry['mode']} | {entry['ran']} ran, {entry['not_run']} not run |"
+                f" {_of(entry['diagnosed'], entry['ran'])} | {named} | {_of(entry['fix_fits'], graded)} |"
+                f" {_of(entry['action_right'], entry['action_judged'])} | {entry['action_where_none_fits']} |"
+                f" {entry['refused_by_code']} | {_number(entry['median_alert_after_fault_seconds'])} |"
+                f" {_number(entry['median_diagnosis_seconds'])} | {_number(entry['median_calls'])} |"
+                f" ${entry['cost_usd']:.2f} |"
             )
         runs, missing = sum(e["runs"] for e in entries), sum(e["not_run"] for e in entries)
         calls, cost = sum(e["calls"] for e in entries), sum(e["cost_usd"] for e in entries)
+        never = sum(len(s["not_run"]) for s in found["suites"] if s["model"] == model)
         lines += ["", f"In all: {runs} runs ({missing} not run), {calls} model calls, ${cost:.2f}."]
+        if never:
+            lines[-1] += f" Planned and never started: {never} (Suites, above)."
     lines += [
         "",
-        "Named the cause: the rule's verdict, of the runs it graded: the six faults, and missing-deploys on its cause"
-        f" alone ({CAUSE_ONLY}). The false alarm is {NOT_GRADED}. A run that did not run counts only in the first"
-        " column, and in the totals.",
+        "Named the cause: the rule's verdict, of the runs it graded: the six faults, and missing-deploys as fault 1, by"
+        f" its cause and its fix ({CAUSE_ONLY}). The false alarm is {NOT_GRADED}. Diagnosed: the runs that ended in a"
+        " diagnosis; a run out of steps, tool calls or time ran, and gave none. A run that did not run counts only in"
+        " the Runs column and the totals. Medians are over the runs that ran and have the number.",
         "",
         "## Each run",
         "",
@@ -814,6 +900,13 @@ def markdown(found: Mapping) -> str:
     if missing:
         lines += ["", "## Not run", ""]
         lines += [f"- {_cell(row['folder'])}: {_cell(row['not_run'])}" for row in missing]
+    other = [row for row in found["runs"] if row["answered_by_another_model"]]
+    if other:
+        lines += ["", "## Answered by another model than the one asked for", ""]
+        lines += [
+            f"- {_cell(row['folder'])}: asked {_cell(row['model'])}, answered {_cell(row['answered_by'])}"
+            for row in other
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -862,7 +955,7 @@ def rehearse(case: Case, settings: traffic.Settings, folder: Path, header: Mappi
                 "A probe of Klaxon's tools through this case's own client, after the rehearsal, with no model: each"
                 " tool called once with no arguments. The withheld ones never reach their source (klaxon.evaluation)."
             ),
-            "results": probe_tools([*case.withheld, "service_health"], Withheld(McpClient(), case.withheld)),
+            "results": probe_tools([*case.withheld, "list_metrics"], Withheld(McpClient(), case.withheld)),
         }
         (folder / PROBE_FILE).write_text(json.dumps(probed, indent=2) + "\n")
         for result in probed["results"]:
@@ -878,7 +971,10 @@ def rehearse(case: Case, settings: traffic.Settings, folder: Path, header: Mappi
 def _names(text: str) -> list[Case]:
     if text == "all":
         return list(CASES.values())
-    return [get_case(name.strip()) for name in text.split(",") if name.strip()]
+    names = [name.strip() for name in text.split(",") if name.strip()]
+    if not names or len(set(names)) != len(names):
+        raise ValueError("--cases is all, or different case names separated by commas")
+    return [get_case(name) for name in names]
 
 
 def _seeds(text: str) -> list[int]:
@@ -915,8 +1011,8 @@ def _run(args: argparse.Namespace) -> int:
     suite = {
         "label": (
             "A suite of Klaxon's evaluation runs (week 5): one model, its cases and seeds, each run on a fresh stack"
-            " (make reset, then make up), live through Claude Code on Aravind's seat. In every run code planned any"
-            " action the diagnosis named, nobody was asked, and nothing ran."
+            " (make reset, then make up), live through Claude Code on Aravind's seat. In each run code plans any action"
+            " the diagnosis names, nobody is asked, and nothing runs."
         ),
         "model": args.model,
         "budgets": asdict(budgets),
@@ -926,8 +1022,10 @@ def _run(args: argparse.Namespace) -> int:
     }
     print(f"The suite's folder: {clean_text(str(folder))}; {len(planned)} runs planned", flush=True)
 
-    def write(value: dict) -> None:
-        (folder / SUITE_FILE).write_text(json.dumps(value, indent=2, default=str) + "\n")
+    def write(value: dict) -> None:  # whole or not at all: a temporary file, then moved into place
+        temporary = folder / f".{SUITE_FILE}.writing"
+        temporary.write_text(json.dumps(value, indent=2, default=str) + "\n")
+        os.replace(temporary, folder / SUITE_FILE)
 
     def run_one(case: Case, seed: int) -> dict:
         print(f"\n== {case.name}, seed {seed} ==", flush=True)
@@ -950,7 +1048,7 @@ def _report(args: argparse.Namespace) -> int:
         found = report(args.folders)
         if args.write is not None:
             write_report(args.write, found)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         print(f"Cannot make the report: {type(exc).__name__}: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
     print(markdown(found))

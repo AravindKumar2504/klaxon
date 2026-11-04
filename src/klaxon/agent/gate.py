@@ -24,8 +24,9 @@ was not written by `make approve`, unless the log too was written by hand, or `m
 writing the decision and its line.
 
 An evaluation run (week 5, klaxon.evaluation) uses plan_only() instead: step 1, and nothing after it. The action is
-planned as here, the damage read as before a request, and the log says "not asked": no request is saved, nobody is
-asked, and nothing runs. The evaluation measures what Klaxon would ask for, and what code refuses to plan.
+planned as here, and the log says "not asked": no request is saved, nobody is asked, and nothing runs. (The
+evaluation reads the money at every diagnosis, before this step, whatever the diagnosis names.) It measures what
+Klaxon would ask for, and what code refuses to plan.
 
 Its limit, said plainly: any process running as Aravind can approve. It can write the decision file, run
 `make approve` in a pseudo-terminal it makes (the tests do), type into his terminal (tools that drive a terminal
@@ -437,19 +438,12 @@ def _planned(
 NOT_ASKED = "an evaluation run: nobody is asked, and nothing runs"
 
 
-def plan_only(
-    folder: Path,
-    diagnosis: Diagnosis,
-    deployer: Deployer,
-    now: Callable[[], float] = time.time,
-    before_asking: Callable[[], None] | None = None,
-) -> Outcome:
+def plan_only(folder: Path, diagnosis: Diagnosis, deployer: Deployer, now: Callable[[], float] = time.time) -> Outcome:
     """The gate of an evaluation run (week 5): the action the diagnosis names is planned by code, as act() plans it,
     and that is all. No request is saved, nobody is asked, and nothing runs, whatever the plan: a plan made is "not
-    asked", and the log says what would have been asked. before_asking: called once a plan is made, as in act(), so
-    the evidence has the damage at the point a request would have been made."""
+    asked", and the log says what would have been asked."""
     folder = Path(folder)
-    planned = _planned(folder, diagnosis, deployer, now, before_asking)
+    planned = _planned(folder, diagnosis, deployer, now, None)
     if isinstance(planned, Outcome):
         return planned
     action = {"name": planned.action, "arguments": planned.arguments}

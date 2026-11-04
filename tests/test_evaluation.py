@@ -20,13 +20,13 @@ from klaxon.agent import catalog, claude_code, gate, loop, verify
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.contract import Diagnosis, Evidence, FixAction, ProposedFix
 from klaxon.agent.mcp_server import MAX_FIELD
-from klaxon.agent.model import ModelError, ScriptedModel
+from klaxon.agent.model import ModelError, Recording, ScriptedModel
 from klaxon.agent.tools import Sources, ToolUnavailable, clean_text, make_tools
 from klaxon.agent.trace import read_trace
 from klaxon.patient.deploys import DeployLog
 from klaxon.patient.stack import StackError
 from klaxon.traffic import Settings
-from tests.agent.test_loop import Served, tool
+from tests.agent.test_loop import ALERT, MadeUpLive, Served, diagnose, tool
 from tests.fake_docker import GOOD, NAIVE, FakeDocker
 from tests.test_fault_runs import (
     LEDGER,
@@ -105,8 +105,9 @@ def test_eight_cases_each_with_its_kind_and_right_answer():
         case = evaluation.CASES[name]
         assert case.fault == name and faults.FAULTS[name].cause in case.right_answer and not case.withheld
     assert FALSE.fault is None and "Nothing is wrong" in FALSE.right_answer and FALSE.right_action is None
-    assert MISSING.fault == "duplicate-delivery" and MISSING.withheld == ("recent_deploys",)
-    assert "could not be checked" in MISSING.right_answer and "claims no deploy it did not see" in MISSING.right_answer
+    assert MISSING.fault == "duplicate-delivery" and MISSING.withheld == ("recent_deploys", "service_health")
+    assert "says what it could not check" in MISSING.right_answer
+    assert "claims no deploy it has no evidence for" in MISSING.right_answer
     with pytest.raises(ValueError, match="no case 'nope'"):
         evaluation.get_case("nope")
 
@@ -144,10 +145,12 @@ def test_the_withheld_tool_says_what_the_real_tool_says_when_docker_does_not_ans
         raise subprocess.TimeoutExpired("docker", 15)
 
     tools = make_tools(Sources(ensure_local=silent, containers=silent, inspect=silent))
-    with pytest.raises(ToolUnavailable) as raised:
-        tools["recent_deploys"].call({})
-    assert clean_text(str(raised.value), 2 * MAX_FIELD) == evaluation.DOCKER_SILENT  # as the server sends it
-    assert evaluation.OUTAGES == {"recent_deploys": (evaluation.DOCKER_SILENT, 15.0)}
+    for name in ("recent_deploys", "service_health"):  # both read docker, so a docker that does not answer fails both
+        with pytest.raises(ToolUnavailable) as raised:
+            tools[name].call({})
+        assert clean_text(str(raised.value), 2 * MAX_FIELD) == evaluation.DOCKER_SILENT  # as the server sends it
+    silent_both = (evaluation.DOCKER_SILENT, 15.0)
+    assert evaluation.OUTAGES == {"recent_deploys": silent_both, "service_health": silent_both}
 
 
 def test_the_cases_command_prints_each_case_its_right_answer_and_its_action(capsys):
@@ -156,7 +159,7 @@ def test_the_cases_command_prints_each_case_its_right_answer_and_its_action(caps
     for case in evaluation.CASES.values():
         assert f"{case.name} ({case.kind}): {case.title}" in out and case.right_answer in out
     assert "action that fits: rollback_deploy payments-api" in out and "action that fits: none" in out
-    assert f"withheld: recent_deploys: each call gets {evaluation.DOCKER_SILENT!r}" in out
+    assert f"withheld: recent_deploys, service_health: each call gets {evaluation.DOCKER_SILENT!r}" in out
 
 
 # The withheld tool
@@ -184,8 +187,11 @@ class Inner:
 def test_a_withheld_tool_never_reaches_its_source_and_answers_as_late_as_a_real_one():
     inner, slept = Inner(), []
     client = evaluation.Withheld(inner, ["recent_deploys"], sleep=slept.append)
+    assert client.call("recent_deploys", {}, 60.0).text == "recent_deploys from the server"  # not opened: not listed
+    inner.called.clear()
     assert [spec.name for spec in client.open()] == list(make_tools()) and inner.opened
-    assert client.call("recent_deploys", {}, 60.0) == mc.ToolResult(evaluation.DOCKER_SILENT, True)
+    withheld = mc.ToolResult(evaluation.DOCKER_SILENT, True, simulated_by=evaluation.SIMULATED)
+    assert client.call("recent_deploys", {}, 60.0) == withheld
     assert inner.called == [] and slept == [15.0]
     assert client.call("service_health", {}, 60.0) == mc.ToolResult("service_health from the server", False)
     assert inner.called == [("service_health", {})] and client.server_info == {"name": "made up"}
@@ -207,6 +213,10 @@ def test_a_withheld_tools_answer_is_recorded_and_replays(tmp_path):
     recorded = mc.RecordedTools(evaluation.Withheld(Inner(), ["recent_deploys"], sleep=lambda s: None), path)
     recorded.open()
     assert recorded.call("recent_deploys", {}, 60.0).is_error
+    assert not recorded.call("list_metrics", {}, 60.0).is_error
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert lines[1]["simulated_by"] == evaluation.SIMULATED and "simulated_by" not in lines[2]  # said, where it was
+    assert "simulated_by was not asked of the server" in lines[0]["label"]
     replayed = mc.ReplayTools(path)
     assert replayed.call("recent_deploys", {}, 60.0) == mc.ToolResult(evaluation.DOCKER_SILENT, True)
 
@@ -221,6 +231,19 @@ def test_a_live_run_records_the_results_of_the_client_it_is_given(tmp_path, monk
     assert found.reason == "diagnosed"
     [called] = [r for r in map(json.loads, (tmp_path / loop.TOOL_RESULTS).read_text().splitlines()) if r.get("seq")]
     assert (called["tool"], called["is_error"], called["text"]) == ("recent_deploys", True, evaluation.DOCKER_SILENT)
+
+
+def test_a_run_with_the_withheld_tools_replays_exactly(tmp_path):
+    # Recorded as a live run is (MadeUpLive keeps each reply as the live adapter does), then replayed offline.
+    folder = tmp_path / "run"
+    folder.mkdir()
+    script = [tool("recent_deploys"), tool("service_health"), tool("list_metrics"), diagnose("c1", "c3")]
+    model = MadeUpLive(Recording(folder / loop.RECORDING), script)
+    client = evaluation.Withheld(Served().client, MISSING.withheld, sleep=lambda seconds: None)
+    recorded = loop.investigate(ALERT, model, mc.RecordedTools(client, folder / loop.TOOL_RESULTS), folder / loop.TRACE)
+    assert recorded.reason == "diagnosed"
+    result, whole, differences = loop.replay(folder, tmp_path / "replay.jsonl")
+    assert (result.reason, whole, differences) == ("diagnosed", True, [])
 
 
 # The gate of an evaluation run
@@ -366,6 +389,35 @@ def test_a_false_alarms_label_claims_nothing_it_did_not_do(where, said, never, t
         assert "written by the harness in the lag rule's own words" in text
 
 
+def test_a_false_alarm_whose_loop_broke_is_said_to_have_started_and_not_finished():
+    world = World()
+    record = case_record(FALSE)
+
+    def broken(alert):
+        world.now += 5.0
+        raise RuntimeError("the loop broke")
+
+    with pytest.raises(RuntimeError, match="the loop broke"):
+        evaluation.false_alarm(FALSE, record, world.stack(), Settings(run_id="r1"), broken, None)
+    record.stopped = "error: RuntimeError: the loop broke"  # as run_case says it
+    text = evaluation.label(record)
+    assert "Klaxon's loop started live on it, through Claude Code on Aravind's seat, and did not finish: error:" in text
+    assert fault_runs.EVALUATION_OFFERED in text and "stopped on" not in text
+
+
+def test_a_false_alarms_printout_says_its_action_was_planned_never_run_and_the_money_it_read(tmp_path):
+    world = World()
+    record = case_record(FALSE)
+    named = replace(NOTHING_WRONG, fix_action=FixAction("rollback_deploy", {"service": LEDGER}))
+    empty_log = FakeDocker().deployer(DeployLog(tmp_path / "d.jsonl"))  # nothing to roll back to: code refuses
+    dry = evaluation.dry_gate(tmp_path, empty_log, record.damage, lambda: READING)
+    evaluation.false_alarm(FALSE, record, world.stack(), Settings(run_id="r1"), diagnosed(world, named), dry)
+    printed = evaluation.render(record)
+    action = '  action it names: rollback_deploy {"service": "ledger-consumer"} (an evaluation run: planned, never run)'
+    assert action in printed and "The gate: refused: " in printed
+    assert "The money at the diagnosis: 2026-11-04T00:00:00Z" in printed
+
+
 def test_a_false_alarms_evidence_is_saved_and_printed(tmp_path, capsys):
     world = World()
     record = case_record(FALSE)
@@ -418,13 +470,39 @@ def test_an_evaluation_run_on_a_fault_plans_the_rollback_asks_nobody_and_the_har
     assert (
         printed[0] == "Klaxon week 5: an evaluation run on case duplicate-delivery, seed 7, a fault: duplicate-delivery"
     )
-    assert "The gate: not asked: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent" in "\n".join(printed)
+    whole = "\n".join(printed)
+    assert "The gate: not asked: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent" in whole
+    assert '{"service": "ledger-consumer"} (an evaluation run: planned by code, never run)' in whole
+    assert "  at the diagnosis 2026-11-04T00:00:00Z" in whole and "(it runs only through the gate)" not in whole
 
 
-def test_an_evaluation_runs_label_says_which_tool_the_harness_withheld(tmp_path):
+def test_an_evaluation_run_stopped_inside_its_gate_says_so(tmp_path):
+    world = DockerStack()
+    fault = faults.get("duplicate-delivery")
+    record = case_record(evaluation.CASES["duplicate-delivery"], fault)
+
+    def broken():
+        raise RuntimeError("the money check broke")
+
+    dry = evaluation.dry_gate(tmp_path, world.local.deployer, record.damage, broken)
+    found = replace(NOTHING_WRONG, fix_action=FixAction("rollback_deploy", {"service": LEDGER}))
+    with pytest.raises(RuntimeError, match="the money check broke"):
+        fault_runs.run(fault, record, world.stack(), Settings(run_id="r1"), diagnosed(world, found), gated=dry)
+    record.stopped = "error: RuntimeError: the money check broke"
+    assert "Klaxon took its diagnosis to its gate, which only plans, and the run stopped there" in fault_runs.label(
+        record
+    )
+    assert world.docker.settings(LEDGER) == GOOD[LEDGER]  # cleared all the same
+
+
+def test_an_evaluation_runs_label_says_which_tools_the_harness_withheld(tmp_path):
     _, record = fault_case_run(tmp_path, MISSING)
-    assert fault_runs.withheld_sentence({"recent_deploys": evaluation.DOCKER_SILENT}) in fault_runs.label(record)
-    assert "The harness withheld recent_deploys: each call to it got the error" in fault_runs.label(record)
+    assert fault_runs.withheld_sentence(MISSING.describe()["withheld"]) in fault_runs.label(record)
+    assert "The harness withheld recent_deploys, service_health: each call to it got the error" in fault_runs.label(
+        record
+    )
+    assert fault_runs.withheld_sentence(MISSING.describe()["withheld"]) in evaluation.what(MISSING, 7)
+    assert "withheld" not in evaluation.what(FALSE, 7)
 
 
 # A suite
@@ -518,8 +596,8 @@ def test_a_suite_goes_on_after_a_run_klaxon_got_wrong_or_whose_fault_raised_no_a
 @pytest.mark.parametrize(
     "raised, stopped",
     [
-        (StackError("docker is not this Mac's"), "false-alarm, seed 8, could not start: StackError: docker is not"),
-        (KeyboardInterrupt(), "interrupted as false-alarm, seed 8, was starting"),
+        (StackError("docker is not this Mac's"), "false-alarm, seed 8, broke off outside its run: StackError: docker"),
+        (KeyboardInterrupt(), "interrupted while false-alarm, seed 8, ran"),
     ],
 )
 def test_a_suite_stops_when_a_run_cannot_even_start(raised, stopped):
@@ -533,16 +611,92 @@ def test_a_suite_stops_when_a_run_cannot_even_start(raised, stopped):
 def test_a_suite_interrupted_while_its_stack_is_made_fresh_says_so():
     planned = evaluation.plan([FALSE], [7, 8])
     suite, done, _ = suite_of(planned, fresh_fails_at=2, fresh_raises=KeyboardInterrupt())
-    assert suite["stopped"] == "interrupted while the stack was made fresh"
+    assert suite["stopped"] == "interrupted while the stack was made fresh for false-alarm, seed 8"
     assert suite["not_run"] == [{"case": "false-alarm", "seed": 8}] and len(suite["runs"]) == 1
 
 
 def test_a_suite_stops_when_the_stack_cannot_be_made_fresh():
     planned = evaluation.plan([FALSE], [7, 8, 9])
     suite, done, _ = suite_of(planned, fresh_fails_at=2)
-    assert suite["stopped"] == "the stack could not be reset and started: docker did not answer"
+    assert (
+        suite["stopped"]
+        == "the stack could not be made fresh for false-alarm, seed 8: StackError: docker did not answer"
+    )
     assert suite["not_run"] == [{"case": "false-alarm", "seed": 8}, {"case": "false-alarm", "seed": 9}]
     assert len(suite["runs"]) == 1
+
+
+def patch_run_case(monkeypatch, world):
+    monkeypatch.setattr(evaluation.faults, "LocalStack", lambda: world.local)
+    monkeypatch.setattr(evaluation.alerts, "Alerting", world.alerting)
+    monkeypatch.setattr(evaluation.fault_runs, "Stack", lambda local, alerting: world.stack())
+    monkeypatch.setattr(evaluation.fault_runs, "_provenance", lambda command: {"rerun_command": command})
+
+
+@pytest.mark.parametrize(
+    "name, raised, interrupted, stopped",
+    [
+        ("duplicate-delivery", KeyboardInterrupt("SIGTERM"), True, "interrupted (SIGTERM)"),
+        ("duplicate-delivery", RuntimeError("the loop broke"), False, "error: RuntimeError: the loop broke"),
+        ("false-alarm", KeyboardInterrupt(), True, "interrupted"),
+        ("false-alarm", RuntimeError("the loop broke"), False, "error: RuntimeError: the loop broke"),
+    ],
+)
+def test_a_run_interrupted_or_broken_keeps_its_evidence_and_stops_the_suite(
+    monkeypatch, tmp_path, name, raised, interrupted, stopped
+):
+    world = DockerStack()
+    patch_run_case(monkeypatch, world)
+
+    def broken(*args, **kwargs):
+        raise raised
+
+    monkeypatch.setattr(evaluation.fault_runs, "run", broken)
+    monkeypatch.setattr(evaluation, "false_alarm", broken)
+    budgets = loop.Budgets(steps=10, tool_calls=8)
+    found = evaluation.run_case(evaluation.CASES[name], 8, "claude-opus-5-5", budgets, 3.0, tmp_path, Path("x"))
+    assert (found["interrupted"], found["stopped"], found["loop"]) == (interrupted, stopped, None)
+    saved = json.loads((tmp_path / found["folder"] / fault_runs.RUN_FILE).read_text())
+    assert saved["stopped"] == stopped and saved["case"]["seed"] == 8 and saved["case"]["name"] == name
+    assert f"--cases {name} --seeds 8 --steps 10 --tool-calls 8" in saved["rerun_command"]  # to run it again by hand
+    assert evaluation.ends_the_suite(found) == ("it was interrupted" if interrupted else f"it stopped on an {stopped}")
+
+
+def test_the_suite_command_exits_130_after_an_interrupt_and_lists_what_it_did_not_run(monkeypatch, tmp_path):
+    world = DockerStack()
+    patch_suite(monkeypatch, world)
+
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt("SIGTERM")
+
+    monkeypatch.setattr(evaluation.fault_runs, "run", interrupted)
+    argv = ["run", "--cases", "duplicate-delivery", "--seeds", "7,8", "--evidence-dir", str(tmp_path)]
+    assert evaluation.main(argv) == 130
+    [suite_folder] = tmp_path.iterdir()
+    suite = json.loads((suite_folder / evaluation.SUITE_FILE).read_text())
+    assert suite["stopped"].endswith("because it was interrupted")
+    assert suite["not_run"] == [{"case": "duplicate-delivery", "seed": 8}]
+    assert not list(suite_folder.glob(".*"))  # the suite's file was written whole: no half-written one left
+
+
+def test_the_suite_command_exits_130_when_interrupted_between_runs(monkeypatch, tmp_path):
+    world = DockerStack()
+    patch_suite(monkeypatch, world)
+    fresh = []
+
+    def made_fresh():
+        fresh.append(1)
+        if len(fresh) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(evaluation, "fresh_stack", made_fresh)
+    argv = ["run", "--cases", "false-alarm", "--seeds", "7,8", "--evidence-dir", str(tmp_path)]
+    assert evaluation.main(argv) == 130
+    [suite_folder] = tmp_path.iterdir()
+    suite = json.loads((suite_folder / evaluation.SUITE_FILE).read_text())
+    assert suite["stopped"] == "interrupted while the stack was made fresh for false-alarm, seed 8"
+    assert len(suite["runs"]) == 1 and suite["not_run"] == [{"case": "false-alarm", "seed": 8}]
+    assert (suite_folder / evaluation.REPORT_MD).is_file()  # and its report written all the same
 
 
 # The suite's command, end to end, offline
@@ -574,6 +728,8 @@ def patch_suite(monkeypatch, world):
 def test_the_suite_command_runs_each_case_on_a_fresh_stack_and_writes_the_report(monkeypatch, tmp_path, capsys):
     world = DockerStack()
     patch_suite(monkeypatch, world)
+    monkeypatch.setattr(evaluation.gate, "act", lambda *args, **kwargs: pytest.fail("the gate that asks was used"))
+    monkeypatch.setattr(evaluation.fault_runs, "klaxon_parts", lambda *args, **kwargs: pytest.fail("week 4's parts"))
     argv = ["run", "--cases", "duplicate-delivery,false-alarm,missing-deploys", "--seeds", "7"]
     assert evaluation.main([*argv, "--evidence-dir", str(tmp_path)]) == 0
     [suite_folder] = tmp_path.iterdir()
@@ -609,7 +765,8 @@ def test_the_suite_command_runs_each_case_on_a_fresh_stack_and_writes_the_report
 def test_the_suite_command_refuses_bad_cases_or_seeds_before_touching_anything(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(evaluation.fault_runs, "preflight", lambda model: pytest.fail("pre-flight ran"))
     monkeypatch.setattr(evaluation, "fresh_stack", lambda: pytest.fail("the stack was touched"))
-    for bad in (["--cases", "nope"], ["--seeds", "7,7"], ["--seeds", ""], ["--steps", "1"], ["--rate", "0"]):
+    bad_ones = [["--cases", "nope"], ["--cases", ","], ["--cases", "false-alarm,false-alarm"], ["--seeds", "7,7"]]
+    for bad in (*bad_ones, ["--seeds", ""], ["--steps", "1"], ["--rate", "0"]):
         assert evaluation.main(["run", *bad, "--evidence-dir", str(tmp_path)]) == 2
     assert list(tmp_path.iterdir()) == [] and "Not started, and nothing was touched" in capsys.readouterr().err
 
@@ -639,7 +796,10 @@ def test_the_report_reads_weeks_3_and_4s_saved_runs_and_their_measured_numbers()
     # The numbers STATUS gives for them: 12 fault runs, 82 loop calls, $4.38 (Claude Code's estimates, rounded).
     found = evaluation.report([REPO / "evidence" / "week3", REPO / "evidence" / "week4"])
     rows = found["runs"]
-    assert len(rows) == 12 and len(found["left_out"]) == 4  # the four rehearsals, with no model
+    assert len(rows) == 12 and len(found["left_out"]) == 5 and found["suites"] == []
+    # Left out, and said: the four rehearsals, and week 3's first live run (make investigate, with no run.json).
+    assert sum(1 for why in found["left_out"] if why.endswith("a rehearsal, with no model")) == 4
+    assert "2026-10-18T112951Z_loop_ledgerlaghigh: it holds no run.json" in found["left_out"]
     assert sum(row["calls"] for row in rows) == 82 and round(sum(row["cost_usd"] for row in rows), 2) == 4.38
     assert {row["mode"] for row in rows} == {"diagnosis only, week 3", "gated, week 4"}
     assert all(row["verdict"] == "names the cause" and row["not_run"] is None for row in rows)
@@ -652,9 +812,17 @@ def test_the_report_reads_weeks_3_and_4s_saved_runs_and_their_measured_numbers()
     assert money_unit["damage_at_alert"] == {"outcome": "failed", "findings": {"payments_match_provider": 56}}
     assert money_unit["damage_at_diagnosis"]["findings"] == {"payments_match_provider": 149}  # at its request
     assert money_unit["alert_after_fault_seconds"] == 17.4 and money_unit["action_right"] is True
-    summary = {entry["case"]: entry for entry in found["summary"]}
-    assert summary["provider-outage"]["fix_fits"] == 1 and summary["provider-outage"]["graded"] == 2
-    assert summary["poison-message"]["runs"] == 3 and summary["poison-message"]["calls"] == 21
+    # Week 3's runs and week 4's are never mixed in one row.
+    summary = {(entry["case"], entry["mode"]): entry for entry in found["summary"]}
+    outage3, outage4 = summary["provider-outage", "diagnosis only, week 3"], summary["provider-outage", "gated, week 4"]
+    assert (outage3["graded"], outage3["fix_fits"], outage4["graded"], outage4["fix_fits"]) == (1, 0, 1, 1)
+    assert (
+        summary["poison-message", "gated, week 4"]["runs"] == 2
+        and summary["poison-message", "gated, week 4"]["calls"] == 13
+    )
+    assert len(found["summary"]) == 9  # 3 cases of week 3, and 6 of week 4
+    page = evaluation.markdown(found)
+    assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | 0 of 1 |" in page
 
 
 def saved_run(folder, fault_name="duplicate-delivery", **changes):
@@ -722,7 +890,9 @@ def test_a_run_that_says_nothing_of_klaxon_counts_apart_never_as_wrong(tmp_path)
     assert (entry["runs"], entry["not_run"], entry["ran"], entry["diagnosed"]) == (4, 2, 2, 1)
     assert (entry["graded"], entry["names_the_cause"]) == (1, 1)
     page = evaluation.markdown(found)
-    assert "| duplicate-delivery | 2 ran, 2 not run | 1 of 1 |" in page and "## Not run" in page
+    # Diagnosed: 1 of the 2 that ran (d ran out of steps), then the cause, of the 1 the rule graded.
+    assert "| duplicate-delivery | gated, week 4 | 2 ran, 2 not run | 1 of 2 | 1 of 1 | 1 of 1 |" in page
+    assert "## Not run" in page
 
 
 def test_the_report_counts_an_action_named_where_none_fits_and_a_plan_code_refused(tmp_path):
@@ -754,16 +924,92 @@ def test_the_report_sums_every_call_and_its_cost_and_gives_medians(tmp_path):
             "seconds": seconds,
             "diagnosis": {"confidence": 0.8, "fix_action": None},
         }
-        responses(saved_run(tmp_path / name, loop=loop_), *costs, accepted=name != "b")
+        responses(saved_run(tmp_path / name, loop=loop_), *costs)
+    with (tmp_path / "c" / loop.RECORDING).open("a") as recording:  # a call that failed: counted, with no cost
+        recording.write(json.dumps({"kind": "failure", "error": "ModelTimeout"}) + "\n")
     found = evaluation.report([tmp_path])
     rows = {row["folder"]: row for row in found["runs"]}
     assert (rows["a"]["calls"], rows["a"]["cost_usd"]) == (2, 0.11)
-    assert (rows["b"]["calls"], rows["b"]["accepted_calls"]) == (1, 0)  # every call counts, accepted or not
+    assert (rows["c"]["calls"], rows["c"]["failed_calls"], rows["c"]["accepted_calls"]) == (4, 1, 3)
     assert (rows["c"]["cost_usd"], rows["c"]["calls_without_cost"]) == (0.05, 1)
     [entry] = found["summary"]
     assert entry["median_diagnosis_seconds"] == 41.0 and entry["median_calls"] == 2 and entry["cost_usd"] == 0.26
-    assert entry["median_alert_after_fault_seconds"] == 18.0 and entry["calls"] == 6
-    assert "In all: 3 runs (0 not run), 6 model calls, $0.26." in evaluation.markdown(found)
+    assert entry["median_alert_after_fault_seconds"] == 18.0 and entry["calls"] == 7
+    assert "In all: 3 runs (0 not run), 7 model calls, $0.26." in evaluation.markdown(found)
+
+
+def test_a_run_whose_model_never_gave_a_reply_klaxon_could_take_is_not_run(tmp_path):
+    # The review's low 1: two calls that timed out, then the time budget: not Klaxon's judgment, and not wrong.
+    timed_out = {
+        "reason": "time_budget",
+        "detail": "x",
+        "steps": 2,
+        "tool_calls": 0,
+        "seconds": 600.0,
+        "diagnosis": None,
+    }
+    folder = saved_run(tmp_path / "a", loop=timed_out, comparison={"verdict": "no diagnosis"})
+    failures = [
+        {"kind": "header"},
+        {"kind": "failure", "error": "ModelTimeout"},
+        {"kind": "failure", "error": "ModelTimeout"},
+    ]
+    (folder / loop.RECORDING).write_text("".join(json.dumps(line) + "\n" for line in failures))
+    unaccepted = saved_run(tmp_path / "b", loop=timed_out, comparison={"verdict": "no diagnosis"})
+    responses(unaccepted, 0.01, accepted=False)  # another model answered: refused, so no reply Klaxon could take
+    rows = {row["folder"]: row for row in evaluation.report([tmp_path])["runs"]}
+    assert (
+        rows["a"]["not_run"] == "the model gave no reply Klaxon could take in 2 calls; the loop stopped on time_budget"
+    )
+    assert rows["b"]["not_run"].startswith("the model gave no reply Klaxon could take in 1 calls")
+    saved_run(tmp_path / "c", loop=timed_out, comparison={"verdict": "no diagnosis"})  # no recording at all
+    assert evaluation.run_row(tmp_path / "c")["not_run"] is None
+
+
+def test_a_run_whose_loop_started_and_did_not_finish_is_said_so(tmp_path):
+    started = {"injected_at": 76.0, "alert_evaluation_began": 94.0, "loop_started_at": 95.0}
+    saved_run(tmp_path / "a", loop=None, comparison=None, timings=started, stopped="interrupted (SIGTERM)")
+    [row] = evaluation.report([tmp_path])["runs"]
+    assert row["not_run"] == "the loop started and did not finish: interrupted (SIGTERM)"
+
+
+def test_the_report_reads_a_suites_runs_and_says_what_it_planned_and_did_not_run(tmp_path):
+    week = tmp_path / "week5"
+    suite = week / "2026-11-05T000000Z_suite_claude-opus-5-5"
+    case = FALSE.describe() | {"seed": 7, "model": "claude-opus-5-5"}
+    saved_run(suite / "2026-11-05T000100Z_false-alarm_seed7", "false-alarm", case=case)
+    (suite / evaluation.SUITE_FILE).write_text(
+        json.dumps(
+            {
+                "model": "claude-opus-5-5",
+                "planned": [{"case": "false-alarm", "seed": seed} for seed in (7, 8, 9)],
+                "runs": [{"case": "false-alarm", "seed": 7}],
+                "not_run": [{"case": "false-alarm", "seed": 8}, {"case": "false-alarm", "seed": 9}],
+                "stopped": "after 2026-11-05T000100Z_false-alarm_seed7, because its loop stopped on model_error",
+            }
+        )
+    )
+    (week / "notes").mkdir()
+    found = evaluation.report([week, week])  # a week's folder, named twice: each run once
+    assert [row["folder"] for row in found["runs"]] == ["2026-11-05T000100Z_false-alarm_seed7"]
+    assert found["left_out"] == ["notes: it holds no run.json"]
+    [summary] = found["suites"]
+    assert (summary["planned"], summary["with_an_outcome"], len(summary["not_run"])) == (3, 1, 2)
+    page = evaluation.markdown(found)
+    assert "3 runs planned, 1 with an outcome; it stopped after" in page
+    assert "not run: false-alarm seed 8, false-alarm seed 9." in page and "Planned and never started: 2" in page
+
+
+def test_the_report_says_when_another_model_answered_than_the_one_asked_for(tmp_path):
+    case = FALSE.describe() | {"seed": 7, "model": "claude-sonnet-5-5"}
+    folder = saved_run(tmp_path / "a", "false-alarm", case=case, comparison=None)
+    responses(folder, 0.01, model="claude-opus-5-5")
+    [row] = evaluation.report([tmp_path])["runs"]
+    assert row["answered_by_another_model"] is True
+    assert "asked claude-sonnet-5-5, answered ['claude-opus-5-5']" in evaluation.markdown(evaluation.report([tmp_path]))
+    snapshot = saved_run(tmp_path / "b", "false-alarm", case=case, comparison=None)
+    responses(snapshot, 0.01, model="claude-sonnet-5-5-20261101")  # a dated snapshot of the one asked for
+    assert evaluation.run_row(snapshot)["answered_by_another_model"] is False
 
 
 def test_the_report_names_its_folders_from_the_repo_never_by_this_macs_home_folder():
@@ -819,8 +1065,10 @@ def test_the_rehearse_command_on_missing_deploys_rehearses_fault_1_then_probes_t
     assert saved["rehearsal"] and saved["fault"]["name"] == "duplicate-delivery" and saved["alert"] is not None
     assert "withheld" not in saved["label"]  # no loop ran, so no call to it was made then
     probe = json.loads((folder / evaluation.PROBE_FILE).read_text())["results"]
-    assert [(p["tool"], p["is_error"]) for p in probe] == [("recent_deploys", True), ("service_health", False)]
-    assert probe[0]["text"] == evaluation.DOCKER_SILENT and world.docker.settings(LEDGER) == GOOD[LEDGER]
+    found = [(p["tool"], p["is_error"]) for p in probe]
+    assert found == [("recent_deploys", True), ("service_health", True), ("list_metrics", False)]
+    assert probe[0]["text"] == probe[1]["text"] == evaluation.DOCKER_SILENT
+    assert world.docker.settings(LEDGER) == GOOD[LEDGER]
 
 
 # The make targets

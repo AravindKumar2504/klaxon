@@ -2359,7 +2359,7 @@ MUTANTS = [
      '    return Outcome("not asked", planned.change)',
      '    actions.run(planned, deployer, by="an evaluation run")\n    return Outcome("not asked", planned.change)', False),
     ("an evaluation run's gate asks for approval", A + "gate.py",
-     "    planned = _planned(folder, diagnosis, deployer, now, before_asking)\n    if isinstance(planned, Outcome):\n"
+     "    planned = _planned(folder, diagnosis, deployer, now, None)\n    if isinstance(planned, Outcome):\n"
      "        return planned\n    action = {",
      "    return act(folder, diagnosis, deployer, timeout=0.0, now=now, say=lambda text: None)\n    action = {", False),
     ("an evaluation run's plan goes unlogged", A + "gate.py",
@@ -2368,7 +2368,10 @@ MUTANTS = [
     ("a withheld tool reaches its source", "src/klaxon/evaluation.py",
      "        if name not in self.outages or name not in self.specs:", "        if True:", False),
     ("a withheld tool's answer is not an error", "src/klaxon/evaluation.py",
-     "        return ToolResult(text, True)", "        return ToolResult(text, False)", False),
+     "        return ToolResult(text, True, simulated_by=SIMULATED)",
+     "        return ToolResult(text, False, simulated_by=SIMULATED)", False),
+    ("a withheld answer is not said to be simulated", "src/klaxon/evaluation.py",
+     "        return ToolResult(text, True, simulated_by=SIMULATED)", "        return ToolResult(text, True)", False),
     ("a withheld tool answers at once", "src/klaxon/evaluation.py",
      "        self.sleep(min(seconds, timeout))", "        pass", False),
     ("a withheld tool waits past the call's time left", "src/klaxon/evaluation.py",
@@ -2383,7 +2386,8 @@ MUTANTS = [
      "        return gate.plan_only(folder, diagnosis, deployer)",
      "        return gate.act(folder, diagnosis, deployer, timeout=0.0, say=lambda text: None)", False),
     ("a false alarm is given on a stack that is not quiet", "src/klaxon/evaluation.py",
-     "            if why is not None:", "            if False:", False),
+     '            if why is not None:\n                record.stopped = f"not quiet before the false alarm',
+     '            if False:\n                record.stopped = f"not quiet before the false alarm', False),
     ("a false alarm needs a quiet stack only once", "src/klaxon/evaluation.py",
      "        for n in range(fault_runs.QUIET_EVALUATIONS):", "        for n in range(1):", False),
     ("the false alarm's loop gets another alert", "src/klaxon/evaluation.py",
@@ -2402,8 +2406,8 @@ MUTANTS = [
     ("a suite runs on the stack as the last run left it", "src/klaxon/evaluation.py",
      "            fresh_stack()", "            pass", False),
     ("a suite goes on after a run that says nothing of Klaxon", "src/klaxon/evaluation.py",
-     '        if why is not None:\n            suite["stopped"] = f"after', '        if False:\n            suite["stopped"] = f"after',
-     False),
+     '            if why is not None:\n                suite["stopped"] = f"after',
+     '            if False:\n                suite["stopped"] = f"after', False),
     ("a suite runs case by case, not seed by seed", "src/klaxon/evaluation.py",
      "    return [(case, seed) for seed in seeds for case in cases]",
      "    return [(case, seed) for case in cases for seed in seeds]", False),
@@ -2414,10 +2418,14 @@ MUTANTS = [
     ("a model that could not answer does not stop a suite", "src/klaxon/evaluation.py",
      'STOPS_A_SUITE = ("model_error", "tools_failed", "crashed")', 'STOPS_A_SUITE = ("tools_failed", "crashed")', False),
     ("a suite stopped early does not say what it did not run", "src/klaxon/evaluation.py",
-     '            suite["not_run"] = [{"case": c.name, "seed": s} for c, s in planned[n + 1 :]]',
+     '            suite["not_run"] = [{"case": c.name, "seed": s} for c, s in planned[len(suite["runs"]) :]]',
      '            suite["not_run"] = []', False),
+    ("the runs left after a stop go unlisted", "src/klaxon/evaluation.py",
+     '        if suite["stopped"] is not None:\n            suite["not_run"]', '        if False:\n            suite["not_run"]',
+     False),
     ("a stack that cannot be made fresh does not stop a suite", "src/klaxon/evaluation.py",
-     "        except (StackError, OSError) as exc:", "        except ZeroDivisionError as exc:", False),
+     "            except Exception as exc:  # docker gone, or a compose command that timed out",
+     "            except ZeroDivisionError as exc:  # docker gone, or a compose command that timed out", False),
     ("a run the model never finished counts as Klaxon's", "src/klaxon/evaluation.py",
      '    if found.get("reason") in NOT_RUN:', "    if False:", False),
     ("an action named where none fits is not counted", "src/klaxon/evaluation.py",
@@ -2430,16 +2438,20 @@ MUTANTS = [
      '                "refused_by_code": sum(1 for row in ran if row["gate"] == "refused"),',
      '                "refused_by_code": sum(1 for row in ran if row["gate"] == "not asked"),', False),
     ("the report counts only the accepted calls", "src/klaxon/evaluation.py",
-     '        "calls": len(responses),', '        "calls": sum(1 for r in responses if r.get("accepted") is True),', False),
+     '        "calls": len(records),', '        "calls": sum(1 for r in responses if r.get("accepted") is True),', False),
+    ("the report leaves out the failed calls", "src/klaxon/evaluation.py",
+     '        "calls": len(records),', '        "calls": len(responses),', False),
     ("a rehearsal counts as a run in the report", "src/klaxon/evaluation.py",
-     '            if "_rehearsal_" in folder.name:', "            if False:", False),
+     '            if "_rehearsal_" in path.name:', "            if False:", False),
     ("the false alarm's right action is a rollback", "src/klaxon/evaluation.py",
      '            " and names no action.",\n            None,\n        ),',
      '            " and names no action.",\n            (ROLLBACK, faults.LEDGER),\n        ),', False),
     ("the provider's outage is said to need a rollback", "src/klaxon/evaluation.py",
      '        _fault_case("provider-outage", None),', '        _fault_case("provider-outage", faults.API),', False),
     ("the missing-deploys case withholds nothing", "src/klaxon/evaluation.py",
-     '            withheld=("recent_deploys",),', "            withheld=(),", False),
+     '            withheld=("recent_deploys", "service_health"),', "            withheld=(),", False),
+    ("the missing-deploys case leaves service_health answering", "src/klaxon/evaluation.py",
+     '            withheld=("recent_deploys", "service_health"),', '            withheld=("recent_deploys",),', False),
     ("the false alarm is written for another consumer group", "src/klaxon/evaluation.py",
      'alerts.lags([({"consumer": "ledger"}, float(FALSE_LAG))])',
      'alerts.lags([({"consumer": "payment-confirmer"}, float(FALSE_LAG))])', False),
@@ -2447,7 +2459,9 @@ MUTANTS = [
      'DOCKER_SILENT = f"docker did not answer within {DOCKER_TIMEOUT:.0f} s: is Docker Desktop running?"',
      'DOCKER_SILENT = "recent_deploys is not available"', False),
     ("an evaluation run's label says a person approves its action", "src/klaxon/fault_runs.py",
-     "            offered = EVALUATION_OFFERED", "            pass", False),
+     '            offered = ""', "            pass", False),
+    ("an evaluation run's offer goes unsaid", "src/klaxon/fault_runs.py",
+     "            said.append(EVALUATION_OFFERED)", "            pass", False),
     ("an evaluation run's withheld tool goes unsaid", "src/klaxon/fault_runs.py",
      '        said.append(withheld_sentence(record.case["withheld"]))', "        pass", False),
     ("an evaluation run's plan is said as nothing", "src/klaxon/fault_runs.py",
@@ -2467,16 +2481,71 @@ MUTANTS = [
      "\t$(PY) -m klaxon.evaluation run --model '$(MODEL)' --cases '$(CASES)' --seeds '$(SEEDS)'", False),
     ("rehearse-case pastes its case into the shell", 'Makefile',
      '\t$(PY) -m klaxon.evaluation rehearse "$$CASE"', "\t$(PY) -m klaxon.evaluation rehearse '$(CASE)'", False),
-    ("a run that cannot start crashes the suite", "src/klaxon/evaluation.py",
-     "        except Exception as exc:  # before its run could begin", "        except ZeroDivisionError as exc:  # before its run could begin",
-     False),
-    ("an interrupt while the stack is made fresh crashes the suite", "src/klaxon/evaluation.py",
-     '        except KeyboardInterrupt:\n            suite["stopped"], suite["not_run"] = "interrupted while the stack was made fresh"',
-     '        except ZeroDivisionError:\n            suite["stopped"], suite["not_run"] = "interrupted while the stack was made fresh"',
-     False),
+    ("a run that breaks off outside its run crashes the suite", "src/klaxon/evaluation.py",
+     "            except Exception as exc:  # outside the run's own handling",
+     "            except ZeroDivisionError as exc:  # outside the run's own handling", False),
+    ("an interrupt crashes the suite", "src/klaxon/evaluation.py",
+     '    except KeyboardInterrupt:\n        suite["stopped"] = f"interrupted {where}"',
+     '    except ZeroDivisionError:\n        suite["stopped"] = f"interrupted {where}"', False),
+    ("a run whose loop started is said never to have run", "src/klaxon/evaluation.py",
+     '        if "loop_started_at" in (saved.get("timings") or {}):', "        if False:", False),
+    ("a run with no reply Klaxon could take counts as Klaxon's", "src/klaxon/evaluation.py",
+     '    if used is not None and used["recorded"] and used["calls"] and not used["accepted"]:', "    if False:", False),
+    ("a run with no recording counts as not run", "src/klaxon/evaluation.py",
+     'used["recorded"] and used["calls"] and not used["accepted"]:', 'not used["accepted"]:', False),
+    ("a folder named twice is counted twice", "src/klaxon/evaluation.py",
+     "        if key in seen:\n            return", "        if False:\n            return", False),
+    ("a folder that holds no run goes unsaid", "src/klaxon/evaluation.py",
+     '            left_out.append(f"{path.name}: it holds no {fault_runs.RUN_FILE}")', "            pass", False),
+    ("the report does not look inside a suite's folder", "src/klaxon/evaluation.py",
+     "        elif (path / SUITE_FILE).is_file():", "        elif False:", False),
+    ("the report drops what a suite did not run", "src/klaxon/evaluation.py",
+     '        "not_run": list(saved.get("not_run") or []),', '        "not_run": [],', False),
+    ("the report mixes week 3, week 4 and the evaluation in one row", "src/klaxon/evaluation.py",
+     '(row["model"] or "unknown", row["case"], row["mode"])', '(row["model"] or "unknown", row["case"], "all")', False),
+    ("the report's Diagnosed column counts every run that ran", "src/klaxon/evaluation.py",
+     "_of(entry['diagnosed'], entry['ran'])", "_of(entry['ran'], entry['ran'])", False),
+    ("the report never compares the model that answered with the one asked for", "src/klaxon/evaluation.py",
+     '        "answered_by_another_model": bool(asked_for) and any(not m.startswith(asked_for) for m in used["models"]),',
+     '        "answered_by_another_model": False,', False),
+    ("an interrupted run does not stop the suite", "src/klaxon/evaluation.py",
+     '        record.stopped, interrupted = "interrupted" + (f" ({exc})" if str(exc) else ""), True',
+     '        record.stopped, interrupted = "interrupted" + (f" ({exc})" if str(exc) else ""), False', False),
+    ("a run's error is not said as an error", "src/klaxon/evaluation.py",
+     '        record.stopped = f"error: {type(exc).__name__}: {clean_text(str(exc), 300)}"',
+     '        record.stopped = f"broke: {type(exc).__name__}: {clean_text(str(exc), 300)}"', False),
+    ("an interrupted suite exits 1", "src/klaxon/evaluation.py",
+     '        return 130\n    return 1 if done["stopped"] else 0', '        return 1\n    return 1 if done["stopped"] else 0', False),
+    ("a run's rerun command leaves out its seed", "src/klaxon/evaluation.py",
+     '    argv = ["run", "--model", model, "--cases", case.name, "--seeds", str(seed)]',
+     '    argv = ["run", "--model", model, "--cases", case.name]', False),
+    ("a case listed twice runs twice", "src/klaxon/evaluation.py",
+     "    if not names or len(set(names)) != len(names):", "    if not names:", False),
+    ("an empty case list makes an empty suite", "src/klaxon/evaluation.py",
+     "    if not names or len(set(names)) != len(names):", "    if len(set(names)) != len(names):", False),
+    ("a false alarm's offer goes unsaid", "src/klaxon/evaluation.py",
+     "        said.append(fault_runs.EVALUATION_OFFERED)", "        pass", False),
+    ("a simulated answer is recorded as the server's", A + "mcp_client.py",
+     '        if result.simulated_by is not None:  # the server was not asked: say who answered\n'
+     '            record["simulated_by"] = result.simulated_by\n', "", False),
+    ("an evaluation run's action is said to run through the gate", "src/klaxon/fault_runs.py",
+     '                        " (an evaluation run: planned by code, never run)"\n                        if record.case',
+     '                        " (an evaluation run: planned by code, never run)"\n                        if False', False),
+    ("the damage at the diagnosis is never printed", "src/klaxon/fault_runs.py",
+     '    ("at_diagnosis", "at the diagnosis"),  # an evaluation run\'s (week 5): whatever the diagnosis names\n', "", False),
+    ("an evaluation run stopped in its gate is said to have stopped at the approval gate", "src/klaxon/fault_runs.py",
+     '        where = "its gate, which only plans" if record.case is not None else "the approval gate"',
+     '        where = "the approval gate"', False),
     ("a report names its folders by this Mac's home folder", "src/klaxon/evaluation.py",
      '        "from": [shown(path) for path in paths],', '        "from": [str(path) for path in paths],', False),
 ]
+
+
+def select(with_stack: bool, stack_only: bool, only: list[str]) -> list[tuple]:
+    """The mutants to run: the offline ones, with the stack's too (with_stack), or the stack's alone (stack_only); of
+    the files named in only, when it names any."""
+    with_stack = with_stack or stack_only
+    return [m for m in MUTANTS if (with_stack or not m[4]) and (m[4] or not stack_only) and (not only or m[1] in only)]
 
 
 def run_tests(work: Path, python: str, integration: bool) -> subprocess.CompletedProcess:
@@ -2513,8 +2582,9 @@ def main() -> int:
     if work.exists():
         shutil.rmtree(work)
     work.mkdir(parents=True)
-    # evidence: a test replays the first live run of the loop from its recording (week 3, item 3).
-    for item in ("src", "tests", "docker", "evidence", "compose.yaml", "pyproject.toml", "Makefile"):
+    # evidence: a test replays the first live run of the loop from its recording (week 3, item 3). scripts: a test
+    # calls this runner's own command line (week 5).
+    for item in ("src", "tests", "docker", "evidence", "scripts", "compose.yaml", "pyproject.toml", "Makefile"):
         src = repo / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
 
@@ -2524,7 +2594,7 @@ def main() -> int:
     )
     assert str(work) in check.stdout, f"the copy is not the code under test: {check.stdout}"
 
-    selected = [m for m in MUTANTS if (with_stack or not m[4]) and (m[4] or not stack_only) and (not only or m[1] in only)]
+    selected = select(with_stack, stack_only, only)
     # A mutant that does not compile would be "caught" by any test that imports its module: say so, and stop.
     broken = []
     for name, file, old, new, _ in selected:

@@ -2,6 +2,7 @@
 
 Week 4 found that --help stopped with an IndexError: the script read its first two arguments as folders."""
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -33,8 +34,31 @@ def test_without_a_repo_and_a_work_folder_first_it_says_how_to_call_it(args):
     assert "Traceback" not in done.stderr
 
 
-def test_the_stack_only_runs_leave_out_every_offline_mutant(tmp_path):
-    # evaluation.py has offline mutants only: with --stack-only, none is run, and no suite either (no stack needed).
-    done = run(str(SCRIPT.parents[1]), str(tmp_path / "work"), "--stack-only", "--only", "src/klaxon/evaluation.py")
-    assert done.returncode == 0, done.stdout + done.stderr
-    assert done.stdout.strip() == "0 of 0 deliberate breaks caught"
+def load_runner():
+    spec = importlib.util.spec_from_file_location("mutation_check", SCRIPT)
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    return runner
+
+
+def test_the_stack_only_runs_leave_out_every_offline_mutant():
+    runner = load_runner()
+    stack = runner.select(True, True, [])
+    assert stack and all(m[4] for m in stack) and len(stack) == sum(1 for m in runner.MUTANTS if m[4])
+    assert runner.select(True, True, ["src/klaxon/evaluation.py"]) == []  # a file with offline mutants only
+    assert runner.select(False, True, []) == stack  # --stack-only needs no --with-stack
+
+
+def test_the_runner_picks_the_offline_mutants_or_all_of_them_and_only_the_files_named():
+    runner = load_runner()
+    offline = runner.select(False, False, [])
+    assert offline and not any(m[4] for m in offline)
+    assert runner.select(True, False, []) == runner.MUTANTS
+    named = runner.select(False, False, ["Makefile"])
+    assert named and {m[1] for m in named} == {"Makefile"}
+
+
+def test_the_runners_copy_holds_what_its_tests_need():
+    # The week 5 review's H1: this file's tests call the runner's own script, so the copy must hold scripts/.
+    text = SCRIPT.read_text()
+    assert '"scripts", "compose.yaml"' in text

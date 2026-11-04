@@ -107,8 +107,8 @@ QUIET_EVALUATIONS = 2  # before the fault: every rule read, none holding, this m
 ALERT_WITHIN_SECONDS = 180.0  # after the injection: no alert by then, and the run stops without a loop
 AFTER_SECONDS = 90.0  # after clearing: long enough for the rules' one-minute windows to move past the fault
 EVALUATION_OFFERED = (
-    ", offered one write action (rollback_deploy), as in week 4; in this evaluation run its gate only plans an action"
-    " the diagnosis names: nobody is asked, and nothing runs"
+    "It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an"
+    " action the diagnosis names: nobody is asked, and nothing runs."
 )
 
 
@@ -521,8 +521,8 @@ def label(record: Record) -> str:
             if record.gated
             else ""
         )
-        if record.case is not None:  # an evaluation run (week 5): its gate plans, and asks nobody
-            offered = EVALUATION_OFFERED
+        if record.case is not None:  # an evaluation run (week 5): its offer is said apart, below
+            offered = ""
         if record.loop is None:
             said.append(
                 f"Klaxon's loop started live on it, through Claude Code on Aravind's seat{offered}, and did not finish:"
@@ -534,6 +534,8 @@ def label(record: Record) -> str:
                 f" {record.loop['reason']} after {record.loop['steps']} steps; any reply it got is a recorded response,"
                 " not a simulation."
             )
+        if record.case is not None:
+            said.append(EVALUATION_OFFERED)
     if record.comparison is not None and record.comparison["verdict"] != "no diagnosis":
         said.append(
             "The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or"
@@ -549,7 +551,8 @@ def _gated_label(record: Record) -> list[str]:
     said = []
     outcome = record.gate
     if outcome is None and "gate_began_at" in record.timings:
-        said.append(f"Klaxon took its diagnosis to the approval gate, and the run stopped there: {record.stopped}.")
+        where = "its gate, which only plans" if record.case is not None else "the approval gate"
+        said.append(f"Klaxon took its diagnosis to {where}, and the run stopped there: {record.stopped}.")
     elif outcome is not None:
         result, detail = outcome["result"], clean_text(outcome["detail"], 300)
         asked = "Klaxon asked at the approval gate to act on its diagnosis"
@@ -636,6 +639,7 @@ def damage_line(entry: Mapping) -> str:
 
 DAMAGE_POINTS = (
     ("at_alert", "at the alert"),
+    ("at_diagnosis", "at the diagnosis"),  # an evaluation run's (week 5): whatever the diagnosis names
     ("at_request", "at the request"),
     ("at_action", "at the action"),
     ("after_action", "after it"),
@@ -733,7 +737,12 @@ def render(record: Record) -> str:
             if named is not None:
                 lines.append(
                     f"  action it names: {clean_text(named['name'], 64)}"
-                    f" {clean_text(json.dumps(named['arguments']), 300)} (it runs only through the gate)"
+                    f" {clean_text(json.dumps(named['arguments']), 300)}"
+                    + (
+                        " (an evaluation run: planned by code, never run)"
+                        if record.case
+                        else " (it runs only through the gate)"
+                    )
                 )
     if record.comparison is not None:
         lines += ["", *grading.render(record.comparison)]
