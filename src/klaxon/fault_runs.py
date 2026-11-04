@@ -106,6 +106,10 @@ WARMUP_SECONDS = 60.0  # traffic before the rules are read: their windows are a 
 QUIET_EVALUATIONS = 2  # before the fault: every rule read, none holding, this many evaluations in a row
 ALERT_WITHIN_SECONDS = 180.0  # after the injection: no alert by then, and the run stops without a loop
 AFTER_SECONDS = 90.0  # after clearing: long enough for the rules' one-minute windows to move past the fault
+EVALUATION_OFFERED = (
+    ", offered one write action (rollback_deploy), as in week 4; in this evaluation run its gate only plans an action"
+    " the diagnosis names: nobody is asked, and nothing runs"
+)
 
 
 @dataclass
@@ -135,6 +139,9 @@ class Record:
     damage: dict = field(default_factory=dict)
     deploys: list[dict] | None = None
     removed_by: str | None = None
+    # An evaluation run (week 5, klaxon.evaluation): its case (name, kind, right answer, any tool withheld), seed and
+    # model. Its gate plans any action the diagnosis names, and nobody is asked: nothing runs.
+    case: dict | None = None
 
 
 @dataclass
@@ -506,12 +513,16 @@ def label(record: Record) -> str:
     said.append("The alert was raised by klaxon.alerts from what the stack showed.")
     if record.rehearsal:
         said.append(REHEARSAL)
+    if record.case is not None and record.case.get("withheld") and "loop_started_at" in record.timings:
+        said.append(withheld_sentence(record.case["withheld"]))
     if "loop_started_at" in record.timings:
         offered = (
             ", offered one write action (rollback_deploy), which runs only if a person approves it at the gate"
             if record.gated
             else ""
         )
+        if record.case is not None:  # an evaluation run (week 5): its gate plans, and asks nobody
+            offered = EVALUATION_OFFERED
         if record.loop is None:
             said.append(
                 f"Klaxon's loop started live on it, through Claude Code on Aravind's seat{offered}, and did not finish:"
@@ -554,6 +565,10 @@ def _gated_label(record: Record) -> list[str]:
             {
                 "no action": "Its diagnosis named no action, so nobody was asked to approve one.",
                 "refused": f"Its diagnosis named an action that code refused to plan, so nobody was asked: {detail}.",
+                "not asked": (
+                    f"Code planned the action its diagnosis named ({detail}); in an evaluation run nobody is asked, and"
+                    " nothing ran."
+                ),
                 "expired": f"{asked}; nobody answered within 10 minutes, which counts as denied, and nothing ran.",
                 "denied": f"{asked}; the request was denied ({detail}), and nothing ran.",
                 "not run": f"{asked}; the request was approved {how}, but the action did not run: {detail}.",
@@ -583,6 +598,15 @@ def _gated_label(record: Record) -> list[str]:
     if record.removed_by is not None:
         said.append(removed_sentence(record.removed_by))
     return said
+
+
+def withheld_sentence(withheld: Mapping[str, str]) -> str:
+    """An evaluation case's tools that the harness withheld (week 5), in a sentence: an outage it simulates."""
+    named = ", ".join(sorted(withheld))
+    return (
+        f"The harness withheld {named}: each call to it got the error its source gives when it does not answer, and"
+        " never reached that source (an outage simulated for this case; the stack itself was not touched)."
+    )
 
 
 NOT_KNOWN = "not known: "
@@ -667,6 +691,9 @@ def render(record: Record) -> str:
     )
     if record.rehearsal:
         title = "Klaxon week 4: a rehearsal of a fault, with no model"
+    if record.case is not None:
+        what = "a rehearsal of" if record.rehearsal else "an evaluation run on"
+        title = f"Klaxon week 5: {what} case {record.case['name']}, seed {record.case['seed']}, a fault"
     lines = [
         f"{title}: {f['name']}",
         label(record),

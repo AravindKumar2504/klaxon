@@ -803,6 +803,16 @@ def test_a_draft_that_cannot_start_writes_nothing(tmp_path, capsys):
     assert "it is not a gated run" in capsys.readouterr().err
 
 
+def test_an_evaluation_run_has_no_postmortem(tmp_path, capsys):
+    """Week 5: an evaluation run's gate only plans, and asks nobody, so no person decided anything and nothing ran."""
+    folder = copy_run("duplicate-delivery, approved", tmp_path)
+    saved = json.loads((folder / "run.json").read_text())
+    (folder / "run.json").write_text(json.dumps(saved | {"case": {"name": "duplicate-delivery", "seed": 7}}))
+    with pytest.raises(postmortem.NoPostmortem, match="it is an evaluation run: nobody was asked and nothing ran"):
+        postmortem.facts(folder)
+    assert postmortem.main(["draft", str(folder)]) == 2 and "it is an evaluation run" in capsys.readouterr().err
+
+
 def test_the_facts_command_prints_the_facts_and_the_prompt_and_writes_nothing(tmp_path, capsys):
     folder = copy_run("duplicate-delivery, approved", tmp_path)
     files = sorted(path.name for path in folder.iterdir())

@@ -808,15 +808,17 @@ def investigate_live(
     model_id: str,
     binary: Path,
     actions: Sequence[ActionSpec] = (),
+    tool_client: ToolClient | None = None,
 ) -> RunResult:
     """One live run into folder: Claude on Aravind's seat, Klaxon's tools through its MCP server. Every reply and
     every tool result is recorded before the loop uses it, with header at the top of each file. actions: the write
-    actions its diagnosis may name (none by default)."""
+    actions its diagnosis may name (none by default). tool_client: the tools' client, Klaxon's MCP server by default;
+    an evaluation run's case may wrap it (klaxon.evaluation.Withheld), and its results are recorded all the same."""
     from klaxon.agent.claude_code import ClaudeCode
     from klaxon.agent.model import Recording
 
     model = ClaudeCode(Recording(folder / RECORDING, dict(header)), model=model_id, binary=binary)
-    tools = RecordedTools(McpClient(), folder / TOOL_RESULTS, header)
+    tools = RecordedTools(McpClient() if tool_client is None else tool_client, folder / TOOL_RESULTS, header)
     return investigate(alert, model, tools, folder / TRACE, budgets, extra={"run": dict(header)}, actions=actions)
 
 

@@ -27,7 +27,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
-	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem
+	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem eval-cases eval eval-report rehearse-case
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -49,7 +49,7 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/agent tests/agent src/klaxon/alerts.py src/klaxon/fault_runs.py src/klaxon/grading.py \
 		tests/test_alerts.py tests/test_fault_runs.py tests/test_grading.py tests/conftest.py \
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
-		tests/test_mutation_check.py
+		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -124,6 +124,18 @@ rehearse-fault: ## a fault under traffic and the alert rules, no model: what the
 
 grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline: make grade-run RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.fault_runs grade "$$RUN"
+
+eval-cases: ## the evaluation's eight cases, each with its right answer and the action that fits; calls nothing (week 5)
+	$(PY) -m klaxon.evaluation cases
+
+eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9
+	$(PY) -m klaxon.evaluation run $${MODEL:+--model "$$MODEL"} $${CASES:+--cases "$$CASES"} $${SEEDS:+--seeds "$$SEEDS"}
+
+eval-report: ## the evaluation's report, worked out offline from saved runs: make eval-report RUNS='evidence/week5/<suite folder> evidence/week4'
+	$(PY) -m klaxon.evaluation report $$RUNS
+
+rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week5/ (his OK first): make rehearse-case CASE=false-alarm
+	$(PY) -m klaxon.evaluation rehearse "$$CASE" $${SEED:+--seed "$$SEED"}
 
 postmortem-facts: ## the facts of a gated run's postmortem, filled in by code, and the exact prompt; calls nothing: make postmortem-facts RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.agent.postmortem facts "$$RUN"

@@ -23,6 +23,10 @@ wrote, and the run the SHA-256 of the one it took: a decision the run took that 
 was not written by `make approve`, unless the log too was written by hand, or `make approve` was stopped between
 writing the decision and its line.
 
+An evaluation run (week 5, klaxon.evaluation) uses plan_only() instead: step 1, and nothing after it. The action is
+planned as here, the damage read as before a request, and the log says "not asked": no request is saved, nobody is
+asked, and nothing runs. The evaluation measures what Klaxon would ask for, and what code refuses to plan.
+
 Its limit, said plainly: any process running as Aravind can approve. It can write the decision file, run
 `make approve` in a pseudo-terminal it makes (the tests do), type into his terminal (tools that drive a terminal
 can, Claude's among them), change this code, or write the log. That Claude never approves is a rule; the log is a
@@ -82,7 +86,7 @@ class Decision:
 class Outcome:
     """What came of a diagnosis at the gate."""
 
-    result: str  # no action, refused, denied, expired, not run, failed, done
+    result: str  # no action, refused, denied, expired, not run, failed, done; not asked (an evaluation run)
     detail: str
     request_id: str | None = None
     deploy: dict | None = None
@@ -366,17 +370,9 @@ def act(
     before_asking: called once a plan is made, right before its request is (week 4, item 2: the run reads the
     money then, so the evidence has the damage at the request)."""
     folder = Path(folder)
-    named = diagnosis.fix_action
-    if named is None:
-        log(folder, "no action", now, why="the diagnosis names no action")
-        return Outcome("no action", "the diagnosis names no action")
-    try:
-        planned = actions.plan(named.name, named.arguments, deployer)
-    except ActionRefused as exc:
-        log(folder, "refused", now, action=named.name, arguments=named.arguments, why=str(exc))
-        return Outcome("refused", str(exc))
-    if before_asking is not None:
-        before_asking()
+    planned = _planned(folder, diagnosis, deployer, now, before_asking)
+    if isinstance(planned, Outcome):  # no action named, or a plan refused: nobody is asked
+        return planned
     request = make_request(planned, diagnosis, folder, alert, now, timeout)
     if _create_once(folder / REQUEST, request) is None:
         raise GateError("this folder already holds an approval request: one request per run")
@@ -413,6 +409,52 @@ def act(
         raise
     log(folder, "done", now, request=request["id"], deploy=asdict(record))
     return Outcome("done", planned.change, request["id"], asdict(record))
+
+
+def _planned(
+    folder: Path,
+    diagnosis: Diagnosis,
+    deployer: Deployer,
+    now: Callable[[], float],
+    before_asking: Callable[[], None] | None,
+) -> Plan | Outcome:
+    """The gate's first steps, for act() and plan_only() alike: the plan of the action the diagnosis names, made by
+    code, or what came of it when there is none to ask about. before_asking is called once a plan is made."""
+    named = diagnosis.fix_action
+    if named is None:
+        log(folder, "no action", now, why="the diagnosis names no action")
+        return Outcome("no action", "the diagnosis names no action")
+    try:
+        planned = actions.plan(named.name, named.arguments, deployer)
+    except ActionRefused as exc:
+        log(folder, "refused", now, action=named.name, arguments=named.arguments, why=str(exc))
+        return Outcome("refused", str(exc))
+    if before_asking is not None:
+        before_asking()
+    return planned
+
+
+NOT_ASKED = "an evaluation run: nobody is asked, and nothing runs"
+
+
+def plan_only(
+    folder: Path,
+    diagnosis: Diagnosis,
+    deployer: Deployer,
+    now: Callable[[], float] = time.time,
+    before_asking: Callable[[], None] | None = None,
+) -> Outcome:
+    """The gate of an evaluation run (week 5): the action the diagnosis names is planned by code, as act() plans it,
+    and that is all. No request is saved, nobody is asked, and nothing runs, whatever the plan: a plan made is "not
+    asked", and the log says what would have been asked. before_asking: called once a plan is made, as in act(), so
+    the evidence has the damage at the point a request would have been made."""
+    folder = Path(folder)
+    planned = _planned(folder, diagnosis, deployer, now, before_asking)
+    if isinstance(planned, Outcome):
+        return planned
+    action = {"name": planned.action, "arguments": planned.arguments}
+    log(folder, "not asked", now, action=action, change=planned.change, undo=planned.undo, why=NOT_ASKED)
+    return Outcome("not asked", planned.change)
 
 
 STOPPED = "the run stopped before it took a decision"

@@ -948,6 +948,10 @@ def _load(folder: Path) -> dict:
         raise NoPostmortem(f"its {RUN_FILE} is not a run's record")
     if saved.get("gated") is not True:
         raise NoPostmortem("it is not a gated run: no action was offered, so no gate, action or verification to report")
+    if saved.get("case") is not None:  # week 5's evaluation: its gate only plans
+        raise NoPostmortem(
+            "it is an evaluation run: nobody was asked and nothing ran, so there is no response to report"
+        )
     loop_run = saved.get("loop")
     if not isinstance(saved.get("gate"), dict) or not isinstance(loop_run, dict) or not loop_run.get("diagnosis"):
         raise NoPostmortem(f"the run never reached the approval gate: {_text(saved.get('stopped'), 300)}")
