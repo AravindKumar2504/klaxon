@@ -48,7 +48,8 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/faults.py src/klaxon/demo/fault_scenario.py src/klaxon/demo/lost_refund.py tests/test_refunds_match_provider.py \
 		src/klaxon/agent tests/agent src/klaxon/alerts.py src/klaxon/fault_runs.py src/klaxon/grading.py \
 		tests/test_alerts.py tests/test_fault_runs.py tests/test_grading.py tests/conftest.py \
-		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py
+		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
+		tests/test_mutation_check.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -72,7 +73,7 @@ logs: ## follow every service's logs
 test-integration: ## tests against the running stack's PostgreSQL and Kafka (make up first)
 	$(PY) -m pytest -q -m integration
 
-e2e: ## reset the stack and drive it end to end (about five minutes)
+e2e: ## reset the stack and drive it end to end (about ten minutes)
 	$(PY) -m pytest -q -m e2e
 
 mutants: ## break the code on purpose, on a copy, and check the tests notice (make up first)

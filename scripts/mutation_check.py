@@ -2366,7 +2366,16 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
         return subprocess.CompletedProcess(args, 1, "FAILED (the tests did not end within 600 s)", "")
 
 
+USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack] [--only FILE ...]"
+
+
 def main() -> int:
+    if "-h" in sys.argv[1:] or "--help" in sys.argv[1:]:
+        print(__doc__)
+        return 0
+    if len(sys.argv) < 3 or any(arg.startswith("-") for arg in sys.argv[1:3]):  # REPO and WORKDIR come first
+        print(USAGE, file=sys.stderr)
+        return 2
     repo, work = Path(sys.argv[1]), Path(sys.argv[2])
     with_stack = "--with-stack" in sys.argv
     only = sys.argv[sys.argv.index("--only") + 1 :] if "--only" in sys.argv else []
