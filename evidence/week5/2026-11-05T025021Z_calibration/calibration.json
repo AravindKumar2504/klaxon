@@ -1,0 +1,1529 @@
+{
+  "label": "The judge's calibration on the grading tests' sentences (klaxon.calibration): one recorded call per sentence, each with the right answer of the system it was written for and the hypothesis alone. The sentences and their expected verdicts were written by Claude, for the tests (not by Klaxon, and not by Aravind); the judgments are recorded responses, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "sentences": [
+    {
+      "sentence": 1,
+      "name": "duplicate-delivery",
+      "system": 1,
+      "hypothesis": "A redeploy of the ledger consumer switched it to a handler without dedupe, so every webhook the provider redelivers after a lost ack is booked a second time.",
+      "expected": "names the cause",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the ledger consumer deployed without its dedupe handler, so each webhook redelivered after a lost acknowledgement is booked twice; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:24.381Z",
+          "sha256": "876de8e589840ce70462ce390d730835639dbfb54a88b9ce1e80ae04f0ea8aeb"
+        },
+        "call": {
+          "reply_sha256": "876de8e589840ce70462ce390d730835639dbfb54a88b9ce1e80ae04f0ea8aeb",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 2,
+      "name": "duplicate-delivery",
+      "system": 1,
+      "hypothesis": "The ledger consumer no longer checks idempotency keys, so some events are posted twice.",
+      "expected": "partly",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the ledger consumer's missing dedupe as what books events twice and implies a recent change, though it does not mention the deploy or the provider's retries, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:29.729Z",
+          "sha256": "a016c7a95913d8c814689fcb8df3e9c73b4fa8a6cf1959e0be4e164ffc742d1a"
+        },
+        "call": {
+          "reply_sha256": "a016c7a95913d8c814689fcb8df3e9c73b4fa8a6cf1959e0be4e164ffc742d1a",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 3,
+      "name": "duplicate-delivery",
+      "system": 1,
+      "hypothesis": "The ledger is posting some events twice.",
+      "expected": "misses the cause",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It only restates the symptom of double postings and never names the deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive) that books redelivered webhooks a second time.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:31.957Z",
+          "sha256": "782d39af7431f1b90626de13acc6d111b15edcd9a740902f2da8c0b062075b9e"
+        },
+        "call": {
+          "reply_sha256": "782d39af7431f1b90626de13acc6d111b15edcd9a740902f2da8c0b062075b9e",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 4,
+      "name": "poison-message",
+      "system": 1,
+      "hypothesis": "One malformed payment.updated event is retried forever by the ledger consumer (BAD_EVENTS=retry after a deploy), so nothing behind it is booked.",
+      "expected": "names the cause",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the deploy that set BAD_EVENTS=retry and the one malformed payment.updated event the ledger consumer retries forever, blocking all booking behind it, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:34.241Z",
+          "sha256": "c2dcbca764cc29d4c8de4e6f20f983e0eae81d22206fc481ba18cf3b79130915"
+        },
+        "call": {
+          "reply_sha256": "c2dcbca764cc29d4c8de4e6f20f983e0eae81d22206fc481ba18cf3b79130915",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 5,
+      "name": "poison-message",
+      "system": 1,
+      "hypothesis": "The ledger consumer keeps retrying and is stuck.",
+      "expected": "partly",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It places the trouble in the ledger consumer retrying and stuck, but leaves out the deploy that set retry-forever and the unreadable payment.updated event with a decimal-string amount, and gives no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:36.663Z",
+          "sha256": "ba344194975c302fff62172d3d4c8cc380d197549be90256342ca224d3081647"
+        },
+        "call": {
+          "reply_sha256": "ba344194975c302fff62172d3d4c8cc380d197549be90256342ca224d3081647",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 6,
+      "name": "poison-message",
+      "system": 1,
+      "hypothesis": "The ledger consumer has stalled and its lag grows.",
+      "expected": "misses the cause",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It only restates the symptom of a stalled ledger consumer with growing lag, never naming the retry-forever deploy (BAD_EVENTS=retry) or the poison payment.updated event with a decimal-string amount, and gives no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:38.954Z",
+          "sha256": "227ac659192168080a5d1d43128043de875e4755ec394a792649e5b4bbd892f1"
+        },
+        "call": {
+          "reply_sha256": "227ac659192168080a5d1d43128043de875e4755ec394a792649e5b4bbd892f1",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 7,
+      "name": "provider-outage",
+      "system": 1,
+      "hypothesis": "The payment provider is timing out, and with no circuit breaker each payment waits through three attempts.",
+      "expected": "names the cause",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the provider timing out and the missing circuit breaker forcing three waited attempts per payment, but leaves out how that fills the API's worker threads and slows even its health checks.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:46.896Z",
+          "sha256": "132ff2cf36fd2f8988cd02ef2c2429a6c3f6c4d7b9752e7774f84d2ea4730d69"
+        },
+        "call": {
+          "reply_sha256": "132ff2cf36fd2f8988cd02ef2c2429a6c3f6c4d7b9752e7774f84d2ea4730d69",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 8,
+      "name": "provider-outage",
+      "system": 1,
+      "hypothesis": "The provider is down.",
+      "expected": "partly",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It blames the provider, but leaves out the hang-then-503 behavior and the missing circuit breaker that make retries fill the API's worker threads and slow its health checks.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:49.477Z",
+          "sha256": "6afc79b723754d0acfb4cbbbb8e663beea0c3961d9c9b3f316c7de6dfbdeef90"
+        },
+        "call": {
+          "reply_sha256": "6afc79b723754d0acfb4cbbbb8e663beea0c3961d9c9b3f316c7de6dfbdeef90",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 9,
+      "name": "provider-outage",
+      "system": 1,
+      "hypothesis": "The database connection pool is exhausted.",
+      "expected": "misses the cause",
+      "source": "version 1's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames an exhausted database connection pool, while the cause is the provider's hanging charge and refund API, with no circuit breaker, filling the payments API's worker threads; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:51.815Z",
+          "sha256": "de90e8d9e4946424bdd867312ffb067466999202c9c6b942316e69c04df46296"
+        },
+        "call": {
+          "reply_sha256": "de90e8d9e4946424bdd867312ffb067466999202c9c6b942316e69c04df46296",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 10,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "The payment provider hangs: our calls to it time out, the circuit breaker opened, and payments-api now fails fast with 503.",
+      "expected": "names the cause",
+      "source": "version 2's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the provider hanging as the cause and the mechanism (timeouts, breaker opening, payments-api failing fast with 503), though without the retry counts or trial-call timing, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:54.914Z",
+          "sha256": "5e27d52a4d5c661a1b759624df57d505d616f9064e35731804bbebb6ea6ba813"
+        },
+        "call": {
+          "reply_sha256": "5e27d52a4d5c661a1b759624df57d505d616f9064e35731804bbebb6ea6ba813",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 11,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "The provider is unavailable, and our breaker is open.",
+      "expected": "names the cause",
+      "source": "version 2's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It rightly blames the provider and notes the open circuit breaker, but never says the provider hangs, calls time out, or that the breaker answers 503 at once, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:50:59.057Z",
+          "sha256": "2e4d9e3b956da6915975b58001918822f9d9e4354c071fb720a20da9fff0b9de"
+        },
+        "call": {
+          "reply_sha256": "2e4d9e3b956da6915975b58001918822f9d9e4354c071fb720a20da9fff0b9de",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 12,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "The provider is down.",
+      "expected": "partly",
+      "source": "version 2's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the failing provider as the place but not what is wrong there (hanging 5 s then 503) or how timeouts and the circuit breaker opening produce the fast 503 'outcome unknown' answers, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:01.417Z",
+          "sha256": "ffc6a2e123a68a803862fda3c2ad364a4ad460b2d801a7e6ae2ef39066e7891e"
+        },
+        "call": {
+          "reply_sha256": "ffc6a2e123a68a803862fda3c2ad364a4ad460b2d801a7e6ae2ef39066e7891e",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 13,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "payments-api short-circuits every payment with a 503.",
+      "expected": "partly",
+      "source": "version 2's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It only says payments-api short-circuits payments with a 503, which restates the symptom, and never names the hanging provider API whose timeouts opened the circuit breaker.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:04.022Z",
+          "sha256": "43b56deb032378ff5d13ca98417ca960a728fdc62b2a66db954be1127a637142"
+        },
+        "call": {
+          "reply_sha256": "43b56deb032378ff5d13ca98417ca960a728fdc62b2a66db954be1127a637142",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 14,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "The database connection pool is exhausted.",
+      "expected": "misses the cause",
+      "source": "version 2's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames an exhausted database connection pool, whereas the cause is the provider's charge and refund API hanging, so our calls time out until the circuit breaker opens and fails fast.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:06.464Z",
+          "sha256": "2c0d0f4004e4fde55ca6b60192201f9c2d17f5886ac7161d82328e8ef5208274"
+        },
+        "call": {
+          "reply_sha256": "2c0d0f4004e4fde55ca6b60192201f9c2d17f5886ac7161d82328e8ef5208274",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 15,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "The provider times out and payments-api waits through three attempts, its workers tied up.",
+      "expected": "partly",
+      "source": "version 2's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the provider timing out and the three attempts per call, but leaves out the circuit breaker that opens after 5 failed calls and then fails fast with 503, and says workers stay tied up instead.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:09.157Z",
+          "sha256": "1e99637a15d5534a9005540775f2b3f7681fe78a48c797cc1d84543c669bb2f6"
+        },
+        "call": {
+          "reply_sha256": "1e99637a15d5534a9005540775f2b3f7681fe78a48c797cc1d84543c669bb2f6",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 16,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "A deploy of payments-api reads our amounts, already in cents, as dollars, so the provider charges each customer 100 times the amount.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments-api deploy that reads amounts already in cents as dollars, making the provider charge 100 times the amount, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:11.998Z",
+          "sha256": "84c5f58bb19fd4ff5dacaff2033222f93ba6eaf144f33cea42de1675b629e606"
+        },
+        "call": {
+          "reply_sha256": "84c5f58bb19fd4ff5dacaff2033222f93ba6eaf144f33cea42de1675b629e606",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 17,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "Since its deploy, payments-api sends 100x amounts: the provider's charges are 100x ours.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It ties the 100x provider charges to the payments-api deploy and notes our records are correct, but never names the money-unit bug (CHARGE_AMOUNT_UNIT=dollars, cents converted to cents again) that causes them.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:15.461Z",
+          "sha256": "6b6db24356ef1b26808596122e3723bbdfcec089e1fedef173246e381b364fa0"
+        },
+        "call": {
+          "reply_sha256": "6b6db24356ef1b26808596122e3723bbdfcec089e1fedef173246e381b364fa0",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 18,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "The payments-api deploy multiplies each amount by 100: each charge sent to the provider is 100x our recorded amount.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It places the fault in the payments-api deploy, says each amount is multiplied by 100, and says the provider charges 100x the correct recorded amount, which matches the unit bug; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:18.889Z",
+          "sha256": "e58f1c068c901a92a36b99eca526527385563fc95c41884fd6079bc7fb3018c5"
+        },
+        "call": {
+          "reply_sha256": "e58f1c068c901a92a36b99eca526527385563fc95c41884fd6079bc7fb3018c5",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 19,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "After the payments-api deploy (CHARGE_AMOUNT_UNIT=dollars), customers are charged 100 times the amount.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the payments-api deploy with CHARGE_AMOUNT_UNIT=dollars and the 100x charges, but does not explain that cent amounts are read as dollars and converted again, or that our records keep the right amount.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:23.287Z",
+          "sha256": "6374e9134887f0902c52380c8162527c1cc063a13cf625bde0701d1b804a812a"
+        },
+        "call": {
+          "reply_sha256": "6374e9134887f0902c52380c8162527c1cc063a13cf625bde0701d1b804a812a",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 20,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "payments-api has a money-unit bug since its deploy: the provider bills customers 100x.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments-api deploy's money-unit bug as the reason the provider charges customers 100 times the amount, which matches the right answer, though it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:26.494Z",
+          "sha256": "a6a4794dba35702eb54d0b84f232f7e305d6f855a9198ed6481c4f8894a65be1"
+        },
+        "call": {
+          "reply_sha256": "a6a4794dba35702eb54d0b84f232f7e305d6f855a9198ed6481c4f8894a65be1",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 21,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "The payments API now treats cents as dollars, so every charge is 100 times the payment amount.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments API reading cents as dollars, so every charge is 100 times the amount, though it never says this came from a deploy or the CHARGE_AMOUNT_UNIT setting, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:29.683Z",
+          "sha256": "99e1bb1dad5a5f426a6cf6aef9c911dbeb091379aedfdbdfb2ad5e363b9bcb33"
+        },
+        "call": {
+          "reply_sha256": "99e1bb1dad5a5f426a6cf6aef9c911dbeb091379aedfdbdfb2ad5e363b9bcb33",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 22,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "A deploy of the payments API converts amounts to cents twice; charges at the provider are 100x ours.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments API deploy that converts amounts to cents twice, so the provider charges 100 times our recorded amount, which matches the cause; it gives no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:31.982Z",
+          "sha256": "8a04616505c19950a964790e3da65f5fec7a431885e7271153ee48c7cf8a07af"
+        },
+        "call": {
+          "reply_sha256": "8a04616505c19950a964790e3da65f5fec7a431885e7271153ee48c7cf8a07af",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 23,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "Since its deploy, payments-api sends amount_cents*100 to the provider.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments-api deploy sending each cents amount multiplied by 100 to the provider, which is the money-unit bug causing the 100x charges, though it does not name the CHARGE_AMOUNT_UNIT setting and proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:37.870Z",
+          "sha256": "a94f6c9d94fb68f970919872115db1840930e0c7f222da24116f5a1bd0138f40"
+        },
+        "call": {
+          "reply_sha256": "a94f6c9d94fb68f970919872115db1840930e0c7f222da24116f5a1bd0138f40",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 24,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "The payments API reads cents as dollars: every customer is charged a hundredfold.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It places the fault in the payments API reading amounts already in cents as dollars, so every customer is charged 100 times, though it omits the deploy and the CHARGE_AMOUNT_UNIT setting and proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:41.305Z",
+          "sha256": "2c4c10ab547ddc626a6fc7aaec6a978022ca851fb884083b8f7f44118d0d429b"
+        },
+        "call": {
+          "reply_sha256": "2c4c10ab547ddc626a6fc7aaec6a978022ca851fb884083b8f7f44118d0d429b",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 25,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "The payments API's charge unit changed to dollars: the provider charged $4,500.00 for a $45.00 payment.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments API's charge unit switched to dollars, which made the provider charge 100 times the amount ($4,500.00 for $45.00), but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:44.459Z",
+          "sha256": "cae47614548e70269f8ce81f1ea5d59494db3512183098380792f4a0a3d484fd"
+        },
+        "call": {
+          "reply_sha256": "cae47614548e70269f8ce81f1ea5d59494db3512183098380792f4a0a3d484fd",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 26,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "payments-api overcharges customers.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It only restates the symptom that payments-api overcharges, without naming the deploy's CHARGE_AMOUNT_UNIT=dollars bug that converts cents to cents again, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:50.112Z",
+          "sha256": "8e56b0f1d1d7176fa9e86adca5762df7a4b0d1e92eb561b1b69b19319942fca8"
+        },
+        "call": {
+          "reply_sha256": "8e56b0f1d1d7176fa9e86adca5762df7a4b0d1e92eb561b1b69b19319942fca8",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 27,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "Our payments disagree with the provider's charges.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "The diagnosis only restates the symptom that our payments disagree with the provider's charges, without naming the deploy's CHARGE_AMOUNT_UNIT=dollars bug that charges 100 times the amount.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:52.446Z",
+          "sha256": "7b10200c4d66e62f5054f256ac5cd2708b6024baa014730713344525b483bb5f"
+        },
+        "call": {
+          "reply_sha256": "7b10200c4d66e62f5054f256ac5cd2708b6024baa014730713344525b483bb5f",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 28,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "The payment confirmer converts amounts to dollars and fails a unit test.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a payment confirmer that converts amounts to dollars and fails a unit test, not the payments API deploy with CHARGE_AMOUNT_UNIT=dollars that charges customers 100 times the amount, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:54.799Z",
+          "sha256": "302db9716aa692d54e0f467ab2233ed537b9f6867b204d183d9f9cba0ee22d8c"
+        },
+        "call": {
+          "reply_sha256": "302db9716aa692d54e0f467ab2233ed537b9f6867b204d183d9f9cba0ee22d8c",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 29,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "The payments API has a unit test failure.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a unit test failure, and never names the deploy setting CHARGE_AMOUNT_UNIT=dollars that turns amounts already in cents into cents again and charges customers 100 times the amount.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:51:57.390Z",
+          "sha256": "7ff2823cfeaa91a6b124341fbe160cae6c6b5dbe57f41120578062e12a93bc9b"
+        },
+        "call": {
+          "reply_sha256": "7ff2823cfeaa91a6b124341fbe160cae6c6b5dbe57f41120578062e12a93bc9b",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 30,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The webhook receiver was deployed with a rotated secret the provider does not sign with, so it refuses every webhook with a 400.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names a webhook receiver deploy with a rotated secret the provider does not sign with, causing every webhook to be refused with a 400, though it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:00.597Z",
+          "sha256": "79de990569af0f2f025723ee65d2de4203912c0d373a585044bbda567bdc8ad4"
+        },
+        "call": {
+          "reply_sha256": "79de990569af0f2f025723ee65d2de4203912c0d373a585044bbda567bdc8ad4",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 31,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "A deploy rotated our webhook secret on the receiver only; the provider still signs with the old one, so every signature check fails.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It correctly names a deploy that rotated the webhook secret on the receiver while the provider still signs with the old one, so every signature check fails; it gives no proposed fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:03.426Z",
+          "sha256": "4024874eb6b0cd76de154521472ae61acadf6f1a60403fa5531841acea07ba84"
+        },
+        "call": {
+          "reply_sha256": "4024874eb6b0cd76de154521472ae61acadf6f1a60403fa5531841acea07ba84",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 32,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The webhook receiver's signing secret was rotated, but the provider still signs with the old one, so every webhook fails its signature check and is refused.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It correctly names the webhook receiver's rotated secret that the provider does not sign with, so every webhook fails its signature check and is refused, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:06.429Z",
+          "sha256": "3f7ee8d8b405546c2a0f5f7324a7a8f0cb4407a71b408d3a9d40e57b23b38db0"
+        },
+        "call": {
+          "reply_sha256": "3f7ee8d8b405546c2a0f5f7324a7a8f0cb4407a71b408d3a9d40e57b23b38db0",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 33,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The secret was rotated on our side only: the webhook receiver now checks v2, and rejects every webhook the provider signs with v1.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the cause: the webhook receiver checks a rotated v2 secret while the provider still signs with v1, so every webhook is rejected; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:09.770Z",
+          "sha256": "7831ef5a7a65dd91dd0473debbbb67c0c7858f11a66e0d2701638b5fabe55b11"
+        },
+        "call": {
+          "reply_sha256": "7831ef5a7a65dd91dd0473debbbb67c0c7858f11a66e0d2701638b5fabe55b11",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 34,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "webhook-receiver was redeployed with WEBHOOK_SECRET_VERSION=v2; every webhook gets a 400 bad_signature.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the webhook-receiver redeploy with WEBHOOK_SECRET_VERSION=v2 and the 400 bad_signature refusals, but never says the provider signs with v1 or that refused webhooks keep any event from reaching Kafka, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:15.388Z",
+          "sha256": "0e6dfcd5eda1f4a32579ec9e0616961733aef5a93ca3356221d2af513c583417"
+        },
+        "call": {
+          "reply_sha256": "0e6dfcd5eda1f4a32579ec9e0616961733aef5a93ca3356221d2af513c583417",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 35,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "A recent config change moved the receiver to a new HMAC secret, so it rejects every webhook as a signature mismatch.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It correctly blames the receiver's move to a new HMAC secret, which makes every webhook fail its signature check, but it proposes no fix such as a rollback to v1 or accepting both versions.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:19.288Z",
+          "sha256": "494ad4b992c2c27806b067c2f531c9970d9d8a72e6bbb4ac2c8c30c1205d4f9e"
+        },
+        "call": {
+          "reply_sha256": "494ad4b992c2c27806b067c2f531c9970d9d8a72e6bbb4ac2c8c30c1205d4f9e",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 36,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "Webhooks fail their signature check at the receiver.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It places the failure in the receiver's signature check but never names the cause: the deploy that rotated the secret to v2 while the provider still signs with v1, so every webhook is refused and never reaches Kafka.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:22.159Z",
+          "sha256": "27f0c4ec7a83d944a14e758582a80cbb4507d091739d4cf4f3dce6962d41753a"
+        },
+        "call": {
+          "reply_sha256": "27f0c4ec7a83d944a14e758582a80cbb4507d091739d4cf4f3dce6962d41753a",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 37,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "Our books are behind the provider: its webhooks are not acknowledged.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It only restates the symptom (webhooks not acknowledged, books behind) without naming the rotated v2 secret deploy that fails every signature check, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:24.702Z",
+          "sha256": "a993c221fec425d63acb7bea7b4af0280ab1c50ff033c608ff84af4be677eeb9"
+        },
+        "call": {
+          "reply_sha256": "a993c221fec425d63acb7bea7b4af0280ab1c50ff033c608ff84af4be677eeb9",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 38,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The provider rotated its webhook signing key and our webhook receiver still checks the old one, so it rejects every webhook.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It is right that the receiver rejects every webhook on a signing-secret mismatch, but it reverses the cause: our deploy rotated to v2 while the provider still signs with v1, and it omits the 400s, the empty Kafka and the retries.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:28.930Z",
+          "sha256": "6516133d32d5431603f7dd184fa1d9a8bbc3a704636fcb6dea4a2d7f43381602"
+        },
+        "call": {
+          "reply_sha256": "6516133d32d5431603f7dd184fa1d9a8bbc3a704636fcb6dea4a2d7f43381602",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 39,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The receiver is down; 400 of the provider's webhooks are pending.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It says the receiver is down and misreads 400 as a count, never naming the rotated WEBHOOK_SECRET_VERSION=v2 that makes every signature check fail and refuse webhooks with 400, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:31.362Z",
+          "sha256": "32bcfc575399415949ca2af46b3cbc746a82c02ed47563e0cea73d00cc7ac0e5"
+        },
+        "call": {
+          "reply_sha256": "32bcfc575399415949ca2af46b3cbc746a82c02ed47563e0cea73d00cc7ac0e5",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 40,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "No recent deploy touched the receiver; the provider must have rotated its signing secret, so every signature check fails.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It rules out the actual cause, a receiver deploy with a rotated secret (v2) the provider does not sign with, and blames a provider-side rotation instead, getting only the failing signature check right, with no fix proposed.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:33.548Z",
+          "sha256": "855aad313b3bb97b0feaed87bba67bdfd8f366d2f0c1c63ea0eb1d3870f41a62"
+        },
+        "call": {
+          "reply_sha256": "855aad313b3bb97b0feaed87bba67bdfd8f366d2f0c1c63ea0eb1d3870f41a62",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 41,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The provider moved to v2 of its webhook format, and our receiver rejects the new payloads.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames the provider for moving to a v2 payload format, but the cause is our own receiver deploy with a rotated v2 secret while the provider still signs with v1, so signature checks fail; no fix is proposed.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:36.999Z",
+          "sha256": "8dfe38da5da9d1821c7b01bcee1017666c879219c98007468682a9934c215e32"
+        },
+        "call": {
+          "reply_sha256": "8dfe38da5da9d1821c7b01bcee1017666c879219c98007468682a9934c215e32",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 42,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The provider rotated its secret; our receiver's config still has the old key, so it rejects every webhook.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a provider-side secret rotation with our receiver still on the old key, but the right answer is the reverse: our deploy rotated the receiver to v2 while the provider still signs with v1.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:39.224Z",
+          "sha256": "c18f22f8f1a3836baa4c15765bb77056afa66503a23cdfd4b72d0749ddcc76d4"
+        },
+        "call": {
+          "reply_sha256": "c18f22f8f1a3836baa4c15765bb77056afa66503a23cdfd4b72d0749ddcc76d4",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 43,
+      "name": "secret-rotation",
+      "system": 3,
+      "hypothesis": "The provider rotated its signing key, so our secret is now stale and the receiver rejects every webhook.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It correctly says the receiver rejects every webhook on a secret mismatch, but blames the provider for rotating its key when our own deploy rotated the secret to v2, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:41.661Z",
+          "sha256": "842f4ddddf3ccbb7a1f63cc8e50ef1594bcf4163d63e25ded90bbe7ade94f929"
+        },
+        "call": {
+          "reply_sha256": "842f4ddddf3ccbb7a1f63cc8e50ef1594bcf4163d63e25ded90bbe7ade94f929",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 44,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "A payments-api deploy leaks database connections in its refund path: its pool runs dry, and requests wait for a connection until they time out.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the payments-api deploy leaking database connections in the refund path, which drains the pool so requests wait until they time out, matching the right answer, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:43.867Z",
+          "sha256": "29723f7bf028d44200bca743f8fe2a1f37f923cf794ebecca84ecab7c3e1a7fe"
+        },
+        "call": {
+          "reply_sha256": "29723f7bf028d44200bca743f8fe2a1f37f923cf794ebecca84ecab7c3e1a7fe",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 45,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "Since its deploy, payments-api leaks database connections: the connection pool is exhausted and every request hits PoolTimeout.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It correctly blames a payments-api deploy that leaks database connections until the pool is exhausted and requests hit PoolTimeout, though it does not pin the leak to refund reads; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:47.832Z",
+          "sha256": "f2fd63b1a416e18204728d664433e61c52937e7b118d3280ed0e66215a555b36"
+        },
+        "call": {
+          "reply_sha256": "f2fd63b1a416e18204728d664433e61c52937e7b118d3280ed0e66215a555b36",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 46,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "The payments API's refund path does not return its database connection to the pool, so the pool of 10 runs out and requests fail.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It correctly says the payments API's refund path never returns its database connection, so the pool of 10 runs out and requests fail, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:50.609Z",
+          "sha256": "ffdded4b72401c90faf2fe4981f31fee7ed03c3f98d22be5f67c4c1de890d91c"
+        },
+        "call": {
+          "reply_sha256": "ffdded4b72401c90faf2fe4981f31fee7ed03c3f98d22be5f67c4c1de890d91c",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 47,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "payments-api never releases the connections it takes for refunds (REFUND_CONNECTION=kept), so its psycopg pool is empty and requests fail with PoolTimeout.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the refund connection leak in payments-api (REFUND_CONNECTION=kept) that empties the pool so requests time out and fail, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:53.374Z",
+          "sha256": "4c07bbec6d190ee1294f5ff6c863d2003b8d5f3a9c9ccee830acbdba0aab3b43"
+        },
+        "call": {
+          "reply_sha256": "4c07bbec6d190ee1294f5ff6c863d2003b8d5f3a9c9ccee830acbdba0aab3b43",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 48,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "A deploy of payments-api leaks database connections, until it runs out of connections and requests fail with PoolTimeout.",
+      "expected": "names the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It correctly names a payments-api deploy that leaks database connections until the pool is exhausted and requests fail on pool timeout, though it does not pinpoint the refund read path, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:52:58.028Z",
+          "sha256": "e84a77029ee12c88b73f62d14ab29f2572888e19c1c8236d2674ef13aa640958"
+        },
+        "call": {
+          "reply_sha256": "e84a77029ee12c88b73f62d14ab29f2572888e19c1c8236d2674ef13aa640958",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 49,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "The payments API's database pool is exhausted.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the exhausted database pool but not the cause behind it, the deploy that leaks a connection on each refund read, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:00.235Z",
+          "sha256": "f28f8851c9f9017c106ba4e82ed1e9a45f51deba2c2d968d2f69184e55165ff6"
+        },
+        "call": {
+          "reply_sha256": "f28f8851c9f9017c106ba4e82ed1e9a45f51deba2c2d968d2f69184e55165ff6",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 50,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "Payments are slow and fail with 500s.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It only restates the symptom of slow payments failing with 500s, and never names the refund connection leak that empties the payments API's database pool; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:02.395Z",
+          "sha256": "312a341464f4ef6522842c8a6e2d027cf5dc9dce92d5cd1f9d5deb002a303ae1"
+        },
+        "call": {
+          "reply_sha256": "312a341464f4ef6522842c8a6e2d027cf5dc9dce92d5cd1f9d5deb002a303ae1",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 51,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "The provider is down, and our breaker is open.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "The diagnosis blames a provider outage and an open breaker instead of the deploy's connection leak (REFUND_CONNECTION=kept) that drains the 10-connection pool, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:04.545Z",
+          "sha256": "c68adbb9316600aabcce10ceb0308e011cb06740af3444b12930b6fc98b878bb"
+        },
+        "call": {
+          "reply_sha256": "c68adbb9316600aabcce10ceb0308e011cb06740af3444b12930b6fc98b878bb",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 52,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "Slow database queries in payments-api are holding connections, so requests hit PoolTimeout.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It correctly places the failure in payments-api's exhausted connection pool causing timeouts, but blames slow queries instead of the deployed refund connection leak that never returns connections, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:08.379Z",
+          "sha256": "c58a7348ee47244869d8c316c6c7801dea9ef7e9138218c389ac8e57b07af44b"
+        },
+        "call": {
+          "reply_sha256": "c58a7348ee47244869d8c316c6c7801dea9ef7e9138218c389ac8e57b07af44b",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 53,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "The provider hangs; our API's worker threads hold their connections while they wait, the thread pool is exhausted, and requests fail.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a hanging provider exhausting the worker thread pool, not the deploy's leak of database connections on reading refunds (REFUND_CONNECTION=kept) that empties the pool of 10, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:10.679Z",
+          "sha256": "819666006dbe9e4f5b14bd266d72b90f58f1e339b459800966c8f0efbb14fe8a"
+        },
+        "call": {
+          "reply_sha256": "819666006dbe9e4f5b14bd266d72b90f58f1e339b459800966c8f0efbb14fe8a",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 54,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "payments-api leaks Redis connections, until the Redis connection pool is exhausted.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It correctly blames a connection leak in payments-api that exhausts a pool, but names the Redis pool instead of the database pool and never ties the leak to reading refunds after the deploy.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:14.643Z",
+          "sha256": "d12475e050ff36c50d897b12114801f8223add886e86ce65e34dd6275bc5f80c"
+        },
+        "call": {
+          "reply_sha256": "d12475e050ff36c50d897b12114801f8223add886e86ce65e34dd6275bc5f80c",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 55,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "The provider never returns an answer, so the payments API's HTTP connection pool to it is exhausted and requests fail.",
+      "expected": "misses the cause",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames an unresponsive provider exhausting an HTTP connection pool, not the deploy whose refund reads leak database connections from the pool of 10, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:17.056Z",
+          "sha256": "c5a369a31526353acef9278852b40f1a81ebea5d8e10b6b47e2b86a715562367"
+        },
+        "call": {
+          "reply_sha256": "c5a369a31526353acef9278852b40f1a81ebea5d8e10b6b47e2b86a715562367",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 56,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "Database connections are not released in time, so the connection pool is exhausted and requests fail.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the right mechanism, connections not released so the pool runs out and requests fail, but not where: it never points to the deploy or to reading a payment's refunds, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:20.304Z",
+          "sha256": "ba726fb15a8d0697877f407797e5b9fdc8551395d89ac12267cfc31522ef50d5"
+        },
+        "call": {
+          "reply_sha256": "ba726fb15a8d0697877f407797e5b9fdc8551395d89ac12267cfc31522ef50d5",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 57,
+      "name": "pool-exhaustion",
+      "system": 3,
+      "hypothesis": "A long-running transaction keeps database connections busy, exhausting the connection pool.",
+      "expected": "partly",
+      "source": "version 3's tests",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It gets the exhausted database connection pool right but blames a long-running transaction instead of the deploy's leak where reading refunds never returns connections, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:22.970Z",
+          "sha256": "1d2e557682f14fba5b5f83beba902ccf3bfe9ac51bd03eb03a4f471518387c24"
+        },
+        "call": {
+          "reply_sha256": "1d2e557682f14fba5b5f83beba902ccf3bfe9ac51bd03eb03a4f471518387c24",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 58,
+      "name": "poison-message",
+      "system": 1,
+      "hypothesis": "The ledger consumer could not process events while PostgreSQL was down; it is retrying.",
+      "expected": "misses the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a PostgreSQL outage, whereas the cause is the deploy that set BAD_EVENTS=retry, which left the ledger consumer retrying one unreadable payment.updated event (amount as a decimal string) forever and booking nothing behind it; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:25.264Z",
+          "sha256": "fd204fcb29fd4d966fbf617a153d24ba78cd84ec7029cc54b8f7d64c362c9469"
+        },
+        "call": {
+          "reply_sha256": "fd204fcb29fd4d966fbf617a153d24ba78cd84ec7029cc54b8f7d64c362c9469",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 59,
+      "name": "duplicate-delivery",
+      "system": 1,
+      "hypothesis": "Redis lost its idempotency keys, so the ledger books webhooks the provider re-sends a second time.",
+      "expected": "misses the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It correctly says the ledger books provider re-sends a second time, but blames Redis losing idempotency keys instead of a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive).",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:27.577Z",
+          "sha256": "a752fe7effbacf15c557966e40257404df59a6552de63170e93c52d0e5fb8c25"
+        },
+        "call": {
+          "reply_sha256": "a752fe7effbacf15c557966e40257404df59a6552de63170e93c52d0e5fb8c25",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 60,
+      "name": "provider-outage",
+      "system": 1,
+      "hypothesis": "PostgreSQL is slow and payments-api requests wait on it; fake-provider looks healthy.",
+      "expected": "misses the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a slow PostgreSQL and calls the provider healthy, while the cause is the provider's hanging charge/refund API with no circuit breaker filling the API's worker threads; it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:30.033Z",
+          "sha256": "5a5b4320d90097bb4ef9898d2836d3fb2024fe6ef451340758ff26c746de0120"
+        },
+        "call": {
+          "reply_sha256": "5a5b4320d90097bb4ef9898d2836d3fb2024fe6ef451340758ff26c746de0120",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 61,
+      "name": "provider-outage",
+      "system": 1,
+      "hypothesis": "payments-api is slow because a traffic spike exhausted its worker threads.",
+      "expected": "misses the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "misses the cause",
+        "fix_fits": null,
+        "why": "It blames a traffic spike for the exhausted worker threads, not the hanging provider API and the missing circuit breaker, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:32.186Z",
+          "sha256": "5db29d8cd4446ffbe2dd5b12593e8f8180f349ed769d5212c6978d85113cacd8"
+        },
+        "call": {
+          "reply_sha256": "5db29d8cd4446ffbe2dd5b12593e8f8180f349ed769d5212c6978d85113cacd8",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 62,
+      "name": "poison-message",
+      "system": 1,
+      "hypothesis": "The ledger consumer retries forever one payment.updated event whose amount is not positive integer cents.",
+      "expected": "names the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It correctly names the ledger consumer retrying one unreadable payment.updated event forever, but it never ties that to the deploy that set BAD_EVENTS=retry or says that nothing behind the event gets booked, and it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:38.324Z",
+          "sha256": "ce725622f359368048afce6a82adc3883e9c0fc6986341248b0a54151c1dc54e"
+        },
+        "call": {
+          "reply_sha256": "ce725622f359368048afce6a82adc3883e9c0fc6986341248b0a54151c1dc54e",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 63,
+      "name": "poison-message",
+      "system": 1,
+      "hypothesis": "The ledger consumer retries forever one event whose amount is a string.",
+      "expected": "names the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It names the ledger consumer retrying forever on an event with a string amount, but not the deploy that set BAD_EVENTS=retry or that the stuck event blocks all booking behind it.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:41.721Z",
+          "sha256": "19ec13f59cf487f29b690847ee5f474b798429819b1b7fe9d01612c43729deba"
+        },
+        "call": {
+          "reply_sha256": "19ec13f59cf487f29b690847ee5f474b798429819b1b7fe9d01612c43729deba",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 64,
+      "name": "duplicate-delivery",
+      "system": 1,
+      "hypothesis": "A deploy turned off the ledger consumer's duplicate check, so webhooks the provider sends again are booked twice.",
+      "expected": "names the cause",
+      "source": "a known limit of version 1 (week 3, item 4's review)",
+      "judgment": {
+        "verdict": "names the cause",
+        "fix_fits": null,
+        "why": "It names the cause: a deploy removed the ledger consumer's dedupe, so webhooks the provider resends are booked a second time, but it proposes no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:43.891Z",
+          "sha256": "cc159794ad22f2efb3d006527ae0f00e14a73150696d2c8a015bafb8d20bf3c2"
+        },
+        "call": {
+          "reply_sha256": "cc159794ad22f2efb3d006527ae0f00e14a73150696d2c8a015bafb8d20bf3c2",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 65,
+      "name": "provider-outage",
+      "system": 2,
+      "hypothesis": "The provider times out, and payments-api has no circuit breaker, so every payment waits through three tries.",
+      "expected": "partly",
+      "source": "a known limit of version 2 (week 4, item 3)",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It rightly blames the provider timing out with calls retried three times, but wrongly says payments-api has no circuit breaker, when a breaker opens after 5 unanswered calls and then fails fast.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:46.210Z",
+          "sha256": "e81c3e4327fef570c5a78363a1a5dde032899531c3b5871804295ccd0c4231d6"
+        },
+        "call": {
+          "reply_sha256": "e81c3e4327fef570c5a78363a1a5dde032899531c3b5871804295ccd0c4231d6",
+          "problems": []
+        }
+      }
+    },
+    {
+      "sentence": 66,
+      "name": "money-unit",
+      "system": 3,
+      "hypothesis": "A deploy of the payment confirmer has a unit bug: it reads the provider's amounts as dollars, so the amounts differ from the payments API's records.",
+      "expected": "partly",
+      "source": "a known limit of version 3 (week 4, item 4's review)",
+      "judgment": {
+        "verdict": "partly",
+        "fix_fits": null,
+        "why": "It rightly names a deploy with a dollars-for-cents unit bug but puts it in the payment confirmer, not the payments API, and misses that customers are charged 100 times the amount, while giving no fix.",
+        "problems": [],
+        "reply": {
+          "model": "claude-opus-5-5",
+          "received_at": "2026-11-05T02:53:48.294Z",
+          "sha256": "2f477a70acbd53118c99eb6d1e1f411f1972c1cef2cadb512d0bc1a279534a43"
+        },
+        "call": {
+          "reply_sha256": "2f477a70acbd53118c99eb6d1e1f411f1972c1cef2cadb512d0bc1a279534a43",
+          "problems": []
+        }
+      }
+    }
+  ],
+  "stopped": null
+}

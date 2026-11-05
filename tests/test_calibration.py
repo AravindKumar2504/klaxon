@@ -357,3 +357,49 @@ def test_the_report_and_replay_commands_with_no_calibration_folder(world, capsys
     assert "no calibration folder yet in evidence/week5" in capsys.readouterr().err
     assert calibration.main(["report", str(world)]) == 2
     assert "holds no calibration.json" in capsys.readouterr().err
+
+
+# The live calibration (2026-11-05 UTC, with Aravind's OK): recorded responses from claude-opus-5-5, replayed here
+# offline. Its verdicts on the 13 saved runs are not pinned here: they stay held back until Aravind labels the runs.
+
+LIVE = REPO / "evidence" / "week5" / "2026-11-05T025021Z_calibration"
+
+
+def test_the_live_calibration_replays_exactly_every_sentence_and_saved_run():
+    assert calibration.replay(LIVE) == []
+
+
+@pytest.mark.parametrize("relative", calibration.SAVED_RUNS)
+def test_each_saved_runs_live_judgment_replays_exactly_and_came_from_the_judge_as_committed(relative):
+    folder = REPO / relative
+    assert judge.replay(folder) == []
+    item = grading.saved(folder)
+    judged, problem = judge.counted(folder, item)
+    assert problem is None and judged["judgment"]["verdict"] in judge.VERDICTS  # a verdict, which one held back
+    records = [r for r in read_records(folder / judge.RECORDING) if r["kind"] in ("response", "failure")]
+    assert [(r["kind"], r["model"], r["source"], r["accepted"]) for r in records] == [
+        ("response", "claude-opus-5-5", "claude-code", True)
+    ]
+    assert (
+        records[0]["details"]["claude_code"]["tools"] == []
+        and records[0]["details"]["claude_code"]["mcp_servers"] == []
+    )
+
+
+def test_the_live_calibration_on_the_66_sentences():
+    # Measured 2026-11-05 UTC (make calibrate): 66 replies, each in the checked shape; the judge agrees with the
+    # verdicts Claude expected on 51, and differs by one step, never two: 12 times stricter, 3 times more lenient.
+    saved = json.loads((LIVE / calibration.CALIBRATION).read_text())
+    assert saved["stopped"] is None and len(saved["sentences"]) == 66
+    assert saved["judge"] == {"model": "claude-opus-5-5", "version": 1, "sha256": judge.fingerprint()}
+    said = calibration.report(LIVE)["agreement"]["sentences"]
+    assert (said["judged"], said["judge_no_verdict"], said["judge_with_expected"]) == (66, 0, {"agree": 51, "of": 66})
+    assert said["judge_matrix"] == {
+        "names the cause": {"names the cause": 22, "partly": 7, "misses the cause": 0, judge.NO_VERDICT: 0},
+        "partly": {"names the cause": 1, "partly": 13, "misses the cause": 5, judge.NO_VERDICT: 0},
+        "misses the cause": {"names the cause": 0, "partly": 2, "misses the cause": 16, judge.NO_VERDICT: 0},
+    }
+    records = [r for r in read_records(LIVE / calibration.RECORDING) if r["kind"] in ("response", "failure")]
+    assert len(records) == 66 and {(r["kind"], r["model"], r["accepted"]) for r in records} == {
+        ("response", "claude-opus-5-5", True)
+    }

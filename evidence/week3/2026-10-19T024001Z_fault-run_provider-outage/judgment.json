@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "provider-outage",
+    "rubric_version": 1
+  },
+  "right_answer": {
+    "cause": "the provider's charge and refund API hangs (5 s, then 503), and our payments API has no circuit breaker: every payment waits through 3 timed-out attempts, the API's worker threads fill up, and even its health checks slow down",
+    "remedy": "it ends when the provider recovers; a circuit breaker would fail fast meanwhile and keep the API answering (planned for week 4)"
+  },
+  "diagnosis_sha256": "8ba656fd8c8624ddfd283e404b9f70e96f8d66a41ecda5e77ad15bb816b38c95",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It identifies the hanging provider payments/refunds API, the 3 timed-out attempts per request with no fail-fast path, and workers tied up so payments-api's health check fails, while marking the unconfirmed parts as open.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-05T02:54:02.265Z",
+      "sha256": "3c5c53fbfc6c4a4584fca0d77a41107f2e0aba4b5b73724de56b7c8c03429374"
+    },
+    "call": {
+      "reply_sha256": "3c5c53fbfc6c4a4584fca0d77a41107f2e0aba4b5b73724de56b7c8c03429374",
+      "problems": []
+    }
+  }
+}

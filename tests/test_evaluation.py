@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from klaxon import alerts, evaluation, fault_runs, faults, grading
+from klaxon import alerts, evaluation, fault_runs, faults, grading, judge
 from klaxon.agent import catalog, claude_code, gate, loop, verify
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.contract import Diagnosis, Evidence, FixAction, ProposedFix
@@ -853,7 +853,10 @@ def test_the_report_reads_weeks_3_and_4s_saved_runs_and_their_measured_numbers()
     )
     assert len(found["summary"]) == 9  # 3 cases of week 3, and 6 of week 4
     page = evaluation.markdown(found)
-    assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | - | 0 | 0 of 1 |" in page
+    assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | " in page
+    # Each was judged in the live calibration (2026-11-05 UTC), by the judge as committed; its verdicts on them are not
+    # pinned here, held back until Aravind labels the runs (klaxon.calibration).
+    assert all(row["judge"] in judge.VERDICTS and not row["grader_problems"] for row in rows)
     # Graded again by the newest rubric for each run's system: version 1 for week 3's fault 3 (before the breaker).
     assert {(row["case"], row["rubric"]) for row in rows if row["rubric"] != 4} == {("provider-outage", 1)}
 
@@ -1136,7 +1139,7 @@ def test_the_evaluations_make_targets_pass_their_values_through_the_environment(
 def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_they_disagree(tmp_path):
     # The judgments and Aravind's verdict here are written by the test (made up), as klaxon.judge and make label save
     # them beside a run. Each run here was graded by rubric version 3: its system's right answer is version 3's.
-    from klaxon import judge, labels
+    from klaxon import labels
 
     right = grading.answer("duplicate-delivery", 3)
 
