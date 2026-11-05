@@ -133,7 +133,7 @@ def test_the_report_counts_each_grader_against_the_expected_verdicts(world):
     page = calibration.markdown(found)
     assert "- The rule agrees with the expected verdict on 3 of 3." in page
     assert "- The judge agrees on 1 of 2; no verdict on 1; judged 3 of 3." in page
-    assert "expected partly; rule partly (version 4); judge names the cause; the fix no fix given: Made up" in page
+    assert "expected partly; rule partly (version 4); judge names the cause; no fix given: Made up" in page
 
 
 def test_the_report_puts_the_rule_the_judge_and_aravind_side_by_side_on_the_saved_runs(world):

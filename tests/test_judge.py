@@ -19,7 +19,7 @@ from klaxon.patient.stack import REPO
 from tests.agent.test_postmortem import RecordedScript
 
 FIRST_LIVE_RUN, FAULT_1, FAULT_3_BEFORE = (REPO / calibration.SAVED_RUNS[i] for i in (0, 1, 3))
-JUDGE_FINGERPRINT = "3334877455a7edb81126a82b49378c9c0fedd1bae143512542ade70485b85059"  # a change to the judge's model, prompt or version fails it
+JUDGE_FINGERPRINT = "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"  # a change to the judge's model, prompt or version fails it
 RIGHT = faults.Recorded("the ledger consumer lost its dedupe", "roll it back")
 DIAGNOSIS = {
     "hypothesis": "A deploy made the ledger consumer book every redelivered webhook again.",
@@ -46,6 +46,12 @@ def copy_run(source: Path, tmp_path: Path) -> Path:
 def test_the_judge_is_opus_5_5_version_1_and_its_prompt_is_pinned():
     assert judge.JUDGE_MODEL == "claude-opus-5-5" and judge.VERSION == 1
     assert judge.fingerprint() == JUDGE_FINGERPRINT
+
+
+def test_the_fingerprint_counts_how_the_document_is_laid_out(monkeypatch):
+    before = judge.fingerprint()
+    monkeypatch.setattr(judge, "document", lambda right, diagnosis: {"diagnosis": dict(diagnosis)})
+    assert judge.fingerprint() != before
 
 
 def test_the_system_prompt_names_no_model_and_holds_the_checked_shape_on_one_line():
@@ -161,7 +167,7 @@ def test_a_reply_it_cannot_take_or_no_reply_is_no_verdict_and_never_asked_again(
 
 
 def test_a_judgment_said_on_one_line():
-    assert judge.said({"verdict": "partly", "fix_fits": None, "why": "x"}) == "partly; the fix no fix given: x"
+    assert judge.said({"verdict": "partly", "fix_fits": None, "why": "x"}) == "partly; no fix given: x"
     assert (
         judge.said({"verdict": "names the cause", "fix_fits": True, "why": "y"}) == "names the cause; the fix fits: y"
     )

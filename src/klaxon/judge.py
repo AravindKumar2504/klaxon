@@ -124,10 +124,15 @@ def first_turn(found: Mapping) -> str:
     return "\n".join([HEAD, DATA_NOTE, one_line(json.dumps(found, ensure_ascii=False)), "", ASK])
 
 
+# What the fingerprint lays out: a turn for a made-up case and diagnosis, so the document's form counts too.
+PROBE = (faults.Recorded("<the right answer>", "<the remedy>"), {"hypothesis": "<the hypothesis>"})
+
+
 def fingerprint() -> str:
-    """The SHA-256 of the judge as committed: its model, its version, its system prompt and the fixed words of its
-    turn. A test pins it: a change to any of them fails it, and must come as a new version."""
-    parts = {"model": JUDGE_MODEL, "version": VERSION, "system": system_prompt(), "turn": [HEAD, DATA_NOTE, ASK]}
+    """The SHA-256 of the judge as committed: its model, its version, its system prompt, and its turn (the fixed
+    words, and how the document is laid out, as a probe shows them). A test pins it: a change to any of them fails it,
+    and must come as a new version."""
+    parts = {"model": JUDGE_MODEL, "version": VERSION, "system": system_prompt(), "turn": first_turn(document(*PROBE))}
     return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
 
 
@@ -262,8 +267,8 @@ def said(judgment: Mapping) -> str:
     """A judgment on one line."""
     if judgment["verdict"] == NO_VERDICT:
         return f"no verdict: {'; '.join(clean_text(problem, 200) for problem in judgment['problems'])}"
-    fits = {True: "fits", False: "does not fit", None: "no fix given"}[judgment["fix_fits"]]
-    return f"{judgment['verdict']}; the fix {fits}: {clean_text(str(judgment['why']), MAX_WHY)}"
+    fits = {True: "the fix fits", False: "the fix does not fit", None: "no fix given"}[judgment["fix_fits"]]
+    return f"{judgment['verdict']}; {fits}: {clean_text(str(judgment['why']), MAX_WHY)}"
 
 
 # The command line.
