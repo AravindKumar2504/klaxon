@@ -167,6 +167,15 @@ def test_a_calibration_that_stopped_says_so_and_what_it_did_not_judge(world):
     )
 
 
+def test_a_calibration_by_another_version_of_the_judge_counts_none_of_its_judgments(world):
+    # The re-check's finding L4: a judge changed since is a new version, checked again, never this one.
+    folder = calibrated(world, ["names the cause", "partly"])
+    _edit(folder, calibration.CALIBRATION, lambda saved: saved["judge"].update(sha256="an older judge"))
+    found = calibration.report(folder)
+    assert found["agreement"]["sentences"]["judged"] == 0
+    assert found["problems"] == ["its judgments were made by another version of the judge: none is counted"]
+
+
 def test_a_judged_sentence_the_tests_no_longer_hold_is_said(world):
     folder = calibrated(world, ["names the cause"])
     path = folder / calibration.CALIBRATION

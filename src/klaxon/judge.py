@@ -267,7 +267,11 @@ def counted(folder: Path, item: grading.Saved) -> tuple[dict | None, str | None]
         return None, "the judge graded another diagnosis than this run's: not counted"
     if (saved.get("judge") or {}).get("sha256") != fingerprint():
         return None, "another version of the judge made this judgment: not counted"
-    if saved.get("graded") != {"name": item.name, "rubric_version": item.version}:
+    right = grading.answer(item.name, item.version)
+    if saved.get("graded") != {"name": item.name, "rubric_version": item.version} or saved.get("right_answer") != {
+        "cause": right.cause,
+        "remedy": right.remedy,
+    }:
         return None, "the judge graded it against another right answer: not counted"
     return saved, None
 

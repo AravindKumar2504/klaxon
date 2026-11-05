@@ -9,6 +9,7 @@ the docs state. The runs are copies of the saved runs' evidence: a test never ch
 import json
 import os
 import random
+import re
 import shutil
 import subprocess
 import sys
@@ -148,9 +149,11 @@ def test_a_folder_of_runs_is_labeled_in_a_shuffled_order_and_passes_over_runs_wi
     assert order != runs  # the review's finding M6: the order says nothing, not even the week
     code, shown = label(week, *(["p", "y", "", "y"] * 4))
     assert code == 0 and "4 to label, in a shuffled order." in shown
-    assert [shown.index(f"Run {n} of 4: {run.name}") for n, run in enumerate(order, 1)] == sorted(
-        shown.index(f"Run {n} of 4: {run.name}") for n, run in enumerate(order, 1)
-    )
+    # Each run's screen shows its right answer, never its folder: the right answers come in the shuffled order.
+    screens = re.split(r"Run \d of 4\n", shown)[1:]
+    rights = [grading.answer(*_named(run)).cause for run in order]
+    assert len(screens) == 4 and all(right in screen for right, screen in zip(rights, screens, strict=True))
+    assert not any(run.name in screen for run in runs for screen in screens)  # the re-check's finding L3
     assert f"{empty.name}: passed over: it ended in no diagnosis" in shown
     assert f"{broken.name}: passed over: {broken.name}'s run.json is not an object" in shown
     assert all(labels.read(run)["verdict"] == "partly" for run in runs)
@@ -221,3 +224,8 @@ def test_make_label_in_a_terminal_saves_the_typed_verdict(tmp_path):
         shown += _read_until(fd, next_prompt)
     assert _exit_code(pid) == 0, shown
     assert labels.read(folder)["verdict"] == "names the cause" and labels.read(folder)["how"] == gate.TYPED
+
+
+def _named(folder):
+    item = grading.saved(folder)
+    return item.name, item.version

@@ -133,8 +133,8 @@ eval-cases: ## the evaluation's eight cases, each with its right answer and the 
 eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9
 	$(PY) -m klaxon.evaluation run $${MODEL:+--model "$$MODEL"} $${CASES:+--cases "$$CASES"} $${SEEDS:+--seeds "$$SEEDS"}
 
-eval-report: ## the evaluation's report, worked out offline from saved runs: make eval-report RUNS='evidence/week5/<suite folder> evidence/week4'
-	$(PY) -m klaxon.evaluation report $$RUNS
+eval-report: ## the evaluation's report, worked out offline from saved runs: make eval-report RUNS='evidence/week5/<suite folder> evidence/week4' (SHOW_JUDGE=1: the judge's verdicts on runs not labeled yet too)
+	$(PY) -m klaxon.evaluation report $$RUNS $${SHOW_JUDGE:+--show-judge}
 
 rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week5/ (his OK first): make rehearse-case CASE=false-alarm
 	$(PY) -m klaxon.evaluation rehearse "$$CASE" $${SEED:+--seed "$$SEED"}

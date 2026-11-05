@@ -854,9 +854,12 @@ def test_the_report_reads_weeks_3_and_4s_saved_runs_and_their_measured_numbers()
     assert len(found["summary"]) == 9  # 3 cases of week 3, and 6 of week 4
     page = evaluation.markdown(found)
     assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | " in page
-    # Each was judged in the live calibration (2026-11-05 UTC), by the judge as committed; its verdicts on them are not
-    # pinned here, held back until Aravind labels the runs (klaxon.calibration).
-    assert all(row["judge"] in judge.VERDICTS and not row["grader_problems"] for row in rows)
+    # Each was judged in the live calibration (2026-11-05 UTC), by the judge as committed. Until Aravind labels them,
+    # the report holds those verdicts back (the re-check's finding M2), and they are pinned nowhere here.
+    assert all(row["judge"] is None and row["judge_held_back"] and not row["grader_problems"] for row in rows)
+    assert found["judge_held_back"] == 12 and "The judge's verdicts on 12 runs are held back" in page
+    shown = evaluation.report([REPO / "evidence" / "week3", REPO / "evidence" / "week4"], show_judge=True)["runs"]
+    assert all(row["judge"] in judge.VERDICTS and "judge_held_back" not in row for row in shown)
     # Graded again by the newest rubric for each run's system: version 1 for week 3's fault 3 (before the breaker).
     assert {(row["case"], row["rubric"]) for row in rows if row["rubric"] != 4} == {("provider-outage", 1)}
 
@@ -1149,10 +1152,11 @@ def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_the
         value = {"diagnosis_sha256": sha or grading.digest(diagnosis), "judgment": said}
         value |= {"judge": {"sha256": judge_sha or judge.fingerprint()}}
         value |= {"graded": {"name": "duplicate-delivery", "rubric_version": 3}}
+        value |= {"right_answer": {"cause": right.cause, "remedy": right.remedy}}
         (folder / judge.SAVED).write_text(json.dumps(value))
         return grading.digest(diagnosis)
 
-    agree, split, other, none, older, broken = (saved_run(tmp_path / name) for name in "abcdef")
+    agree, split, other, none, older, broken, unlabeled = (saved_run(tmp_path / name) for name in "abcdefg")
     judged(agree, "names the cause")
     sha = judged(split, "partly", why="It never says why the webhooks come again.")
     mine = {"verdict": "partly", "fix_fits": True, "how": "typed at a terminal", "diagnosis_sha256": sha}
@@ -1163,9 +1167,15 @@ def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_the
     judged(none, judge.NO_VERDICT)
     judged(older, "misses the cause", judge_sha="an older judge")  # the review's finding L3
     (broken / judge.SAVED).write_text("{")  # the review's finding L7: said, and the report is still made
-    found = evaluation.report([tmp_path])
+    judged(unlabeled, "misses the cause")  # it disagrees with the rule, and he has not labeled it
+    held = {row["folder"]: row for row in evaluation.report([tmp_path])["runs"]}  # by default: held back unless labeled
+    assert held["b"]["judge"] == "partly" and held["b"]["graders_disagree"] is True  # he labeled b
+    assert held["a"]["judge"] is None and held["a"]["judge_held_back"] is True and held["d"]["judge"] is None
+    assert held["g"]["graders_disagree"] is False  # nor that it disagrees: that too would tell him the judge's verdict
+    assert "- g (duplicate-delivery)" not in evaluation.markdown(evaluation.report([tmp_path]))
+    found = evaluation.report([tmp_path], show_judge=True)
     rows = {row["folder"]: row for row in found["runs"]}
-    assert {name: row["verdict"] for name, row in rows.items()} == dict.fromkeys("abcdef", "names the cause")
+    assert {name: row["verdict"] for name, row in rows.items()} == dict.fromkeys("abcdefg", "names the cause")
     assert [rows[name]["judge"] for name in "abcdef"] == [
         "names the cause",
         "partly",
@@ -1184,10 +1194,11 @@ def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_the
     assert rows["e"]["grader_problems"] == ["another version of the judge made this judgment: not counted"]
     assert rows["f"]["grader_problems"] == ["its judgment.json cannot be read (JSONDecodeError): not counted"]
     [entry] = found["summary"]
-    assert (entry["judged"], entry["judge_names_the_cause"], entry["graders_disagree"]) == (2, 1, 1)
+    assert (entry["judged"], entry["judge_names_the_cause"], entry["graders_disagree"]) == (3, 1, 2)
+    assert rows["g"]["graders_disagree"] is True  # shown: show_judge
     assert (entry["judge_no_verdict"], entry["labeled"]) == (1, 1)
     page = evaluation.markdown(found)
-    assert "| duplicate-delivery | gated, week 4 | 6 ran, 0 not run | 6 of 6 | 6 of 6 | 1 of 2 | 1 | 6 of 6 |" in page
+    assert "| duplicate-delivery | gated, week 4 | 7 ran, 0 not run | 7 of 7 | 7 of 7 | 1 of 3 | 2 | 7 of 7 |" in page
     assert (
         "- b (duplicate-delivery): the rule (version 4): names the cause; the judge: partly (It never says why the"
         " webhooks come again.); Aravind: partly." in page

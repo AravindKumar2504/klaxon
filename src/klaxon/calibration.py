@@ -568,12 +568,17 @@ def report(folder: Path | None) -> dict:
     are read."""
     saved = {} if folder is None else json.loads((folder / CALIBRATION).read_text(encoding="utf-8"))
     judged = {_key(item): item["judgment"] for item in saved.get("sentences", [])}
+    stale = folder is not None and (saved.get("judge") or {}).get("sha256") != judge.fingerprint()
+    if stale:  # another version of the judge: its judgments are not this one's (the re-check's finding L4)
+        judged = {}
     sentences = [
         {"sentence": number, "name": s.name, "system": s.system, "hypothesis": s.hypothesis, "expected": s.expected}
         | {"source": s.source, "judgment": judged.pop(_key(s), None), "rule": rule_on(s)}
         for number, s in enumerate(SENTENCES, 1)
     ]
     unknown = [f"a judged sentence the tests no longer hold: {clean_text(key[2], 120)}" for key in judged]
+    if stale:
+        unknown.append("its judgments were made by another version of the judge: none is counted")
     runs = [_run_row(relative) for relative in SAVED_RUNS]
     labeled = [r for r in runs if r["aravind"] is not None]
 

@@ -413,10 +413,15 @@ RUBRICS_V4 = RUBRICS_V3 | {
             _more(
                 V3["provider-outage"].elements[2],
                 unless=(
-                    r"\b(no|without|lacks?|lacking|missing|has no|had no|have no)\s+(a\s+|an\s+|any\s+|its\s+|the\s+)?"
-                    r"(working\s+)?(circuit[ -]?)?breaker\b(?![^.;]*\b(would|could)\b)",
+                    r"\b(lacks?|lacking|missing|has no|had no|have no|there is no|there's no)\s+(a\s+|an\s+|any\s+|its\s+"
+                    r"|the\s+)?(working\s+)?(circuit[ -]?)?breaker",
+                    # "Without the breaker, each payment would wait" supposes one away: no denial.
+                    r"\b(without|with no|no)\s+(a\s+|an\s+|any\s+|its\s+|the\s+)?(working\s+)?(circuit[ -]?)?breaker\b"
+                    r"(?![^.;]*\b(would|could|might)\b)",
                     rf"breaker{_gap(2)}(missing|absent|disabled|removed|turned off|switched off|(is|was|set to|left) off)\b",
-                    rf"breaker{_gap(2)}(did not|didn't|never|failed to|does not|doesn't|could not|couldn't) (open|trip)",
+                    rf"breaker{_gap(2)}(did not|didn't|never|failed to|does not|doesn't|could not|couldn't|has not|hasn't|had"
+                    r" not|hadn't|is not|isn't|was not|wasn't) (yet )?(open|opened|trip|tripped)\b",
+                    rf"breaker{_gap(2)}(is|was|stays|stayed|remains|remained) (still )?closed\b",
                     r"PROVIDER_BREAKER\W{0,3}off\b",
                 ),
             ),
@@ -441,8 +446,8 @@ RUBRICS_V4 = RUBRICS_V3 | {
                 V3["money-unit"].elements[0],
                 unless=(
                     rf"(deploy\w*|redeploy\w*|bug|change|regression)\W+(of|in|to|on)\W+(the\W+)?{ELSEWHERE}",
-                    rf"{ELSEWHERE}{_gap(3)}(has|had|introduced|got|carries|carried)\W+(a\W+|an\W+|the\W+)?(\w+\W+)?"
-                    r"(bug|regression)",
+                    rf"{ELSEWHERE}{_gap(3)}(has|had|introduced|got|carries|carried)\W+(a\W+|an\W+|the\W+)?"
+                    r"((?!(no|not|never|zero)\b)\w+\W+)?(bug|regression)",
                 ),
             ),
             # Found by the independent review: "reads amounts as dollars" is the mechanism, with no "cents" said.
@@ -482,6 +487,7 @@ RUBRICS_V4 = RUBRICS_V3 | {
                     r"\bup to date\b",
                     r"\bno (consumer |real )?(lag|backlog)\b",
                     r"\bnot (actually |really |at all )?(behind|lagging)\b",
+                    r"\b(reads?|is|shows?|stays?|sits?)\s+(at\s+)?(0|zero)\b(?!\s+(to|and|then)\s+\d)",  # "it reads 0"
                 ),
                 scoped=True,
             ),
@@ -524,16 +530,17 @@ RUBRICS_V4 = RUBRICS_V3 | {
                     r"\b(deploy\w*|docker|container\w*|health\w*|recent_deploys|service_health)\b[^.;]{0,60}?"
                     r"\b(could not|couldn't|cannot|can't) be (read|checked|seen|confirmed|verified|listed|reached)\b",
                     r"\bdocker[^\w.;]+(\w+[^\w.;]+){0,4}(did not answer|didn't answer|not answer|no answer|timed out"
-                    r"|times out|time ?out|unavailable|unreachable|not responding|unresponsive|down\b)",
+                    r"|times out|time ?out|unavailable|unreachable|not responding|unresponsive|down\b|did not respond"
+                    r"|didn't respond|never responded|never answered|no response)",
                     r"\b(recent_deploys|service_health|deploy (list|log|history)|deploy tool|health (check|tool))"
                     r"[^\w.;]+(\w+[^\w.;]+){0,4}(failed|fails|timed out|times out|errored|error|unavailable|did not"
-                    r" answer|didn't answer|not available|returned nothing)",
+                    r" answer|didn't answer|not available|returned nothing|did not respond|didn't respond|never answered)",
                     r"\b(deploy\w*|docker|container\w*|health\w*|setting\w*|handler|recent_deploys|service_health)\b"
                     r"[^.;]{0,80}?\b(unverified|unconfirmed|not (been |yet )?(confirmed|verified|checked))\b",
                     r"\b(unverified|unconfirmed|not (been |yet )?(confirmed|verified|checked))\b[^.;]{0,40}?"
                     r"\b(deploy\w*|docker|container\w*|health\w*|setting\w*|handler)\b",
                 ),
-                scoped=True,
+                # Not scoped: its own words are negations ("did not answer"), and the outage's negations come with them.
             ),
         ),
     ),
@@ -581,70 +588,103 @@ def version_of(saved: object) -> int:
     return version
 
 
-# Version 4: what denies a match, or rules it out. A negation earlier in its clause counts unless a turn of the
-# sentence ("but", "and", "while" ...) comes after it; words right after a match can rule it out too. A clause ends at
-# a full stop, a semicolon, a colon or an opening bracket, never at a comma: "not hung, stalled or crashed".
+# Version 4: what denies a match, or offers it only as a maybe, read within its own part of a sentence. A clause ends at a
+# full stop, a semicolon, a colon or an opening bracket. Inside it, a comma ends a segment, except through a list of the
+# same kind of thing ("not hung, stalled or crashed"): a negation reaches no further (the re-check's finding H1: "The
+# provider is not down, the database is overloaded" blames the database). In a segment, a turn of the sentence ("but",
+# "and", "while" ...) after a negation ends its reach.
 CUE = re.compile(
     r"\b(not|no|never|neither|nor|without|cannot|nothing|none|unlikely|excluded|rather than|instead of"
-    r"|rule[sd]? out|ruling out)\b|n't\b",
+    r"|rule[sd]? out|ruling out|if)\b|n't\b",
     re.IGNORECASE,
 )
 TURN = re.compile(
-    r"\b(but|however|although|though|whereas|while|when|after|until|as|if|yet|so|because|since|instead|and|then)\b",
+    r"\b(but|however|although|though|whereas|while|when|after|until|as|yet|so|because|since|instead|and|then)\b",
     re.IGNORECASE,
 )
+# After a match, in its segment: ruled out ("is unlikely", "and found none"), or only supposed ("would show").
 RULED_OUT = re.compile(
-    r"[^.;!?]{0,40}?\b(ruled out|excluded|unlikely|not the cause|not at fault|not involved|not to blame)\b",
+    r"\b(ruled out|excluded|unlikely|not the cause|not at fault|not involved|not to blame|found none|found nothing"
+    r"|found no sign|would)\b",
     re.IGNORECASE,
 )
+OBJECT_DENIED = re.compile(r"\s+(nothing|none|no)\b", re.IGNORECASE)  # right after a match: "Redis lost nothing"
+RULING_OUT_LEAD = re.compile(r"\s*(ruled out|excluded|unlikely|not likely|not the cause)\s*", re.IGNORECASE)
 CLAUSE = ".;!?:("
-# A wrong cause offered as a maybe, beside the right one: "the database could be down too", "Still open: whether...".
-# "Could not" is no hedge; "open" is one only before a colon ("Still open:"), never in "the breaker is open".
+SEGMENT_ENDS = ".;!?:(),"
+# A wrong cause offered as a maybe, beside the right one: "the database could be down too", "Still open: whether...",
+# ", or PostgreSQL was briefly unavailable". "Could not" is no hedge; "open" is one only before a colon ("Still open:").
 HEDGE = re.compile(
     r"\b(could(?!\s*(not|n't))|might|may|possibly|perhaps|maybe|whether|either|unclear|uncertain)\b", re.IGNORECASE
 )
 HEDGE_LEAD = re.compile(r"\b(open|unknown|unclear|possible|possibly|maybe|perhaps|unverified)\b", re.IGNORECASE)
 MAYBE_AFTER = re.compile(
-    r"[^.;!?]{0,40}?\b(is possible|was possible|possibly|a possibility|cannot be ruled out|can't be ruled out"
-    r"|not ruled out)\b",
+    r"\b(is possible|was possible|possibly|a possibility|cannot be ruled out|can't be ruled out|not ruled out)\b",
     re.IGNORECASE,
 )
 
 
 def _clause(text: str, start: int) -> tuple[int, str]:
-    """Where the clause of a match at start begins (after a full stop, a semicolon, a colon or an opening bracket, never
-    a comma), and the words before its colon when a colon opens it ("Ruled out: ...", "Still open: ...")."""
+    """Where the clause of a match at start begins (after a full stop, a semicolon, a colon or an opening bracket), and
+    the words before its colon when a colon opens it ("Ruled out: ...", "Still open: ...")."""
     opened = max(text.rfind(mark, 0, start) for mark in CLAUSE) + 1
     if opened and text[opened - 1] == ":":
         return opened, text[max(text.rfind(mark, 0, opened - 1) for mark in CLAUSE) + 1 : opened - 1]
     return opened, ""
 
 
-def _negated(text: str, start: int, end: int) -> bool:
-    """Whether the match at text[start:end] is denied or ruled out (version 4): a negation earlier in its clause, with
-    no turn of the sentence after it ("not hung, stalled or crashed", "no sign of a poison message", "rather than
-    Redis losing keys"); a ruling-out of one or two words before a colon ("Ruled out: Redis losing its keys"); or words
-    right after it that rule it out ("was ruled out", "is unlikely")."""
+def _segment(text: str, start: int, opened: int, patterns: tuple[str, ...]) -> int:
+    """Where the comma segment of a match at start begins: after the last comma of its clause; or, when the segments
+    before it each end in another match of the same patterns, where that list begins ("not hung, stalled or crashed")."""
+    begins = max(text.rfind(",", opened, start) + 1, opened)
+    while begins > opened:
+        before = max(text.rfind(",", opened, begins - 1) + 1, opened)
+        piece = text[before : begins - 1]
+        if not any(re.search(rf"(?:{pattern})\W*$", piece, re.IGNORECASE) for pattern in patterns):
+            break
+        begins = before
+    return begins
+
+
+def _segment_end(text: str, end: int) -> int:
+    found = [i for i in (text.find(mark, end) for mark in SEGMENT_ENDS) if i != -1]
+    return min(found, default=len(text))
+
+
+def _negated(text: str, start: int, end: int, patterns: tuple[str, ...] = ()) -> bool:
+    """Whether the match at text[start:end] (of one of patterns) is denied, ruled out or only supposed (version 4): a
+    negation earlier in its segment, with no turn of the sentence after it ("no sign of a poison message", "rather
+    than Redis losing keys", "if it were stuck"), through a list of the same kind ("not hung, stalled or crashed"); a
+    ruling-out before a colon ("Ruled out: Redis losing its keys"); or, later in its segment, words that rule it out
+    or only suppose it ("is unlikely", "and found none", "would show"), or a denied object right after it ("Redis
+    lost nothing")."""
     opened, lead = _clause(text, start)
-    if len(lead.split()) <= 2 and CUE.search(lead):
+    if RULING_OUT_LEAD.fullmatch(lead):
         return True
-    cues = list(CUE.finditer(text, opened, start))
+    begins = _segment(text, start, opened, patterns)
+    cues = list(CUE.finditer(text, begins, start))
     if cues and not TURN.search(text, cues[-1].end(), start):
         return True
-    return RULED_OUT.match(text, end) is not None
+    if OBJECT_DENIED.match(text, end):
+        return True
+    return RULED_OUT.search(text, end, _segment_end(text, end)) is not None
 
 
-def _hedged(text: str, start: int, end: int) -> bool:
-    """Whether the match at text[start:end] is offered as a maybe (version 4): a hedge in it ("could be down"), or
-    earlier in its clause with no turn of the sentence after it ("might", "whether"), one before its colon ("Still
-    open: ..."), or right after it ("is possible", "cannot be ruled out")."""
+def _hedged(text: str, start: int, end: int, patterns: tuple[str, ...] = ()) -> bool:
+    """Whether the match at text[start:end] is offered as a maybe (version 4): a hedge in it ("could be down"); earlier
+    in its segment with no turn of the sentence after it ("might", "whether"), or as an alternative (", or PostgreSQL
+    was down"); one before its colon ("Still open: ..."); or later in its segment ("is possible", "cannot be ruled
+    out")."""
     opened, lead = _clause(text, start)
     if HEDGE_LEAD.search(lead) or HEDGE.search(lead) or HEDGE.search(text, start, end):
         return True
-    hedges = list(HEDGE.finditer(text, opened, start))
+    begins = _segment(text, start, opened, patterns)
+    if text[begins:start].strip().lower() in ("or", "either", "or else"):  # an alternative: ", or X"
+        return True
+    hedges = list(HEDGE.finditer(text, begins, start))
     if hedges and not TURN.search(text, hedges[-1].end(), start):
         return True
-    return MAYBE_AFTER.match(text, end) is not None
+    return MAYBE_AFTER.search(text, end, _segment_end(text, end)) is not None
 
 
 def _stance(element: Element, text: str) -> str | None:
@@ -653,9 +693,9 @@ def _stance(element: Element, text: str) -> str | None:
     offered = False
     for pattern in element.patterns:
         for found in re.finditer(pattern, text, re.IGNORECASE):
-            if _negated(text, found.start(), found.end()):
+            if _negated(text, found.start(), found.end(), element.patterns):
                 continue
-            if not _hedged(text, found.start(), found.end()):
+            if not _hedged(text, found.start(), found.end(), element.patterns):
                 return "asserted"
             offered = True
     return "offered" if offered else None
@@ -665,7 +705,7 @@ def _found(patterns: tuple[str, ...], text: str, scoped: bool = False) -> bool:
     if not scoped:
         return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
     return any(  # version 4: only a match no negation denies
-        not _negated(text, found.start(), found.end())
+        not _negated(text, found.start(), found.end(), patterns)
         for pattern in patterns
         for found in re.finditer(pattern, text, re.IGNORECASE)
     )

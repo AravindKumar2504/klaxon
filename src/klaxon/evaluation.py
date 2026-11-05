@@ -850,9 +850,23 @@ def shown(path: Path) -> str:
         return clean_text(str(path))
 
 
-def report(paths: Sequence[Path]) -> dict:
+HELD_BACK = "held back until Aravind labels it"
+
+
+def held_back(row: Mapping) -> dict:
+    """A run's row with the judge's verdict held back, as it is until Aravind labels the run: so a report never shows
+    him a grader's verdict before he gives his own (the re-check's finding M2). Its disagreement with the rule too."""
+    hidden = dict.fromkeys(("judge", "judge_fix_fits", "judge_why"))
+    return dict(row) | hidden | {"graders_disagree": False, "judge_held_back": True}
+
+
+def report(paths: Sequence[Path], show_judge: bool = False) -> dict:
+    """The report on these saved runs. The judge's verdict on a run Aravind has not labeled is held back, unless
+    show_judge (once he has labeled the runs he will, or for Claude's own reading)."""
     folders, left_out, suites = run_folders(paths)
     rows = [run_row(folder) for folder in folders]
+    if not show_judge:
+        rows = [held_back(row) if row["aravind"] is None and row["judge"] is not None else row for row in rows]
     return {
         "label": (
             "Worked out offline from saved runs by klaxon.evaluation: no model was called and nothing was run. The"
@@ -863,6 +877,7 @@ def report(paths: Sequence[Path]) -> dict:
         ),
         "made_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "from": [shown(path) for path in paths],
+        "judge_held_back": sum(1 for row in rows if row.get("judge_held_back")),
         "left_out": left_out,
         "suites": [suite_summary(folder) for folder in suites],
         "runs": rows,
@@ -887,6 +902,11 @@ def markdown(found: Mapping) -> str:
     run."""
     lines = ["# Klaxon evaluation report", "", found["label"], ""]
     lines.append(f"Made {found['made_at_utc']} from {len(found['runs'])} runs in: {', '.join(found['from'])}.")
+    if found.get("judge_held_back"):
+        lines.append(
+            f"The judge's verdicts on {found['judge_held_back']} runs are held back until Aravind labels them (make"
+            " label), and are counted nowhere here; make eval-report SHOW_JUDGE=1 shows them."
+        )
     if found["left_out"]:
         lines.append(f"Left out: {'; '.join(found['left_out'])}.")
     if found["suites"]:
@@ -949,7 +969,8 @@ def markdown(found: Mapping) -> str:
         action = "-" if row["named_action"] is None else " ".join(str(part) for part in row["named_action"])
         lines.append(
             f"| {_cell(row['folder'])} | {_cell(row['case'])} | {row['seed']} | {row['mode']} | {verdict} |"
-            f" {row['judge'] or '-'} | {row['aravind'] or '-'} | {_cell(action)} | {row['gate'] or '-'} |"
+            f" {'held back' if row.get('judge_held_back') else row['judge'] or '-'} | {row['aravind'] or '-'} |"
+            f" {_cell(action)} | {row['gate'] or '-'} |"
             f" {_number(row['diagnosis_seconds'])} | {row['calls']} | ${row['cost_usd']:.2f} |"
         )
     split = [row for row in found["runs"] if row["graders_disagree"]]
@@ -1114,7 +1135,7 @@ def _run(args: argparse.Namespace) -> int:
 
 def _report(args: argparse.Namespace) -> int:
     try:
-        found = report(args.folders)
+        found = report(args.folders, args.show_judge)
         if args.write is not None:
             write_report(args.write, found)
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
@@ -1153,6 +1174,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     again = actions.add_parser("report", help="the report, from saved runs; offline")
     again.add_argument("folders", type=Path, nargs="+", help="run folders, or folders of them (a suite's, a week's)")
     again.add_argument("--write", type=Path, help="also write report.json and report.md into this folder")
+    again.add_argument(
+        "--show-judge", action="store_true", help="show the judge's verdicts on runs Aravind has not labeled too"
+    )
     rehearsal = actions.add_parser("rehearse", help="one case under traffic, with the rules and no model")
     rehearsal.add_argument("case", choices=list(CASES))
     rehearsal.add_argument("--seed", type=int, default=SEEDS[0])

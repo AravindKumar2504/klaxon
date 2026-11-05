@@ -357,6 +357,7 @@ def test_the_graders_make_targets_pass_their_values_through_the_environment():
         ("judge", "RUN=x' ; echo pwned", "$RUN"),
         ("replay-judge", "RUN=x' ; echo pwned", "$RUN"),
         ("label", "RUN=x' ; echo pwned", "$RUN"),
+        ("eval-report", "SHOW_JUDGE=1' ; echo pwned", "${SHOW_JUDGE:+--show-judge}"),
         ("calibration-report", "FOLDER=x' ; echo pwned", '"$FOLDER"'),
         ("replay-calibration", "FOLDER=x' ; echo pwned", '"$FOLDER"'),
     ]:
@@ -450,6 +451,9 @@ def test_a_report_counts_only_a_judgment_by_this_judge_of_this_diagnosis_against
         None,
         "the judge graded it against another right answer: not counted",
     )
+    _edit(folder, judge.SAVED, lambda saved: saved["right_answer"].update(cause="an older right answer"))
+    assert judge.counted(folder, item) == (None, "the judge graded it against another right answer: not counted")
+    _edit(folder, judge.SAVED, lambda saved: saved["right_answer"].update(cause=grading.answer(item.name, 1).cause))
     _edit(folder, judge.SAVED, lambda saved: saved["judge"].update(sha256="an older judge"))
     assert judge.counted(folder, item) == (None, "another version of the judge made this judgment: not counted")
     (folder / judge.SAVED).write_text("{")

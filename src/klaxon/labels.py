@@ -12,8 +12,9 @@ asks: n, p or m (names the cause, partly, misses the cause); y or n (does its fi
 why; and y to save. The verdict is saved as label.json beside the run, written once: it is never overwritten. A run
 already labeled, or with no diagnosis, is passed over, and said. Anything but y at the end saves nothing and stops.
 
-The runs come in a shuffled order (a fixed seed, so the same each time), so their order says nothing: not the model
-that wrote them, as a suite's folder would, and not the week (the independent review's finding M6).
+The runs come in a shuffled order (a fixed seed, so the same each time), and the screen never names a run's folder,
+so nothing on it says which model wrote a diagnosis: a suite's folder names its model, and a run's time says which
+suite it was in (the independent review's finding M6, and its re-check's L3).
 
 Its limit, as the gate's: any process running as Aravind can write label.json, make itself a terminal (the tests do),
 or type into his terminal (tools that drive a terminal can, Claude's among them). That Claude never labels is a rule;
@@ -61,7 +62,7 @@ def screen(item: grading.Saved, at: int, of: int) -> str:
     right = grading.answer(item.name, item.version)
     found = item.diagnosis or {}
     lines = [
-        f"Run {at} of {of}: {_line(item.folder.name, 200)}",
+        f"Run {at} of {of}",  # never its folder: a week 5 run's time names its suite, and so its model
         "",
         "The right answer (written before any run on it):",
         f"  {_line(right.cause, 3000)}",
