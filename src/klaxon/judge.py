@@ -12,8 +12,9 @@ it is data, never instructions. It never sees which model wrote the diagnosis, n
 
 What it answers, in a checked shape: the verdict on the cause ("names the cause", "partly" or "misses the cause"),
 whether the proposed fix fits the remedy (null when there is no fix), and one sentence why. One call per diagnosis: a
-reply that fails the check, or a call that gives no reply, is "no verdict", recorded and said, and never asked again on
-its own.
+reply that fails the check is "no verdict", recorded and said, and never asked again on its own. A call that gives no
+reply Klaxon can use (a seat's limit, a sign-in gone, a runtime Klaxon refuses) stops the batch: nothing is saved for
+that run, its recording keeps the call, and nothing after it is asked (the independent review's finding M4).
 
 Every call is recorded before it is used (judge-recording.jsonl), so a judgment replays offline. A run's judgment is
 saved beside it (judgment.json), written once: it is never overwritten.
@@ -46,6 +47,7 @@ from klaxon.agent.contract import MAX_PROBLEMS, check, parse_object
 from klaxon.agent.loop import find_live_model, one_line
 from klaxon.agent.model import Message, Model, ModelError, ReplayModel, text_sha256
 from klaxon.agent.tools import clean_text
+from klaxon.patient.stack import REPO
 
 JUDGE_MODEL = "claude-opus-5-5"  # Aravind's choice (2026-11-03): the stronger of the two models, for both models' runs
 VERSION = 1  # of the judge's prompt; a change after its calibration is a new version (DECISIONS.md)
@@ -106,6 +108,11 @@ ASK = "Grade the diagnosis against the case: one JSON object in the form the sys
 
 class NoJudgment(ValueError):
     """A run the judge cannot judge: no diagnosis, or a judgment already saved."""
+
+
+class NoReply(RuntimeError):
+    """The call gave no reply Klaxon could use: a batch stops here, and nothing is saved for it. Asking on would likely
+    fail the same way (a seat's limit, a sign-in gone), or start a runtime Klaxon refused again."""
 
 
 def system_prompt() -> str:
@@ -169,20 +176,20 @@ class Judgment:
     why: str | None  # its one sentence, with hidden characters dropped; None when there is no verdict
     problems: tuple[str, ...]  # why there is no verdict
     reply: dict | None  # the reply: the model it reports, when it was received, and its SHA-256
-    call: dict  # its reply's SHA-256 and what the check found, or its error's type
+    call: dict  # its reply's SHA-256, and what the check found
 
     def to_dict(self) -> dict:
         return json.loads(json.dumps(asdict(self)))
 
 
 def judge(model: Model, right: faults.Recorded, diagnosis: Mapping) -> Judgment:
-    """One call: the judge's verdict on diagnosis, against right (its right answer and remedy), or no verdict."""
+    """One call: the judge's verdict on diagnosis, against right (its right answer and remedy), or no verdict when its
+    reply is out of shape. NoReply when the call gives no reply Klaxon can use."""
     conversation = [Message("user", first_turn(document(right, diagnosis)))]
     try:
         reply = model.ask(system_prompt(), conversation)
     except ModelError as exc:
-        why = (f"the call gave no reply Klaxon could use ({type(exc).__name__})",)
-        return Judgment(NO_VERDICT, None, None, why, None, {"error": type(exc).__name__})
+        raise NoReply(f"the call gave no reply Klaxon could use ({type(exc).__name__})") from exc
     found, problems = read_judgment(reply.text, "proposed_fix" in diagnosis)
     shown = {"model": reply.model, "received_at": reply.received_at, "sha256": text_sha256(reply.text)}
     call = {"reply_sha256": shown["sha256"], "problems": list(problems)}
@@ -230,14 +237,39 @@ def save(folder: Path, item: grading.Saved, judgment: Judgment) -> bool:
 
 
 def read(folder: Path) -> dict | None:
-    """A run's saved judgment, or None when it has none."""
+    """A run's saved judgment, or None when it has none. ValueError when the file is not a judgment this module
+    writes."""
     path = Path(folder) / SAVED
     if not path.is_file():
         return None
     saved = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(saved, dict) or not isinstance(saved.get("judgment"), dict):
+    said = saved.get("judgment") if isinstance(saved, dict) else None
+    if (
+        not isinstance(said, dict)
+        or said.get("verdict") not in (*VERDICTS, NO_VERDICT)
+        or not any(said.get("fix_fits") is value for value in (True, False, None))  # not 1 or 0
+        or not isinstance(said.get("why"), str | None)
+    ):
         raise ValueError(f"{Path(folder).name}'s {SAVED} is not a judgment")
     return saved
+
+
+def counted(folder: Path, item: grading.Saved) -> tuple[dict | None, str | None]:
+    """A run's saved judgment, if a report may count it: made by the judge as committed, of this very diagnosis,
+    against this right answer. Else None, and why (no why when there is no judgment at all)."""
+    try:
+        saved = read(folder)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"its {SAVED} cannot be read ({type(exc).__name__}): not counted"
+    if saved is None:
+        return None, None
+    if saved.get("diagnosis_sha256") != grading.digest(item.diagnosis):
+        return None, "the judge graded another diagnosis than this run's: not counted"
+    if (saved.get("judge") or {}).get("sha256") != fingerprint():
+        return None, "another version of the judge made this judgment: not counted"
+    if saved.get("graded") != {"name": item.name, "rubric_version": item.version}:
+        return None, "the judge graded it against another right answer: not counted"
+    return saved, None
 
 
 def replay(folder: Path | str) -> list[str]:
@@ -252,7 +284,10 @@ def replay(folder: Path | str) -> list[str]:
     if item.diagnosis is None or saved.get("diagnosis_sha256") != grading.digest(item.diagnosis):
         differences.append("the diagnosis differs from the one judged: the evidence changed since")
     model = ReplayModel(folder / RECORDING)
-    again = record(item, judge(model, grading.answer(item.name, item.version), item.diagnosis or {}))
+    try:
+        again = record(item, judge(model, grading.answer(item.name, item.version), item.diagnosis or {}))
+    except NoReply as exc:  # the prompt changed since, or the recording holds no reply for it
+        return [*differences, f"no recorded reply for this prompt: {exc}"]
     differences += [
         f"the saved judgment differs in: {key}"
         for key in sorted(set(saved) | set(again))
@@ -287,12 +322,36 @@ def _prompt(folder: Path) -> int:
     print(f"Judge: {JUDGE_MODEL}, version {VERSION} (sha256 {fingerprint()})")
     print(f"Graded against: {item.name}, the right answer of rubric version {item.version}'s system\n")
     print(f"System prompt ({len(system):,} characters, sha256 {text_sha256(system)}):\n\n{system}\n")
-    print(f"First turn ({len(turn):,} characters, sha256 {text_sha256(turn)}):\n\n{clean_text(turn, len(turn))}")
+    print(
+        f"First turn ({len(turn):,} characters, sha256 {text_sha256(turn)} of the exact text; shown with hidden"
+        f" characters dropped and this Mac's home folder written as ~):\n\n{clean_text(turn, len(turn))}"
+    )
     return 0
 
 
-def judge_runs(folders: Sequence[Path], argv: Sequence[str], binary: Path) -> tuple[int, int, int]:
-    """Judge each run not judged yet, live: (judged with a verdict, no verdict, passed over)."""
+def rerun_command(folder: Path) -> str:
+    """The command that judges this one run again, naming its folder from the repo's root where it can."""
+    try:
+        named = str(folder.resolve().relative_to(REPO))
+    except ValueError:
+        named = clean_text(str(folder))
+    return shlex.join(["python", "-m", "klaxon.judge", "run", named])
+
+
+@dataclass(frozen=True)
+class Batch:
+    """What came of judging a list of runs: judged with a verdict, no verdict, passed over, and why it stopped early."""
+
+    judged: int
+    no_verdict: int
+    passed_over: int
+    stopped: str | None = None
+
+
+def judge_runs(folders: Sequence[Path], binary: Path, held_back: bool = False) -> Batch:
+    """Judge each run not judged yet, live. It stops at the first call that gives no reply Klaxon can use, and saves
+    nothing for that run. held_back: say only that each run was judged, never its verdict, so the person who labels
+    these runs afterwards does not see it first (the independent review's finding M6)."""
     from klaxon.agent.claude_code import ClaudeCode, _provenance
     from klaxon.agent.model import Recording
 
@@ -306,23 +365,30 @@ def judge_runs(folders: Sequence[Path], argv: Sequence[str], binary: Path) -> tu
             continue
         header = {
             "what": WHAT,
-            "rerun_command": clean_text(shlex.join(["python", "-m", "klaxon.judge", *argv]), 2000),
+            "rerun_command": rerun_command(folder),
             "run": folder.name,
             "judge": {"model": JUDGE_MODEL, "version": VERSION, "sha256": fingerprint()},
             **_provenance(),
         }
         adapter = ClaudeCode(Recording(folder / RECORDING, header), model=JUDGE_MODEL, binary=binary)
-        judgment = judge(adapter, grading.answer(item.name, item.version), item.diagnosis)
+        try:
+            judgment = judge(adapter, grading.answer(item.name, item.version), item.diagnosis)
+        except NoReply as exc:
+            print(f"{clean_text(folder.name)}: stopped: {exc}. Nothing was saved for it; {RECORDING} keeps the call.")
+            return Batch(*counts, stopped=f"at {folder.name}: {exc}")
         if not save(folder, item, judgment):
             print(f"{clean_text(folder.name)}: judged meanwhile by another process: nothing was written")
             counts[2] += 1
             continue
-        print(f"{clean_text(folder.name)}: {said(judgment.to_dict())}")
+        if held_back:
+            print(f"{clean_text(folder.name)}: judged (its verdict is held back until Aravind labels this run)")
+        else:
+            print(f"{clean_text(folder.name)}: {said(judgment.to_dict())}")
         counts[0 if judgment.verdict != NO_VERDICT else 1] += 1
-    return counts[0], counts[1], counts[2]
+    return Batch(*counts)
 
 
-def _run(paths: Sequence[Path], argv: Sequence[str]) -> int:
+def _run(paths: Sequence[Path]) -> int:
     folders = grading.run_folders(paths)
     if not folders:
         print("No saved run in: " + ", ".join(clean_text(str(path)) for path in paths), file=sys.stderr)
@@ -333,12 +399,14 @@ def _run(paths: Sequence[Path], argv: Sequence[str]) -> int:
         print(f"Not started, and nothing was written: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
     try:
-        judged, none, passed = judge_runs(folders, argv, binary)
+        done = judge_runs(folders, binary)
     except KeyboardInterrupt:
         print(f"Interrupted: each {RECORDING} keeps the calls made", file=sys.stderr)
         return 130
-    print(f"\nJudged: {judged}; no verdict: {none}; passed over: {passed}.")
-    return 0 if none == 0 else 1
+    print(f"\nJudged: {done.judged}; no verdict: {done.no_verdict}; passed over: {done.passed_over}.")
+    if done.stopped:
+        print(f"Stopped {done.stopped}: nothing after it was asked.", file=sys.stderr)
+    return 0 if done.no_verdict == 0 and done.stopped is None else 1
 
 
 def _replay(paths: Sequence[Path]) -> int:
@@ -375,7 +443,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _prompt(args.folder)
     if args.action == "replay":
         return _replay(args.folders)
-    return _run(args.folders, argv)
+    return _run(args.folders)
 
 
 if __name__ == "__main__":

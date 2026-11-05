@@ -8,6 +8,7 @@ the docs state. The runs are copies of the saved runs' evidence: a test never ch
 
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -25,7 +26,9 @@ NOW = 1_793_000_000.0  # 2026-10-26T07:33:20Z, a made-up clock
 
 
 def copy_run(source: Path, parent: Path) -> Path:
-    return Path(shutil.copytree(source, parent / source.name))
+    """A copy of a saved run as it was before any grader (the review's finding H1): no judgment, no verdict of his."""
+    ignore = shutil.ignore_patterns("judgment.json", "judge-recording.jsonl", labels.LABEL_FILE)
+    return Path(shutil.copytree(source, parent / source.name, ignore=ignore))
 
 
 def label(folder, *answers, during=None):
@@ -131,17 +134,48 @@ def test_a_label_written_meanwhile_is_kept_and_nothing_is_written(tmp_path):
     assert json.loads((folder / labels.LABEL_FILE).read_text()) == {"written": "meanwhile"}
 
 
-def test_a_folder_of_runs_is_labeled_in_turn_and_passes_over_runs_with_nothing_to_label(tmp_path):
+def test_a_folder_of_runs_is_labeled_in_a_shuffled_order_and_passes_over_runs_with_nothing_to_label(tmp_path):
     week = tmp_path / "week"
-    first, fault_1 = copy_run(FIRST_LIVE_RUN, week), copy_run(FAULT_1, week)
+    runs = [copy_run(REPO / relative, week) for relative in calibration.SAVED_RUNS[:4]]
     empty = week / "2026-10-20T000000Z_fault-run_poison-message"
     empty.mkdir()
-    (empty / "run.json").write_text(json.dumps({"fault": {"name": "poison-message"}}))  # no trace: no diagnosis
-    code, shown = label(week, "m", "n", "", "y", "n", "y", "", "y")
-    assert code == 0 and "Run 1 of 2: " + first.name in shown and "Run 2 of 2: " + fault_1.name in shown
+    (empty / "run.json").write_text(json.dumps({"fault": {"name": "poison-message"}}))  # no loop: no diagnosis
+    broken = week / "2026-10-20T000001Z_fault-run_poison-message"
+    broken.mkdir()
+    (broken / "run.json").write_text("[]")
+    order = list(runs)
+    random.Random(labels.ORDER_SEED).shuffle(order)
+    assert order != runs  # the review's finding M6: the order says nothing, not even the week
+    code, shown = label(week, *(["p", "y", "", "y"] * 4))
+    assert code == 0 and "4 to label, in a shuffled order." in shown
+    assert [shown.index(f"Run {n} of 4: {run.name}") for n, run in enumerate(order, 1)] == sorted(
+        shown.index(f"Run {n} of 4: {run.name}") for n, run in enumerate(order, 1)
+    )
     assert f"{empty.name}: passed over: it ended in no diagnosis" in shown
-    assert labels.read(first)["verdict"] == "misses the cause" and labels.read(fault_1)["verdict"] == "names the cause"
+    assert f"{broken.name}: passed over: {broken.name}'s run.json is not an object" in shown
+    assert all(labels.read(run)["verdict"] == "partly" for run in runs)
     assert label(tmp_path / "nothing")[0] == 2
+
+
+def test_a_report_counts_only_his_verdict_on_this_diagnosis_against_this_right_answer(tmp_path):
+    folder = copy_run(FAULT_1, tmp_path)
+    assert label(folder, "n", "y", "", "y")[0] == 0
+    item = grading.saved(folder)
+    assert labels.counted(folder, item)[0]["verdict"] == "names the cause"
+    other = grading.Saved(folder, "duplicate-delivery", 1, dict(item.diagnosis, confidence=0.1))
+    assert labels.counted(folder, other) == (
+        None,
+        "Aravind's verdict is on another diagnosis than this run's: not counted",
+    )
+    saved = labels.read(folder) | {"right_answer_sha256": "another right answer"}
+    (folder / labels.LABEL_FILE).write_text(json.dumps(saved))
+    assert labels.counted(folder, item) == (
+        None,
+        "Aravind's verdict was given against another right answer: not counted",
+    )
+    (folder / labels.LABEL_FILE).write_text("{")
+    assert labels.counted(folder, item) == (None, "its label.json cannot be read (JSONDecodeError): not counted")
+    assert labels.counted(tmp_path, item) == (None, None)
 
 
 def test_a_saved_file_that_is_not_a_verdict_make_label_writes_is_refused(tmp_path):

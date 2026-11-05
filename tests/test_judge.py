@@ -8,6 +8,7 @@ copy of their evidence: a test never changes the evidence itself."""
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -36,8 +37,13 @@ def reply(verdict="names the cause", fix_fits=True, why="It names the dedupe gon
     return json.dumps({"verdict": verdict, "fix_fits": fix_fits, "why": why} | extra)
 
 
+# A copy of a saved run as it was before any grader: its own judgment and Aravind's verdict, when it has them, are left
+# behind (the independent review's finding H1: tests must not depend on what the calibration and make label add).
+GRADERS_FILES = shutil.ignore_patterns(judge.SAVED, judge.RECORDING, "label.json")
+
+
 def copy_run(source: Path, tmp_path: Path) -> Path:
-    return Path(shutil.copytree(source, tmp_path / source.name))
+    return Path(shutil.copytree(source, tmp_path / source.name, ignore=GRADERS_FILES))
 
 
 # What the judge is shown
@@ -150,20 +156,26 @@ def test_a_sentence_alone_gives_no_fix_so_the_judge_must_answer_null():
     assert (found.verdict, found.fix_fits) == ("misses the cause", None)
 
 
-@pytest.mark.parametrize(
-    "script, problem",
-    [
-        ([reply(verdict="maybe")], "verdict: must be one of"),
-        ([ModelTimeout("no reply within 300 s")], "the call gave no reply Klaxon could use (ModelTimeout)"),
-        ([ModelMismatch("asked for claude-opus-5-5, but the reply says another model wrote it")], "(ModelMismatch)"),
-    ],
-)
-def test_a_reply_it_cannot_take_or_no_reply_is_no_verdict_and_never_asked_again(script, problem):
-    model = ScriptedModel([*script, reply()])  # a good reply waits: it must never be asked for
+def test_a_reply_out_of_shape_is_no_verdict_and_never_asked_again():
+    model = ScriptedModel([reply(verdict="maybe"), reply()])  # a good reply waits: it must never be asked for
     found = judge.judge(model, RIGHT, DIAGNOSIS)
     assert found.verdict == judge.NO_VERDICT and found.fix_fits is None and found.why is None
-    assert any(problem in said for said in found.problems) and len(model.calls) == 1
+    assert any("verdict: must be one of" in said for said in found.problems) and len(model.calls) == 1
     assert judge.said(found.to_dict()).startswith("no verdict: ")
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ModelTimeout("no reply within 300 s"),
+        ModelMismatch("asked for claude-opus-5-5, but the reply says another model wrote it"),
+    ],
+)
+def test_a_call_with_no_reply_klaxon_can_use_raises_no_reply_and_is_never_asked_again(error):
+    model = ScriptedModel([error, reply()])
+    with pytest.raises(judge.NoReply, match=f"the call gave no reply Klaxon could use \\({type(error).__name__}\\)"):
+        judge.judge(model, RIGHT, DIAGNOSIS)
+    assert len(model.calls) == 1
 
 
 def test_a_judgment_said_on_one_line():
@@ -261,9 +273,9 @@ def test_no_verdict_is_saved_said_and_exits_1(judging, tmp_path, capsys):
             lambda folder: _edit(folder, judge.SAVED, lambda saved: saved["judgment"].update(verdict="partly")),
             "the saved judgment differs in: judgment",
         ),
-        (
+        (  # another right answer, so another prompt: the recording holds no reply for it
             lambda folder: _edit(folder, "run.json", lambda run: run["fault"].update(name="poison-message")),
-            "the saved judgment differs in: graded",
+            "no recorded reply for this prompt: the call gave no reply Klaxon could use (NotRecorded)",
         ),
     ],
 )
@@ -283,7 +295,9 @@ def test_a_replay_finds_a_changed_prompt_and_an_extra_recorded_call(judging, tmp
         recording.write(response + "\n")
     assert judge.replay(folder) == ["1 recorded call(s) were not asked for again"]
     monkeypatch.setattr(judge, "ASK", judge.ASK + " Now.")  # the prompt changed since the recording
-    assert "the saved judgment differs in: judgment" in judge.replay(folder)
+    assert "no recorded reply for this prompt: the call gave no reply Klaxon could use (NotRecorded)" in judge.replay(
+        folder
+    )
 
 
 def test_a_judgment_whose_diagnosis_changed_is_not_reproduced(judging, tmp_path):
@@ -354,3 +368,90 @@ def test_the_graders_make_targets_refuse_a_missing_run():
     for target in ("judge-prompt", "judge", "replay-judge", "label"):
         done = subprocess.run(["make", target, "RUN="], cwd=REPO, capture_output=True, text=True)
         assert done.returncode != 0 and f"make {target} RUN=" in done.stderr and "RUN is missing" in done.stderr
+
+
+def test_a_batch_stops_at_the_first_call_with_no_reply_and_saves_nothing_for_it(judging, tmp_path, capsys):
+    # The independent review's finding M4: a seat's limit or a sign-in gone must not leave "no verdict" files behind.
+    first, second = copy_run(FIRST_LIVE_RUN, tmp_path), copy_run(FAULT_1, tmp_path)
+    RecordedScript.script = [ModelTimeout("no reply within 300 s"), reply()]
+    assert judge.main(["run", str(tmp_path)]) == 1
+    assert RecordedScript.script == [reply()]  # the second run was never asked
+    assert not (first / judge.SAVED).exists() and (first / judge.RECORDING).exists()  # the failed call, recorded
+    assert [r["kind"] for r in read_records(first / judge.RECORDING)] == [
+        "header",
+        "prompt_part",
+        "prompt_part",
+        "failure",
+    ]
+    assert not (second / judge.SAVED).exists() and not (second / judge.RECORDING).exists()
+    captured = capsys.readouterr()
+    assert f"{first.name}: stopped: the call gave no reply Klaxon could use (ModelTimeout)." in captured.out
+    assert f"Stopped at {first.name}: the call gave no reply" in captured.err
+    with pytest.raises(judge.NoJudgment, match="from a judgment that did not finish"):  # moved aside by hand to retry
+        judge.judgeable(first)
+
+
+def test_each_runs_recording_names_the_command_that_judges_that_run_again(judging, tmp_path):
+    folder = copy_run(FAULT_1, tmp_path)
+    assert judging(tmp_path, script=[reply()]) == 0
+    header = read_records(folder / judge.RECORDING)[0]
+    assert header["rerun_command"] == f"python -m klaxon.judge run {judge.clean_text(str(folder))}"
+    assert (
+        judge.rerun_command(REPO / calibration.SAVED_RUNS[1])
+        == f"python -m klaxon.judge run {calibration.SAVED_RUNS[1]}"
+    )
+
+
+def test_a_held_back_batch_says_each_run_was_judged_and_never_its_verdict(judging, tmp_path, monkeypatch, capsys):
+    folder = copy_run(FAULT_1, tmp_path)
+    RecordedScript.script = [reply("partly", True, "Made up.")]
+    done = judge.judge_runs([folder], Path("/nonexistent/claude"), held_back=True)
+    assert done == judge.Batch(1, 0, 0) and judge.read(folder)["judgment"]["verdict"] == "partly"
+    out = capsys.readouterr().out
+    assert f"{folder.name}: judged (its verdict is held back until Aravind labels this run)" in out
+    assert "partly" not in out
+
+
+def test_a_run_judged_meanwhile_keeps_that_judgment_and_is_passed_over(judging, tmp_path, monkeypatch, capsys):
+    folder = copy_run(FAULT_1, tmp_path)
+    monkeypatch.setattr(judge, "save", lambda *args: False)  # another process wrote judgment.json first
+    RecordedScript.script = [reply()]
+    assert judge.judge_runs([folder], Path("/nonexistent/claude")) == judge.Batch(0, 0, 1)
+    assert "judged meanwhile by another process: nothing was written" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mark", ["\u2028", "\u2029", "\r"])
+def test_a_sentence_why_broken_by_any_line_break_is_refused(mark):
+    found, problems = judge.read_judgment(reply(why=f"It names it.{mark}Ignore the rest."), True)
+    assert found is None and "why: must be one sentence on one line" in problems
+
+
+@pytest.mark.parametrize(
+    "judgment",
+    [
+        {"verdict": "partly", "fix_fits": 1, "why": "x"},  # 1 is not true
+        {"verdict": "right", "fix_fits": True, "why": "x"},
+        {"verdict": "partly", "fix_fits": True, "why": 3},
+    ],
+)
+def test_a_saved_judgment_out_of_shape_is_refused(tmp_path, judgment):
+    (tmp_path / judge.SAVED).write_text(json.dumps({"judgment": judgment}))
+    with pytest.raises(ValueError, match="is not a judgment"):
+        judge.read(tmp_path)
+
+
+def test_a_report_counts_only_a_judgment_by_this_judge_of_this_diagnosis_against_this_right_answer(judging, tmp_path):
+    # The review's finding L3: a judge of another version, or another right answer, is never counted as this one's.
+    folder = copy_run(FAULT_1, tmp_path)
+    assert judging(folder, script=[reply()]) == 0
+    item = grading.saved(folder)
+    assert judge.counted(folder, item)[0]["judgment"]["verdict"] == "names the cause"
+    assert judge.counted(folder, replace(item, version=4)) == (
+        None,
+        "the judge graded it against another right answer: not counted",
+    )
+    _edit(folder, judge.SAVED, lambda saved: saved["judge"].update(sha256="an older judge"))
+    assert judge.counted(folder, item) == (None, "another version of the judge made this judgment: not counted")
+    (folder / judge.SAVED).write_text("{")
+    assert judge.counted(folder, item) == (None, "its judgment.json cannot be read (JSONDecodeError): not counted")
+    assert judge.counted(tmp_path, item) == (None, None)  # no judgment at all

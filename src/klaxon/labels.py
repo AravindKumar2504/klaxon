@@ -12,8 +12,12 @@ asks: n, p or m (names the cause, partly, misses the cause); y or n (does its fi
 why; and y to save. The verdict is saved as label.json beside the run, written once: it is never overwritten. A run
 already labeled, or with no diagnosis, is passed over, and said. Anything but y at the end saves nothing and stops.
 
-Its limit, as the gate's: any process running as Aravind can write label.json, or make itself a terminal (the tests
-do). That Claude never labels is a rule; the file records how the verdict was given, not who gave it.
+The runs come in a shuffled order (a fixed seed, so the same each time), so their order says nothing: not the model
+that wrote them, as a suite's folder would, and not the week (the independent review's finding M6).
+
+Its limit, as the gate's: any process running as Aravind can write label.json, make itself a terminal (the tests do),
+or type into his terminal (tools that drive a terminal can, Claude's among them). That Claude never labels is a rule;
+the file records how the verdict was given, not who gave it.
 
 Run: python -m klaxon.labels FOLDER [FOLDER ...]   (make label RUN=FOLDER)
 """
@@ -22,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
@@ -42,6 +47,7 @@ FITS = {"y": True, "n": False}
 TRIES = 3  # a question is asked at most this often, when the answer is not one it takes
 MAX_WHY = 500  # characters kept of the sentence why
 STOPPED, SAVED, MEANWHILE = "stopped", "saved", "labeled meanwhile"
+ORDER_SEED = 5  # the shuffle's seed: the same order every time, and one that says nothing of the runs
 
 
 def _line(text: object, limit: int = 1000) -> str:
@@ -171,9 +177,10 @@ def label(
     if not todo:
         terminal.write("Nothing left to label.\n")
         return 0
+    random.Random(ORDER_SEED).shuffle(todo)
     terminal.write(
-        f"\n{len(todo)} to label. Each shows the right answer, its remedy and the diagnosis: never a grader's verdict,"
-        " nor the model.\n\n"
+        f"\n{len(todo)} to label, in a shuffled order. Each shows the right answer, its remedy and the diagnosis: never"
+        " a grader's verdict, nor the model.\n\n"
     )
     for at, item in enumerate(todo, 1):
         if label_one(item, terminal, at, len(todo), now) == STOPPED:
@@ -197,6 +204,23 @@ def read(folder: Path) -> dict | None:
     ):
         raise ValueError(f"{Path(folder).name}'s {LABEL_FILE} is not a verdict make label writes")
     return saved
+
+
+def counted(folder: Path, item: grading.Saved) -> tuple[dict | None, str | None]:
+    """A run's saved verdict of Aravind's, if a report may count it: given on this very diagnosis, against this right
+    answer. Else None, and why (no why when there is no verdict at all)."""
+    try:
+        saved = read(folder)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, f"its {LABEL_FILE} cannot be read ({type(exc).__name__}): not counted"
+    if saved is None:
+        return None, None
+    if saved.get("diagnosis_sha256") != grading.digest(item.diagnosis):
+        return None, "Aravind's verdict is on another diagnosis than this run's: not counted"
+    right = grading.answer(item.name, item.version)
+    if saved.get("right_answer_sha256") != grading.digest([right.cause, right.remedy]):
+        return None, "Aravind's verdict was given against another right answer: not counted"
+    return saved, None
 
 
 def main(argv: Sequence[str] | None = None) -> int:

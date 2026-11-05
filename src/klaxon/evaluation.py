@@ -298,6 +298,7 @@ def false_alarm(
         result = investigate(alert)
         record.timings["loop_ended_at"] = since()
         record.loop = fault_runs.summary(result)
+        record.comparison = grading.compare(case.name, record.loop["diagnosis"])  # by the rule, as a fault run's is
         record.stopped = f"the loop stopped: {result.reason}"
         if gated is not None and result.diagnosis is not None:
             record.timings["gate_began_at"] = since()
@@ -346,6 +347,11 @@ def false_alarm_label(record: fault_runs.Record) -> str:
                 " not a simulation."
             )
         said.append(fault_runs.EVALUATION_OFFERED)
+    if record.comparison is not None and record.comparison["verdict"] != "no diagnosis":
+        said.append(
+            "The diagnosis was compared with the case's right answer by a rule (klaxon.grading), not by a person or a"
+            " model."
+        )
     if record.gated:
         said += fault_runs._gated_label(record)
     return " ".join(said)
@@ -401,6 +407,8 @@ def render(record: fault_runs.Record) -> str:
                     f"  action it names: {clean_text(named['name'], 64)}"
                     f" {clean_text(json.dumps(named['arguments']), 300)} (an evaluation run: planned, never run)"
                 )
+    if record.comparison is not None:
+        lines += ["", *grading.render(record.comparison)]
     if record.gate is not None:
         lines += ["", f"The gate: {record.gate['result']}: {clean_text(record.gate['detail'], 500)}"]
     if record.damage.get("at_diagnosis"):
@@ -632,25 +640,26 @@ def not_run(saved: Mapping, used: Mapping | None = None) -> str | None:
 
 def _graders(folder: Path, saved: Mapping, name: str, diagnosis: object) -> dict:
     """The run's diagnosis by each grader: the rule's, worked out again with the newest rubric for the system the run
-    ran on; the judge's and Aravind's, read from beside the run, each counted only if it graded this very diagnosis."""
+    ran on; the judge's and Aravind's, read from beside the run, each counted only if it graded this very diagnosis,
+    against this right answer (the judge's, by the judge as committed). A file that cannot be read is said, never
+    fatal to the report."""
     out: dict = {"verdict": None, "rubric": None, "fix_fits": None, "judge": None, "judge_fix_fits": None}
     out |= {"judge_why": None, "aravind": None, "aravind_fix_fits": None, "grader_problems": []}
     if not isinstance(diagnosis, Mapping):
         return out
-    version = grading.newest_for(name, grading.version_of(saved.get("comparison")))
+    system = grading.version_of(saved.get("comparison"))
+    version = grading.newest_for(name, system)
     found = grading.compare(name, diagnosis, version)
     out |= {"verdict": found["verdict"], "rubric": version, "fix_fits": found["fix_fits_the_remedy"]}
-    sha = grading.digest(diagnosis)
-    judged, mine = judge.read(folder), labels.read(folder)
-    if judged is not None and judged.get("diagnosis_sha256") != sha:
-        out["grader_problems"].append("the judge graded another diagnosis than this run's: not counted")
-    elif judged is not None:
+    item = grading.Saved(folder, name, system, dict(diagnosis))
+    judged, judge_problem = judge.counted(folder, item)
+    mine, label_problem = labels.counted(folder, item)
+    if judged is not None:
         said = judged["judgment"]
         out |= {"judge": said["verdict"], "judge_fix_fits": said["fix_fits"], "judge_why": said["why"]}
-    if mine is not None and mine.get("diagnosis_sha256") != sha:
-        out["grader_problems"].append("Aravind's verdict is on another diagnosis than this run's: not counted")
-    elif mine is not None:
+    if mine is not None:
         out |= {"aravind": mine["verdict"], "aravind_fix_fits": mine["fix_fits"]}
+    out["grader_problems"] = [problem for problem in (judge_problem, label_problem) if problem is not None]
     return out
 
 

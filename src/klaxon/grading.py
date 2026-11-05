@@ -78,7 +78,11 @@ BY = {
         f" breaker): {HOW}"
     ),
     3: (f"a rule (klaxon.grading, rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6): {HOW}"),
-    4: f"a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): {HOW}",
+    4: (
+        "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element"
+        " of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it"
+        " reads words, not meaning."
+    ),
 }
 
 
@@ -88,6 +92,7 @@ class Element:
     patterns: tuple[str, ...]  # regular expressions; one match is enough
     required: bool = True
     unless: tuple[str, ...] = ()  # version 4: one match, and the element is not named (it is put elsewhere, or denied)
+    scoped: bool = False  # version 4: a match a negation denies or rules out does not count (_negated)
 
 
 @dataclass(frozen=True)
@@ -346,8 +351,9 @@ RUBRICS_V3 = RUBRICS_V2 | {
 
 def _gap(words: int) -> str:
     """A gap of a few words within one clause (never across a full stop or a semicolon), none of them a negation:
-    "PostgreSQL was down" counts, "PostgreSQL was not down" and "PostgreSQL wasn't down" do not."""
-    return rf"[^\w.;]+((?!(not|never|no|t)\b)\w+[^\w.;]+){{0,{words}}}"
+    "PostgreSQL was down" counts, "PostgreSQL was not down", "PostgreSQL wasn't down" and "neither slow nor down" do
+    not."""
+    return rf"[^\w.;]+((?!(not|never|no|t|neither|nor)\b)\w+[^\w.;]+){{0,{words}}}"
 
 
 def _more(element: Element, *patterns: str, unless: tuple[str, ...] = ()) -> Element:
@@ -361,13 +367,16 @@ DEDUPE_GONE = _more(
     V3["duplicate-delivery"].elements[1], r"duplicate[- ]?(check|detection|filter\w*|guard|suppression)"
 )
 REDIS_LOST = Element(  # known limit (version 1): Redis losing its keys is another cause than the handler's deploy
-    "a wrong cause: Redis lost the keys",
+    "Redis lost the keys",
     (
         rf"redis{_gap(3)}(lost|loses|lose|losing|dropped|drops|evicted|evicts|flushed|flushes|expired|wiped|forgot)\b",
         r"\b(lost|dropped|evicted|flushed|expired|wiped) (\w+ ){0,3}(from|in) redis",
     ),
+    scoped=True,
 )
 DATABASE = r"(postgres\w*|database|\bdb\b)"
+# Another of our services, where a hypothesis may put a bug (fault 4's known limit).
+ELSEWHERE = r"(payment[-_ ]?confirmer|ledger[-_ ]?consumer|webhook[-_ ]?receiver)"
 RUBRICS_V4 = RUBRICS_V3 | {
     "duplicate-delivery": replace(
         V3["duplicate-delivery"],
@@ -381,7 +390,7 @@ RUBRICS_V4 = RUBRICS_V3 | {
             # Known limits (version 1): the services' own words for its amount, and "a string" put another way.
             _more(
                 V3["poison-message"].elements[1],
-                r"not (a )?(positive )?(integer|whole number)",
+                r"not (a |an )?(positive )?(integer|whole number)",
                 r"\b(is|was|are|were|as) (a |an )?(decimal |numeric |text |json )?string\b",
             ),
             *V3["poison-message"].elements[2:],
@@ -389,8 +398,9 @@ RUBRICS_V4 = RUBRICS_V3 | {
         # Known limit (version 1): a database outage that makes the ledger retry is another cause.
         wrong=(
             Element(
-                "a wrong cause: the database was down",
+                "the database was down",
                 (rf"{DATABASE}{_gap(2)}(down|unavailable|unreachable|offline|restarting|crashed)\b",),
+                scoped=True,
             ),
         ),
     ),
@@ -398,13 +408,15 @@ RUBRICS_V4 = RUBRICS_V3 | {
         V3["provider-outage"],
         elements=(
             *V3["provider-outage"].elements[:2],
-            # Known limit (version 2): in a system with the breaker, saying there is none names the word, and is wrong.
+            # Known limit (version 2): in a system with the breaker, saying there is none names the word, and is wrong;
+            # so is saying it never opened. "Without the breaker, each payment would wait" is not a denial.
             _more(
                 V3["provider-outage"].elements[2],
                 unless=(
                     r"\b(no|without|lacks?|lacking|missing|has no|had no|have no)\s+(a\s+|an\s+|any\s+|its\s+|the\s+)?"
-                    r"(working\s+)?(circuit[ -]?)?breaker",
-                    rf"breaker{_gap(2)}(missing|absent|disabled|removed|turned off|switched off|off)\b",
+                    r"(working\s+)?(circuit[ -]?)?breaker\b(?![^.;]*\b(would|could)\b)",
+                    rf"breaker{_gap(2)}(missing|absent|disabled|removed|turned off|switched off|(is|was|set to|left) off)\b",
+                    rf"breaker{_gap(2)}(did not|didn't|never|failed to|does not|doesn't|could not|couldn't) (open|trip)",
                     r"PROVIDER_BREAKER\W{0,3}off\b",
                 ),
             ),
@@ -412,11 +424,12 @@ RUBRICS_V4 = RUBRICS_V3 | {
         # Known limit (version 1): a slow database is another cause; fake-provider's name holds "provider".
         wrong=(
             Element(
-                "a wrong cause: the database is slow or down",
+                "the database is slow or down",
                 (
                     rf"{DATABASE}{_gap(2)}(slow|down|overloaded|locked|unavailable|saturated)\b",
                     rf"\bslow {DATABASE}",
                 ),
+                scoped=True,
             ),
         ),
     ),
@@ -427,53 +440,62 @@ RUBRICS_V4 = RUBRICS_V3 | {
             _more(
                 V3["money-unit"].elements[0],
                 unless=(
-                    r"(deploy\w*|redeploy\w*|bug|change|regression)\W+(of|in|to|on)\W+(the\W+)?"
-                    r"(payment[-_ ]?confirmer|ledger[-_ ]?consumer|webhook[-_ ]?receiver)",
-                    rf"(payment[-_ ]?confirmer|ledger[-_ ]?consumer|webhook[-_ ]?receiver){_gap(3)}"
-                    r"(has|had|introduced|got|carries|carried)\W+(a\W+|an\W+|the\W+)?(\w+\W+)?(bug|regression)",
+                    rf"(deploy\w*|redeploy\w*|bug|change|regression)\W+(of|in|to|on)\W+(the\W+)?{ELSEWHERE}",
+                    rf"{ELSEWHERE}{_gap(3)}(has|had|introduced|got|carries|carried)\W+(a\W+|an\W+|the\W+)?(\w+\W+)?"
+                    r"(bug|regression)",
                 ),
             ),
-            *V3["money-unit"].elements[1:],
+            # Found by the independent review: "reads amounts as dollars" is the mechanism, with no "cents" said.
+            _more(
+                V3["money-unit"].elements[1],
+                r"(reads?|reading|treats?|treating|takes?|sends?|sending|charges?)\W+(\w+\W+){0,3}(amounts?|cents)\W+"
+                r"(\w+\W+){0,2}(as|in) dollars",
+            ),
+            *V3["money-unit"].elements[2:],
         ),
     ),
-    # The evaluation's two new cases (klaxon.evaluation.CASES has their right answers).
+    # The evaluation's two new cases (klaxon.evaluation.CASES has their right answers). Their own elements are scoped:
+    # a denial does not count ("this is not a false alarm", "it cannot keep up").
     "false-alarm": Rubric(
         elements=(
             Element("where: the ledger consumer group the alert names", (r"\bledger\b",)),
             Element(
                 "what: the alert is false, and nothing is wrong",
                 (
-                    r"false (alarm|alert|positive)",
-                    rf"(alert|alarm){_gap(4)}(is|was|looks|seems|appears){_gap(2)}"
+                    r"\bfalse (alarm|alert|positive)",
+                    rf"\b(alert|alarm){_gap(4)}(is|was|looks|seems|appears){_gap(2)}"
                     r"(wrong|false|mistaken|incorrect|spurious|stale|bogus|unfounded|inaccurate|misleading|untrue)\b",
-                    r"\bnothing (\w+ ){0,3}(wrong|broken|amiss|behind)\b",
-                    r"\bno (real |actual |current |ongoing |live )?(problem|incident|issue|fault|outage)s?\b",
+                    r"\bnothing (is |was |seems |looks |appears )?(to be )?(wrong|broken|amiss|behind)\b",
                     r"\bspurious\b",
-                    r"\bnot (a |an )?(real|genuine|actual|true) (alert|alarm|incident|problem|issue|fault)",
+                    r"\bnot (a |an )?(real|genuine|actual|true) (alert|alarm|incident|problem|issue|fault|backlog)",
                 ),
+                scoped=True,
             ),
             Element(
                 "how it knows: the lag reads near 0, and the group keeps up",
                 (
-                    rf"\blag\b{_gap(4)}(\b0\b|zero|near (0|zero)|normal|low|small|negligible|nil|none|empty)",
-                    r"\b(0|zero) (messages? )?(behind|lag)",
+                    # A lag near 0, but not one that rose from 0 to more.
+                    rf"\blag\b{_gap(4)}(?<!from )(\b0\b|zero|near (0|zero)|normal|low|small|negligible|nil|none|empty)"
+                    r"(?!\s+(to|and|then)\s+\d)",
+                    r"\b(0|zero) (messages? )?(behind|lag)\b",
                     r"\b(caught|catching|catches|keeps?|keeping|kept) up\b",
                     r"\bup to date\b",
                     r"\bno (consumer |real )?(lag|backlog)\b",
-                    r"\bnot (actually |really |at all )?(behind|lagging)",
+                    r"\bnot (actually |really |at all )?(behind|lagging)\b",
                 ),
+                scoped=True,
             ),
         ),
         fix_kinds=("none",),  # nothing to fix
         fix_target=r"",  # on any target
         wrong=(
             Element(
-                "a wrong cause: a real fault in the ledger consumer (stuck, hung, stalled, crashed)",
+                "a real fault in the ledger consumer (stuck, hung, stalled, crashed)",
                 (
-                    r"(?<!not )(?<!n't )(?<!never )(?<!nothing )(?<!nothing is )(?<!no )(?<!or )(?<!nor )"
                     r"\b(stuck|hung|hangs|hanging|stall|stalls|stalled|stalling|frozen|freezes|deadlock\w*|crash|crashed"
                     r"|crashes|crashing|wedged|poison\w*)\b",
                 ),
+                scoped=True,
             ),
         ),
     ),
@@ -495,15 +517,23 @@ RUBRICS_V4 = RUBRICS_V3 | {
             Element(
                 "what it could not check: docker did not answer the deploy list or the health check",
                 (
-                    r"(could not|couldn't|cannot|can't|unable to|did not|didn't|failed to) (\w+ ){0,2}"
-                    r"(check|read|see|confirm|verify|get|list|reach|query|inspect|retrieve|access)\b",
-                    r"docker[^\w.;]+(\w+[^\w.;]+){0,4}(did not answer|didn't answer|not answer|no answer|timed out"
+                    # Klaxon could not check something docker shows: not "the handler did not check for duplicates".
+                    r"\b(could not|couldn't|cannot|can't|unable to|did not|didn't|failed to)\s+(\w+\s+){0,2}"
+                    r"(check|read|see|confirm|verify|list|reach|query|inspect|retrieve|access|get)\b[^.;]{0,60}?"
+                    r"\b(deploy\w*|docker|container\w*|health\w*|tools?|recent_deploys|service_health|setting\w*|history)\b",
+                    r"\b(deploy\w*|docker|container\w*|health\w*|recent_deploys|service_health)\b[^.;]{0,60}?"
+                    r"\b(could not|couldn't|cannot|can't) be (read|checked|seen|confirmed|verified|listed|reached)\b",
+                    r"\bdocker[^\w.;]+(\w+[^\w.;]+){0,4}(did not answer|didn't answer|not answer|no answer|timed out"
                     r"|times out|time ?out|unavailable|unreachable|not responding|unresponsive|down\b)",
-                    r"(recent_deploys|service_health|deploy (list|log|history)|deploy tool|health (check|tool))"
+                    r"\b(recent_deploys|service_health|deploy (list|log|history)|deploy tool|health (check|tool))"
                     r"[^\w.;]+(\w+[^\w.;]+){0,4}(failed|fails|timed out|times out|errored|error|unavailable|did not"
                     r" answer|didn't answer|not available|returned nothing)",
-                    r"\b(unverified|unconfirmed|not (been |yet )?(confirmed|verified|checked))\b",
+                    r"\b(deploy\w*|docker|container\w*|health\w*|setting\w*|handler|recent_deploys|service_health)\b"
+                    r"[^.;]{0,80}?\b(unverified|unconfirmed|not (been |yet )?(confirmed|verified|checked))\b",
+                    r"\b(unverified|unconfirmed|not (been |yet )?(confirmed|verified|checked))\b[^.;]{0,40}?"
+                    r"\b(deploy\w*|docker|container\w*|health\w*|setting\w*|handler)\b",
                 ),
+                scoped=True,
             ),
         ),
     ),
@@ -522,6 +552,8 @@ def _shape(rubric: Rubric) -> dict:
     for element in [*shape["elements"], *shape.get("wrong", []), *shape.get("also", [])]:
         if not element["unless"]:
             del element["unless"]
+        if not element["scoped"]:
+            del element["scoped"]
     return shape
 
 
@@ -549,13 +581,100 @@ def version_of(saved: object) -> int:
     return version
 
 
-def _found(patterns: tuple[str, ...], text: str) -> bool:
-    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+# Version 4: what denies a match, or rules it out. A negation earlier in its clause counts unless a turn of the
+# sentence ("but", "and", "while" ...) comes after it; words right after a match can rule it out too. A clause ends at
+# a full stop, a semicolon, a colon or an opening bracket, never at a comma: "not hung, stalled or crashed".
+CUE = re.compile(
+    r"\b(not|no|never|neither|nor|without|cannot|nothing|none|unlikely|excluded|rather than|instead of"
+    r"|rule[sd]? out|ruling out)\b|n't\b",
+    re.IGNORECASE,
+)
+TURN = re.compile(
+    r"\b(but|however|although|though|whereas|while|when|after|until|as|if|yet|so|because|since|instead|and|then)\b",
+    re.IGNORECASE,
+)
+RULED_OUT = re.compile(
+    r"[^.;!?]{0,40}?\b(ruled out|excluded|unlikely|not the cause|not at fault|not involved|not to blame)\b",
+    re.IGNORECASE,
+)
+CLAUSE = ".;!?:("
+# A wrong cause offered as a maybe, beside the right one: "the database could be down too", "Still open: whether...".
+# "Could not" is no hedge; "open" is one only before a colon ("Still open:"), never in "the breaker is open".
+HEDGE = re.compile(
+    r"\b(could(?!\s*(not|n't))|might|may|possibly|perhaps|maybe|whether|either|unclear|uncertain)\b", re.IGNORECASE
+)
+HEDGE_LEAD = re.compile(r"\b(open|unknown|unclear|possible|possibly|maybe|perhaps|unverified)\b", re.IGNORECASE)
+MAYBE_AFTER = re.compile(
+    r"[^.;!?]{0,40}?\b(is possible|was possible|possibly|a possibility|cannot be ruled out|can't be ruled out"
+    r"|not ruled out)\b",
+    re.IGNORECASE,
+)
+
+
+def _clause(text: str, start: int) -> tuple[int, str]:
+    """Where the clause of a match at start begins (after a full stop, a semicolon, a colon or an opening bracket, never
+    a comma), and the words before its colon when a colon opens it ("Ruled out: ...", "Still open: ...")."""
+    opened = max(text.rfind(mark, 0, start) for mark in CLAUSE) + 1
+    if opened and text[opened - 1] == ":":
+        return opened, text[max(text.rfind(mark, 0, opened - 1) for mark in CLAUSE) + 1 : opened - 1]
+    return opened, ""
+
+
+def _negated(text: str, start: int, end: int) -> bool:
+    """Whether the match at text[start:end] is denied or ruled out (version 4): a negation earlier in its clause, with
+    no turn of the sentence after it ("not hung, stalled or crashed", "no sign of a poison message", "rather than
+    Redis losing keys"); a ruling-out of one or two words before a colon ("Ruled out: Redis losing its keys"); or words
+    right after it that rule it out ("was ruled out", "is unlikely")."""
+    opened, lead = _clause(text, start)
+    if len(lead.split()) <= 2 and CUE.search(lead):
+        return True
+    cues = list(CUE.finditer(text, opened, start))
+    if cues and not TURN.search(text, cues[-1].end(), start):
+        return True
+    return RULED_OUT.match(text, end) is not None
+
+
+def _hedged(text: str, start: int, end: int) -> bool:
+    """Whether the match at text[start:end] is offered as a maybe (version 4): a hedge in it ("could be down"), or
+    earlier in its clause with no turn of the sentence after it ("might", "whether"), one before its colon ("Still
+    open: ..."), or right after it ("is possible", "cannot be ruled out")."""
+    opened, lead = _clause(text, start)
+    if HEDGE_LEAD.search(lead) or HEDGE.search(lead) or HEDGE.search(text, start, end):
+        return True
+    hedges = list(HEDGE.finditer(text, opened, start))
+    if hedges and not TURN.search(text, hedges[-1].end(), start):
+        return True
+    return MAYBE_AFTER.match(text, end) is not None
+
+
+def _stance(element: Element, text: str) -> str | None:
+    """How text gives a known wrong cause (version 4): "asserted", "offered" (only as a maybe), or None (not at all, or
+    only denied)."""
+    offered = False
+    for pattern in element.patterns:
+        for found in re.finditer(pattern, text, re.IGNORECASE):
+            if _negated(text, found.start(), found.end()):
+                continue
+            if not _hedged(text, found.start(), found.end()):
+                return "asserted"
+            offered = True
+    return "offered" if offered else None
+
+
+def _found(patterns: tuple[str, ...], text: str, scoped: bool = False) -> bool:
+    if not scoped:
+        return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+    return any(  # version 4: only a match no negation denies
+        not _negated(text, found.start(), found.end())
+        for pattern in patterns
+        for found in re.finditer(pattern, text, re.IGNORECASE)
+    )
 
 
 def names(element: Element, text: str) -> bool:
-    """Whether text names the element: one of its patterns, and none of the words that cancel it (version 4)."""
-    return _found(element.patterns, text) and not _found(element.unless, text)
+    """Whether text names the element: one of its patterns (version 4: for a scoped element, one no negation denies),
+    and none of the words that cancel it (version 4: words it asserts, never ones it denies)."""
+    return _found(element.patterns, text, element.scoped) and not _found(element.unless, text, scoped=True)
 
 
 def answer(name: str, version: int = RUBRIC_VERSION) -> faults.Recorded:
@@ -608,9 +727,13 @@ def compare(fault_name: str, diagnosis: Mapping | None, version: int = RUBRIC_VE
     also = [(element, names(element, hypothesis)) for element in rubric.also]
     if verdict == "names the cause" and not all(named for _, named in also):  # version 4: the cause, and not the rest
         verdict = "partly"
-    wrong = [element.name for element in rubric.wrong if names(element, hypothesis)]
+    stances = {element.name: _stance(element, hypothesis) for element in rubric.wrong}
+    wrong = [name for name, said in stances.items() if said == "asserted"]
+    offered = [name for name, said in stances.items() if said == "offered"]
     if wrong:  # version 4: a hypothesis that gives a known wrong cause as the cause misses it, whatever else it names
         verdict = "misses the cause"
+    elif offered and verdict == "names the cause":  # version 4: the right cause beside a wrong one, unchosen
+        verdict = "partly"
     fix = diagnosis["proposed_fix"]
     fits = (
         fix["kind"] in rubric.fix_kinds and re.search(rubric.fix_target, str(fix["target"]), re.IGNORECASE) is not None
@@ -629,7 +752,7 @@ def compare(fault_name: str, diagnosis: Mapping | None, version: int = RUBRIC_VE
         "elements": elements,
     }
     if version >= 4:
-        out["wrong_causes"] = wrong
+        out |= {"wrong_causes": wrong, "wrong_causes_offered": offered}
     return out | {
         "proposed_fix": {"kind": fix["kind"], "target": fix["target"]},
         "fix_fits_the_remedy": fits,
@@ -650,7 +773,9 @@ def render(comparison: Mapping) -> list[str]:
         cancelled = " (its words are there, but put elsewhere or denied)" if item.get("cancelled") else ""
         lines.append(f"  {said} ({kind}) {item['element']}{cancelled}")
     for name in comparison.get("wrong_causes", []):
-        lines.append(f"  names a known wrong cause as the cause: {name}")
+        lines.append(f"  names a known wrong cause: {name}")
+    for name in comparison.get("wrong_causes_offered", []):
+        lines.append(f"  offers a known wrong cause as a maybe: {name}")
     fix = comparison["proposed_fix"]
     fits = comparison["fix_fits_the_remedy"]
     lines.append(f"  proposed fix: {fix['kind']} on {clean_text(str(fix['target']), 200)}; fits the remedy: {fits}")
@@ -662,8 +787,11 @@ def render(comparison: Mapping) -> list[str]:
 
 RUN_FILE, TRACE = "run.json", "trace.jsonl"  # as klaxon.fault_runs and klaxon.agent.loop name them
 # Week 3's first live run (make investigate, 2026-10-18) saved no run.json: an alert given by hand ("the ledger
-# consumer's lag on provider-events is above 100 messages") on a healthy stack, which is the false alarm's case.
-HAND_GIVEN = {"2026-10-18T112951Z_loop_ledgerlaghigh": "false-alarm"}
+# consumer's lag on provider-events is above 100 messages") on a healthy stack, which is the false alarm's case. It is
+# graded against the false alarm's right answer as version 4 has it, the first with one, whatever version comes next. A
+# stated limit (the review's finding L6): that stack had no traffic, and the right answer says "under traffic its lag
+# stays near 0"; what it asks for (not behind, the alert false) holds there too.
+HAND_GIVEN = {"2026-10-18T112951Z_loop_ledgerlaghigh": ("false-alarm", 4)}
 
 
 @dataclass(frozen=True)
@@ -691,7 +819,7 @@ def saved(folder: Path | str) -> Saved:
         version = version_of(run.get("comparison"))
         found = (run.get("loop") or {}).get("diagnosis")  # None: the loop never ran, did not finish, or gave none
     elif folder.name in HAND_GIVEN:
-        name, version = HAND_GIVEN[folder.name], RUBRIC_VERSION
+        name, version = HAND_GIVEN[folder.name]
         stop = read_trace(folder / TRACE)[-1]
         found = stop.get("diagnosis") if stop.get("kind") == "stop" else None
     else:

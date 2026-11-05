@@ -1,7 +1,9 @@
-"""The rule that compares a diagnosis with the cause a fault records. The hypotheses here are written for the tests,
-except the saved runs' (the first live run's, a recorded response from Claude, claude-opus-5-5, 2026-10-18, and the
-fault runs'), read from their evidence as data. The 66 sentences with an expected verdict are kept in
-klaxon.calibration, where the judge is checked on them too (week 5, item 2)."""
+"""The rule that compares a diagnosis with the cause a fault records. The hypotheses here were written for the tests by
+Claude (the sessions that built each rubric, and their independent reviews), with the verdict each expects: not Klaxon's
+output, and not Aravind's verdicts. The saved runs' hypotheses are the exception (the first live run's, a recorded
+response from Claude, claude-opus-5-5, 2026-10-18, and the fault runs'), read from their evidence as data. The 66
+sentences with an expected verdict are kept in klaxon.calibration, where the judge is checked on them too (week 5, item
+2)."""
 
 import json
 import re
@@ -251,7 +253,7 @@ def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6():
 V3_FINGERPRINT = "9cd4375a58cc3b1cb2b7a2da52835d398b24c544a14855cc2f0b72b56f19d4c7"  # pinned before any live run
 
 
-# Version 3's sentences: written for the tests (not model output), with the independent review's and its re-check's.
+# Version 3's sentences: written for the tests (not Klaxon's output), with the independent review's and its re-check's.
 V3_SENTENCES = sentences(calibration.V3_TESTS)
 
 
@@ -421,10 +423,10 @@ def test_a_known_limit_of_version_2(hypothesis, right):
 
 
 # Version 4 (week 5, item 2): the nine known limits fixed where a rule can, words that cancel an element (unless), known
-# wrong causes (wrong), and the evaluation's two cases. Its sentences below are written for these tests, not model
-# output. Its new patterns were written knowing the known limits: these tests show each mechanism works, nothing more.
+# wrong causes (wrong), and the evaluation's two cases. Its sentences below were written for these tests by Claude, not
+# Klaxon. Its new patterns were written knowing the known limits: these tests show each mechanism works, nothing more.
 
-V4_FINGERPRINT = "bd8fbb2889171fa1597236c8c908a51165f195fb47638db1501d72ee92a17e72"  # pinned before any week 5 live run
+V4_FINGERPRINT = "a2abd2070b92f8eafed7d865c4856daec1d517e12abe79133bec9a65b3a6cd5e"  # pinned before any week 5 live run
 CHANGED_IN_4 = ("duplicate-delivery", "poison-message", "provider-outage", "money-unit")
 V1_OUTAGE = {
     h for f, h, _ in sentences(calibration.V1_TESTS) if f == "provider-outage"
@@ -448,7 +450,8 @@ def test_version_4_is_version_3_with_its_limits_fixed_and_two_new_cases_and_new_
         right = grading.answer(name)
         assert found["rubric"] == {"version": 4, "sha256": grading.fingerprint(4)}
         assert (found["recorded_cause"], found["remedy"]) == (right.cause, right.remedy)
-        assert found["wrong_causes"] == [] and all(item["cancelled"] is False for item in found["elements"])
+        assert found["wrong_causes"] == [] == found["wrong_causes_offered"]
+        assert all(item["cancelled"] is False for item in found["elements"])
     assert "rubric version 4, committed" in grading.BY[4] and "before any week 5 live run" in grading.BY[4]
 
 
@@ -458,11 +461,11 @@ def test_version_4s_new_fields_are_left_out_of_an_earlier_versions_fingerprint_w
         for rubric in grading.VERSIONS[version].values():
             shape = grading._shape(rubric)
             assert "wrong" not in shape and "also" not in shape
-            assert all("unless" not in element for element in shape["elements"])
+            assert all("unless" not in element and "scoped" not in element for element in shape["elements"])
     shape = grading._shape(grading.VERSIONS[4]["money-unit"])
     assert shape["elements"][0]["unless"] and "unless" not in shape["elements"][1]
     shape = grading._shape(grading.VERSIONS[4]["missing-deploys"])
-    assert shape["wrong"] and shape["also"]
+    assert shape["wrong"] and shape["also"] and shape["also"][0]["scoped"] is True
 
 
 @pytest.mark.parametrize(
@@ -623,8 +626,12 @@ def test_a_comparison_by_version_4_says_which_words_were_cancelled_and_which_wro
     printed = "\n".join(grading.render(found))
     assert "not named (required) where: the payments API (its words are there, but put elsewhere or denied)" in printed
     found = grading.compare("duplicate-delivery", diagnosis(KNOWN_LIMITS[1][1]))
-    assert found["wrong_causes"] == ["a wrong cause: Redis lost the keys"] and found["verdict"] == "misses the cause"
-    assert "  names a known wrong cause as the cause: a wrong cause: Redis lost the keys" in grading.render(found)
+    assert found["wrong_causes"] == ["Redis lost the keys"] and found["verdict"] == "misses the cause"
+    assert "  names a known wrong cause: Redis lost the keys" in grading.render(found)
+    hedged = "The ledger consumer's dedupe is gone, so webhooks the provider re-sends are booked twice; or perhaps Redis lost keys."
+    found = grading.compare("duplicate-delivery", diagnosis(hedged))
+    assert found["wrong_causes_offered"] == ["Redis lost the keys"] and found["verdict"] == "partly"
+    assert "  offers a known wrong cause as a maybe: Redis lost the keys" in grading.render(found)
 
 
 @pytest.mark.parametrize(
@@ -692,9 +699,7 @@ def test_the_13_saved_diagnoses_by_the_newest_rubric_for_their_system():
     first = found.pop("2026-10-18T112951Z_loop_ledgerlaghigh")
     assert first["fault"] == "false-alarm" and first["rubric"]["version"] == 4
     assert first["verdict"] == "misses the cause" and first["fix_fits_the_remedy"] is False
-    assert first["wrong_causes"] == [
-        "a wrong cause: a real fault in the ledger consumer (stuck, hung, stalled, crashed)"
-    ]
+    assert first["wrong_causes"] == ["a real fault in the ledger consumer (stuck, hung, stalled, crashed)"]
     assert len(found) == 12 and {c["verdict"] for c in found.values()} == {"names the cause"}
     assert found["2026-10-19T024001Z_fault-run_provider-outage"]["rubric"]["version"] == 1
     assert {c["rubric"]["version"] for name, c in found.items() if "024001Z" not in name} == {4}
@@ -730,3 +735,264 @@ def test_digest_names_a_value_whatever_the_order_of_its_keys():
     assert grading.digest({"a": 1, "b": [2]}) == grading.digest({"b": [2], "a": 1})
     assert grading.digest({"a": 1}) != grading.digest({"a": 2})
     assert len(grading.digest(None)) == 64
+
+
+# The independent review's own sentences (week 5, item 2): written by a separate Claude, with their expected verdict,
+# before it ran them against version 4 as first committed (bec1afb), where several got another verdict (its findings
+# M1 to M3 and L1). The fixes were written knowing them, so here they show the fixes work, nothing more.
+REVIEW_SENTENCES = [
+    (
+        "false-alarm",
+        "The alert is a false alarm: the ledger consumer group's lag is 0 on every partition and it keeps up with provider-events.",
+        "names the cause",
+    ),
+    (
+        "false-alarm",
+        "The ledger consumer is healthy and not stuck; its lag is near zero, so this alert is spurious.",
+        "names the cause",
+    ),
+    (
+        "false-alarm",
+        "The ledger consumer is neither stuck nor stalled: its lag on provider-events reads 0, so the alert is false.",
+        "names the cause",
+    ),
+    (
+        "false-alarm",
+        "There is no evidence the ledger consumer is stuck; its lag is 0 and the group is caught up, so the alert is false.",
+        "names the cause",
+    ),
+    (
+        "false-alarm",
+        "The ledger consumer appears to be stalled: lag reads 0 but no offsets were committed recently.",
+        "misses the cause",
+    ),
+    ("false-alarm", "This is not a false alarm: the ledger consumer is really behind.", "misses the cause"),
+    (
+        "false-alarm",
+        "The ledger consumer group is 250 messages behind because the consumer is slow; there is no outage elsewhere.",
+        "misses the cause",
+    ),
+    ("false-alarm", "No real problem with the ledger: lag reads 0, so the alert is wrong.", "names the cause"),
+    (
+        "false-alarm",
+        "The ledger group's lag is 0 and it is up to date; nothing is wrong, and nothing crashed or hung.",
+        "names the cause",
+    ),
+    (
+        "false-alarm",
+        "The ledger consumer has not crashed and is not hung: lag is 0, so this is a false positive.",
+        "names the cause",
+    ),
+    (
+        "false-alarm",
+        "The ledger lag is not 0: the alert is right, the ledger consumer is stuck behind a poison message.",
+        "misses the cause",
+    ),
+    (
+        "missing-deploys",
+        "The ledger consumer stopped deduplicating, so webhooks the provider resends are booked twice. I could not check recent deploys: the deploy list timed out.",
+        "names the cause",
+    ),
+    (
+        "missing-deploys",
+        "A deploy switched the ledger consumer to LEDGER_HANDLER=naive, so every webhook the provider re-sends is booked again.",
+        "partly",
+    ),
+    (
+        "missing-deploys",
+        "The ledger consumer did not check idempotency keys, so webhooks the provider resent were booked twice.",
+        "partly",
+    ),
+    (
+        "missing-deploys",
+        "The ledger consumer's handler failed to check event_id, so each webhook the provider re-sends is booked a second time.",
+        "partly",
+    ),
+    (
+        "missing-deploys",
+        "The ledger consumer cannot see that an event was already processed, so webhooks sent again are booked twice.",
+        "partly",
+    ),
+    (
+        "missing-deploys",
+        "Redis evicted the ledger's idempotency keys, so redelivered webhooks are booked twice; I could not verify deploys.",
+        "misses the cause",
+    ),
+    (
+        "missing-deploys",
+        "The ledger consumer's dedupe is gone, so redelivered webhooks are booked twice. Docker did not answer, so the deploy history is unverified.",
+        "names the cause",
+    ),
+    (
+        "duplicate-delivery",
+        "The ledger consumer books redelivered webhooks twice because a deploy disabled its idempotency check, rather than Redis losing keys.",
+        "names the cause",
+    ),
+    (
+        "duplicate-delivery",
+        "Redis did not lose keys: a deploy turned off the ledger consumer's dedupe, so webhooks the provider re-sends are booked twice.",
+        "names the cause",
+    ),
+    (
+        "duplicate-delivery",
+        "Ruled out: Redis losing its keys. A deploy removed the ledger consumer's dedupe, so webhooks the provider re-sends are booked twice.",
+        "names the cause",
+    ),
+    (
+        "duplicate-delivery",
+        "Redis dropped the ledger's dedupe keys, so webhooks the provider re-sends are booked twice.",
+        "misses the cause",
+    ),
+    (
+        "poison-message",
+        "PostgreSQL was not down; one malformed event is retried forever by the ledger consumer.",
+        "names the cause",
+    ),
+    (
+        "poison-message",
+        "The ledger consumer retries one invalid event forever; the database could be down too.",
+        "partly",
+    ),
+    (
+        "poison-message",
+        "The ledger consumer retries forever because the database was unavailable and one event failed to book.",
+        "misses the cause",
+    ),
+    (
+        "poison-message",
+        "The ledger consumer retries forever one event whose amount field is a JSON string, so nothing behind it is booked.",
+        "names the cause",
+    ),
+    (
+        "provider-outage",
+        "The provider times out; payments-api's circuit breaker tripped, cutting off calls, so payments fail fast with 503.",
+        "names the cause",
+    ),
+    (
+        "provider-outage",
+        "The provider hangs, so payments-api's circuit breaker opened and it fails fast; without the breaker each payment would wait 9 s.",
+        "names the cause",
+    ),
+    (
+        "provider-outage",
+        "The provider hangs; the circuit breaker did not open, so each request waited through three attempts.",
+        "partly",
+    ),
+    (
+        "provider-outage",
+        "The provider is healthy and there is no outage; payments-api's breaker is open because the database is overloaded.",
+        "misses the cause",
+    ),
+    (
+        "provider-outage",
+        "The database is not slow; the provider is timing out and the breaker is open, so payments fail fast.",
+        "names the cause",
+    ),
+    (
+        "provider-outage",
+        "PostgreSQL is slow, so payments-api waits on it; the provider and its breaker are fine.",
+        "misses the cause",
+    ),
+    (
+        "money-unit",
+        "A deploy of payments-api sends amounts in dollars instead of cents, so the provider charges 100 times what our records say.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "There was no deploy of the payment confirmer; a deploy of payments-api sends each amount 100 times too large, so the provider overcharges.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "payments-api multiplies each amount by 100 since its deploy; the provider charges 100 times our records. A bug in the ledger consumer was ruled out.",
+        "names the cause",
+    ),
+    (
+        "money-unit",
+        "A regression in the payment confirmer reads amounts as dollars, so the provider's amounts differ from the payments API's records.",
+        "partly",
+    ),
+]
+
+
+@pytest.mark.parametrize("fault, hypothesis, expected", REVIEW_SENTENCES)
+def test_version_4_gets_the_reviews_own_sentences_right(fault, hypothesis, expected):
+    assert verdict(fault, hypothesis, 4) == expected
+
+
+@pytest.mark.parametrize(
+    "text, word, denied",
+    [
+        ("The ledger consumer is not hung, stalled or crashed.", "crashed", True),  # a negated list, across commas
+        ("No sign of a poison message.", "poison", True),
+        ("A deploy did it, rather than Redis losing keys.", "Redis", True),
+        ("Ruled out: Redis losing its keys.", "Redis", True),  # one or two words before a colon
+        ("Redis losing its keys is unlikely.", "Redis", True),  # ruled out after
+        ("A bug in the ledger consumer was ruled out.", "ledger", True),
+        ("The provider is not answering, and PostgreSQL is down.", "PostgreSQL", False),  # a turn after the negation
+        ("It could not process events while PostgreSQL was down.", "PostgreSQL", False),
+        ("Nothing is wrong: the group is not behind.", "group", False),  # a colon ends a clause of more than two words
+        ("The group is not behind (its lag stays near 0).", "lag", False),  # so does a bracket
+        ("Not hung. The consumer crashed.", "crashed", False),  # and a full stop
+        ("The breaker opened; the database is neither slow nor down.", "database", False),  # the gap stops at neither
+    ],
+)
+def test_a_negation_reaches_to_the_end_of_its_clause_unless_the_sentence_turns(text, word, denied):
+    start = text.index(word)
+    assert grading._negated(text, start, start + len(word)) is denied
+
+
+@pytest.mark.parametrize(
+    "text, word, hedged",
+    [
+        ("The ledger consumer retries forever; the database could be down too.", "database could be down", True),
+        ("Still open: whether Redis lost its keys.", "Redis", True),  # a hedge before a colon
+        ("The ledger retries a bad event, so Redis may have lost keys.", "Redis may have lost", True),  # in it
+        ("Redis losing its keys cannot be ruled out.", "Redis", True),  # after it
+        ("It could not process events while PostgreSQL was down.", "PostgreSQL", False),  # could not: no hedge
+        ("Events could not be booked: PostgreSQL was down.", "PostgreSQL", False),  # nor before a colon
+        ("The breaker is open because the database is overloaded.", "database", False),  # open: no hedge here
+        ("With the breaker open, the database is overloaded.", "database", False),  # nor with no turn after it
+        ("Still open: Redis lost its keys.", "Redis", True),  # "open" before a colon is one
+        ("Perhaps Redis lost its keys.", "Redis", True),  # earlier in its clause
+        ("It may be slow, but PostgreSQL was down.", "PostgreSQL", False),  # not past a turn of the sentence
+    ],
+)
+def test_a_wrong_cause_offered_as_a_maybe_is_hedged(text, word, hedged):
+    start = text.index(word)
+    assert grading._hedged(text, start, start + len(word)) is hedged
+
+
+def test_a_wrong_cause_only_offered_beside_the_right_one_makes_it_partly_and_never_lifts_a_miss():
+    right = "One malformed event is retried forever by the ledger consumer, so nothing behind it is booked."
+    assert verdict("poison-message", right, 4) == "names the cause"
+    assert verdict("poison-message", f"{right} The database could be down too.", 4) == "partly"
+    assert verdict("poison-message", f"{right} The database was down too.", 4) == "misses the cause"
+    assert verdict("poison-message", "The ledger is stuck. The database could be down.", 4) == "misses the cause"
+
+
+@pytest.mark.parametrize(
+    "fault, hypothesis, expected",
+    [
+        # The review's finding L1: the false alarm must not credit a lag that rose, a consumer that fell behind, or one
+        # that cannot keep up.
+        ("false-alarm", "The ledger consumer group's lag rose from 0 to 250 messages.", "misses the cause"),
+        ("false-alarm", "The ledger consumer consumed nothing and fell behind.", "misses the cause"),
+        ("false-alarm", "The ledger consumer cannot keep up: its lag climbed past 250.", "misses the cause"),
+        # The review's finding L8: "not an integer" is fault 2's message too.
+        (
+            "poison-message",
+            "The ledger consumer retries forever one event whose amount is not an integer.",
+            "names the cause",
+        ),
+        # A database neither slow nor down is no wrong cause.
+        (
+            "provider-outage",
+            "The provider times out and the breaker opened, so payments fail fast; the database is neither slow nor down.",
+            "names the cause",
+        ),
+    ],
+)
+def test_version_4_reads_the_reviews_other_cases_right(fault, hypothesis, expected):
+    assert verdict(fault, hypothesis, 4) == expected

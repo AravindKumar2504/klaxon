@@ -15,7 +15,7 @@ import pytest
 
 from klaxon import calibration, grading, judge, labels
 from klaxon.agent import claude_code, gate
-from klaxon.agent.model import ScriptedModel, read_records
+from klaxon.agent.model import ModelTimeout, ScriptedModel, read_records
 from klaxon.patient.stack import REPO
 from tests.agent.test_postmortem import RecordedScript
 
@@ -78,8 +78,8 @@ def test_the_judge_gets_each_sentence_alone_with_the_right_answer_of_its_system_
     sentences = [calibration.SENTENCES[0], next(s for s in calibration.SENTENCES if s.name == "provider-outage")]
     model = ScriptedModel([reply(), reply("partly")])
     seen = []
-    found = calibration.judge_sentences(model, sentences, lambda done: seen.append(len(done)))
-    assert seen == [1, 2] and len(model.calls) == 2
+    found, stopped = calibration.judge_sentences(model, sentences, lambda done, why: seen.append((len(done), why)))
+    assert seen == [(1, None), (2, None)] and len(model.calls) == 2 and stopped is None
     for (_, turns), sentence in zip(model.calls, sentences, strict=True):
         right = grading.answer(sentence.name, sentence.system)
         assert turns[0].content == judge.first_turn(judge.document(right, {"hypothesis": sentence.hypothesis}))
@@ -96,79 +96,139 @@ def test_the_judge_gets_each_sentence_alone_with_the_right_answer_of_its_system_
     }
 
 
+def test_the_judge_on_the_sentences_stops_at_the_first_call_with_no_reply():
+    # The review's finding M4: a seat's limit stops the calibration, and what was judged is kept.
+    model = ScriptedModel([reply(), ModelTimeout("no reply within 300 s"), reply()])
+    seen = []
+    found, stopped = calibration.judge_sentences(model, calibration.SENTENCES[:3], lambda d, why: seen.append(why))
+    assert len(found) == 1 and len(model.calls) == 2
+    assert stopped == "at sentence 2: the call gave no reply Klaxon could use (ModelTimeout)" and seen[-1] == stopped
+
+
 # The report, from saved files
 
 
 @pytest.fixture
 def world(tmp_path, monkeypatch):
-    """The 13 saved runs copied to a made-up repo, and the calibration's evidence folder there: nothing is written into
-    the real evidence."""
+    """The 13 saved runs copied to a made-up repo as they were before any grader (no judgment, no verdict of his: the
+    review's finding H1), and the calibration's evidence folder there: nothing is written into the real evidence."""
+    ignore = shutil.ignore_patterns(judge.SAVED, judge.RECORDING, labels.LABEL_FILE)
     for relative in calibration.SAVED_RUNS:
-        shutil.copytree(REPO / relative, tmp_path / relative)
+        shutil.copytree(REPO / relative, tmp_path / relative, ignore=ignore)
     monkeypatch.setattr(calibration, "REPO", tmp_path)
     monkeypatch.setattr(calibration, "EVIDENCE", tmp_path / "evidence" / "week5")
     return tmp_path
 
 
-def calibrated(world, verdicts):
-    """A calibration folder whose sentences the judge gave these verdicts (scripted, made up)."""
+def calibrated(world, verdicts, stopped=None):
+    """A calibration folder whose first sentences the judge gave these verdicts (scripted, made up)."""
     folder = world / "evidence" / "week5" / "2026-11-05T000000Z_calibration"
     folder.mkdir(parents=True)
     model = ScriptedModel([reply(v) for v in verdicts])
-    found = calibration.judge_sentences(model, calibration.SENTENCES[: len(verdicts)])
-    calibration._write(folder, found)
+    found, _ = calibration.judge_sentences(model, calibration.SENTENCES[: len(verdicts)])
+    calibration._write(folder, found, stopped)
     return folder
 
 
-def test_the_report_counts_each_grader_against_the_expected_verdicts(world):
+def his(folder, verdict, fix_fits, **changes):
+    """A verdict of Aravind's on a saved run, written by the test (standing in for his, typed at a terminal)."""
+    item = grading.saved(folder)
+    right = grading.answer(item.name, item.version)
+    mine = {"verdict": verdict, "fix_fits": fix_fits, "why": None, "how": gate.TYPED}
+    mine |= {
+        "diagnosis_sha256": grading.digest(item.diagnosis),
+        "right_answer_sha256": grading.digest([right.cause, right.remedy]),
+    }
+    (folder / labels.LABEL_FILE).write_text(json.dumps(mine | changes))
+
+
+def test_the_report_counts_each_grader_against_the_expected_verdicts_on_all_66(world):
     first = calibration.SENTENCES[:3]  # names the cause, partly, misses the cause
     folder = calibrated(world, ["names the cause", "names the cause", "unsure"])
     found = calibration.report(folder)
     said = found["agreement"]["sentences"]
     assert [s.expected for s in first] == list(judge.VERDICTS)
-    assert said["count"] == 3 and said["rule_with_expected"] == {"agree": 3, "of": 3}
+    assert (said["count"], said["judged"]) == (66, 3) and said["rule_with_expected"] == {"agree": 64, "of": 66}
     assert said["judge_with_expected"] == {"agree": 1, "of": 2} and said["judge_no_verdict"] == 1
     assert said["judge_matrix"]["partly"]["names the cause"] == 1
     assert said["judge_matrix"]["misses the cause"][judge.NO_VERDICT] == 1
     page = calibration.markdown(found)
-    assert "- The rule agrees with the expected verdict on 3 of 3." in page
-    assert "- The judge agrees on 1 of 2; no verdict on 1; judged 3 of 3." in page
+    assert "- The rule agrees with the expected verdict on 64 of 66." in page
+    assert "- The judge agrees on 1 of 2; no verdict on 1; judged 3 of 66." in page  # the review's M5: never "3 of 3"
     assert "expected partly; rule partly (version 4); judge names the cause; no fix given: Made up" in page
 
 
-def test_the_report_puts_the_rule_the_judge_and_aravind_side_by_side_on_the_saved_runs(world):
-    item_folder = world / calibration.SAVED_RUNS[0]  # week 3's first live run
-    item = grading.saved(item_folder)
+def test_a_calibration_that_stopped_says_so_and_what_it_did_not_judge(world):
+    folder = calibrated(world, ["names the cause"], stopped="at sentence 2: the call gave no reply (ModelTimeout)")
+    page = calibration.markdown(calibration.report(folder))
+    assert "judged 1 of 66." in page
+    assert (
+        "- The calibration stopped at sentence 2: the call gave no reply (ModelTimeout): the sentences after it" in page
+    )
+
+
+def test_a_judged_sentence_the_tests_no_longer_hold_is_said(world):
+    folder = calibrated(world, ["names the cause"])
+    path = folder / calibration.CALIBRATION
+    saved = json.loads(path.read_text())
+    saved["sentences"][0]["hypothesis"] = "A sentence since changed."
+    path.write_text(json.dumps(saved))
+    found = calibration.report(folder)
+    assert found["agreement"]["sentences"]["judged"] == 0
+    assert found["problems"] == ["a judged sentence the tests no longer hold: A sentence since changed."]
+    assert "- the calibration: a judged sentence the tests no longer hold" in calibration.markdown(found)
+
+
+def test_the_report_puts_the_rule_the_judge_and_aravind_side_by_side_and_holds_back_unlabeled_runs(world):
+    first = world / calibration.SAVED_RUNS[0]  # week 3's first live run
+    item = grading.saved(first)
     judged = judge.judge(
         ScriptedModel([reply("misses the cause", False)]), grading.answer("false-alarm"), item.diagnosis
     )
-    judge.save(item_folder, item, judged)
-    mine = {"verdict": "misses the cause", "fix_fits": False, "why": None, "how": gate.TYPED}
-    mine |= {"diagnosis_sha256": grading.digest(item.diagnosis)}
-    (item_folder / labels.LABEL_FILE).write_text(json.dumps(mine))  # standing in for his, typed at a terminal
-    other = world / calibration.SAVED_RUNS[1]
-    (other / labels.LABEL_FILE).write_text(json.dumps(mine | {"verdict": "partly", "diagnosis_sha256": "x"}))
+    judge.save(first, item, judged)
+    his(first, "misses the cause", False)
+    second = world / calibration.SAVED_RUNS[1]
+    his(second, "partly", False, diagnosis_sha256="x")  # on another diagnosis: not counted
     third = world / calibration.SAVED_RUNS[2]
-    (third / judge.SAVED).write_text(json.dumps({"diagnosis_sha256": "x", "judgment": {"verdict": "partly"}}))
+    other = judge.judge(ScriptedModel([reply("partly", True)]), grading.answer("poison-message"), {"hypothesis": "x"})
+    judge.save(third, grading.saved(third), other)
+    _edit(third, judge.SAVED, lambda saved: saved.update(diagnosis_sha256="x"))
+    fourth = world / calibration.SAVED_RUNS[3]
+    unlabeled = judge.judge(
+        ScriptedModel([reply("partly", True)]), grading.answer("provider-outage", 1), {"hypothesis": "y"}
+    )
+    judge.save(fourth, grading.saved(fourth), unlabeled)
+    _edit(
+        fourth,
+        judge.SAVED,
+        lambda saved: saved.update(diagnosis_sha256=grading.digest(grading.saved(fourth).diagnosis)),
+    )
     found = calibration.report(None)
     said = found["agreement"]["runs"]
-    assert (said["count"], said["judged"], said["labeled"]) == (13, 1, 1)  # one of each graded another diagnosis
-    assert found["runs"][2]["problems"] == [
-        "the judge graded another diagnosis than the run's evidence holds now: not counted"
-    ]
+    assert (said["count"], said["judged"], said["labeled"]) == (13, 2, 1)
+    assert found["runs"][2]["problems"] == ["the judge graded another diagnosis than this run's: not counted"]
+    assert found["runs"][1]["problems"] == ["Aravind's verdict is on another diagnosis than this run's: not counted"]
+    assert found["runs"][1]["aravind"] is None and found["runs"][2]["judge"] is None
+    # Agreement only on the run he labeled: the fourth's judgment tells him nothing yet.
     assert said["rule_with_judge"] == {"agree": 1, "of": 1} and said["judge_with_aravind"] == {"agree": 1, "of": 1}
     assert said["rule_with_aravind"] == {"agree": 1, "of": 1} and said["rule_fix_with_aravind"] == {"agree": 1, "of": 1}
-    assert found["runs"][1]["problems"] == [
-        "Aravind's verdict is on another diagnosis than the run's evidence holds now: not counted"
-    ]
-    assert found["runs"][1]["aravind"] is None and found["runs"][2]["judge"] is None
     page = calibration.markdown(found)
     assert "| 2026-10-18T112951Z_loop_ledgerlaghigh | false-alarm | misses the cause (v4), fix False |" in page
+    held = f"{calibration.HELD_BACK} | {calibration.HELD_BACK} | - |"
+    assert f"| 2026-10-19T024001Z_fault-run_provider-outage | provider-outage | {held}" in page  # judged, not labeled
     assert (
-        "| 2026-10-19T024001Z_fault-run_provider-outage | provider-outage | names the cause (v1), fix False | - | - |"
+        f"| 2026-10-19T022933Z_fault-run_duplicate-delivery | duplicate-delivery | {calibration.HELD_BACK} | - | - |"
         in page
     )
-    assert "Judged: 1 of 13. Labeled by Aravind: 1 of 13." in page and "Problems:" in page
+    assert "partly" not in page.split("## The 13 saved diagnoses")[1]  # no grader's verdict on a run he has not labeled
+    assert "Judged: 2 of 13. Labeled by Aravind: 1 of 13." in page and "Problems:" in page
+
+
+def _edit(folder, name, change):
+    path = folder / name
+    value = json.loads(path.read_text())
+    change(value)
+    path.write_text(json.dumps(value))
 
 
 def test_before_any_judge_call_the_report_holds_the_66_sentences_and_the_rules_verdicts(world):
@@ -211,16 +271,23 @@ def calibrating(world, monkeypatch):
     return run
 
 
+SCRIPT = (reply(), reply("partly"), reply("misses the cause", False), reply("names the cause", True))
+
+
 def test_the_run_command_judges_the_sentences_then_the_saved_runs_and_replays(world, calibrating, capsys):
-    script = [reply(), reply("partly"), reply("misses the cause", False), reply("names the cause", True)]
-    assert calibrating(*script) == 0
+    assert calibrating(*SCRIPT) == 0
     out = capsys.readouterr().out
     assert (
         "Sentences judged: 2; no verdict: 0." in out and "Saved runs judged: 2; no verdict: 0; passed over: 0." in out
     )
+    assert "judged (its verdict is held back until Aravind labels this run)" in out  # the review's finding M6
+    for relative in calibration.SAVED_RUNS:  # each run's line says it was judged, and never its verdict
+        name = Path(relative).name
+        assert f"{name}: judged (its verdict is held back" in out
+        assert not any(f"{name}: {verdict}" in out for verdict in judge.VERDICTS)
     folder = calibration.latest()
     saved = json.loads((folder / calibration.CALIBRATION).read_text())
-    assert saved["label"] == calibration.LABEL and len(saved["sentences"]) == 2
+    assert saved["label"] == calibration.LABEL and len(saved["sentences"]) == 2 and saved["stopped"] is None
     assert saved["judge"] == {"model": "claude-opus-5-5", "version": 1, "sha256": judge.fingerprint()}
     records = read_records(folder / calibration.RECORDING)
     assert records[0]["what"] == calibration.WHAT and [r["kind"] for r in records].count("response") == 2
@@ -230,10 +297,22 @@ def test_the_run_command_judges_the_sentences_then_the_saved_runs_and_replays(wo
     assert capsys.readouterr().out.startswith("Reproduced: the same prompts, replies and judgments as recorded")
     assert calibration.main(["report", "--write"]) == 0
     assert (folder / "calibration-report.md").read_text().startswith("# Klaxon's graders, checked")
+    assert not (folder / "calibration-report.json").exists()  # held back: he has labeled none of the runs yet
+
+
+def test_a_calibration_whose_call_gives_no_reply_stops_and_judges_no_saved_run(world, calibrating, capsys):
+    assert calibrating(reply(), ModelTimeout("no reply within 300 s")) == 1
+    folder = calibration.latest()
+    saved = json.loads((folder / calibration.CALIBRATION).read_text())
+    assert len(saved["sentences"]) == 1
+    assert saved["stopped"] == "at sentence 2: the call gave no reply Klaxon could use (ModelTimeout)"
+    assert "Stopped at sentence 2" in capsys.readouterr().err
+    assert not any((world / relative / judge.SAVED).exists() for relative in calibration.SAVED_RUNS)
+    assert calibration.replay(folder) == []  # it stops at the same call again
 
 
 def test_a_replay_finds_a_changed_judgment(world, calibrating, capsys):
-    assert calibrating(reply(), reply("partly"), reply("misses the cause", False), reply("names the cause", True)) == 0
+    assert calibrating(*SCRIPT) == 0
     path = calibration.latest() / calibration.CALIBRATION
     saved = json.loads(path.read_text())
     saved["sentences"][1]["judgment"]["verdict"] = "names the cause"
@@ -241,8 +320,17 @@ def test_a_replay_finds_a_changed_judgment(world, calibrating, capsys):
     assert calibration.replay(calibration.latest()) == ["sentence 2: the judgment differs"]
 
 
+def test_a_replay_finds_a_changed_judgment_of_a_saved_run(world, calibrating, capsys):
+    assert calibrating(*SCRIPT) == 0
+    run = world / calibration.SAVED_RUNS[1]
+    _edit(run, judge.SAVED, lambda saved: saved["judgment"].update(verdict="partly"))
+    assert calibration.replay(calibration.latest()) == [
+        f"{calibration.SAVED_RUNS[1]}: the saved judgment differs in: judgment"
+    ]
+
+
 def test_a_replay_finds_a_recorded_call_it_did_not_ask_for_again(world, calibrating):
-    assert calibrating(reply(), reply("partly"), reply("misses the cause", False), reply("names the cause", True)) == 0
+    assert calibrating(*SCRIPT) == 0
     recording = calibration.latest() / calibration.RECORDING
     response = next(line for line in recording.read_text().splitlines() if '"kind":"response"' in line)
     with open(recording, "a") as out:
@@ -262,7 +350,9 @@ def test_the_run_command_without_claude_code_starts_nothing_and_writes_nothing(w
 
 def test_the_report_and_replay_commands_with_no_calibration_folder(world, capsys):
     assert calibration.main(["report"]) == 0
-    assert capsys.readouterr().out.startswith("No calibration folder yet: the saved runs only.")
+    assert capsys.readouterr().out.startswith(
+        "No calibration folder yet: the rule on the sentences, and the saved runs."
+    )
     assert calibration.main(["replay"]) == 2
     assert "no calibration folder yet in evidence/week5" in capsys.readouterr().err
     assert calibration.main(["report", str(world)]) == 2

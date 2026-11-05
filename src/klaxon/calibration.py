@@ -1,19 +1,27 @@
-"""The graders checked (week 5, item 2): the rule and the judge, on sentences with a known verdict and on the saved
+"""The graders checked (week 5, item 2): the rule and the judge, on sentences with an expected verdict and on the saved
 diagnoses, and both against Aravind's own verdicts.
 
 A grader nobody has checked measures nothing. Two sets, Aravind's choice (2026-11-04), 79 items:
 - SENTENCES: the 66 hypotheses of the grading tests (tests/test_grading.py reads them from here), each with the verdict
-  a person gives it, and the system it was written for (a fault's cause as one rubric version records it: fault 3 had
-  no circuit breaker in version 1's). The nine known limits are among them, with their right verdict. Written for the
-  tests, not model output.
+  the tests expect, and the system it was written for (a fault's cause as one rubric version records it: fault 3 had
+  no circuit breaker in version 1's). Claude wrote them, with their expected verdicts, in the sessions that built each
+  rubric and in their independent reviews (the nine known limits, with the right verdict); Aravind accepted those items,
+  but did not write or label these sentences. They are not Klaxon's output. So on them the judge is checked against
+  verdicts Claude expected: a check of the judge's reading, not a person's.
 - SAVED_RUNS: the 13 saved diagnoses: the 12 fault runs of weeks 3 and 4, and week 3's first live run, on a false
-  alarm. Recorded responses. Aravind's verdicts on them come from make label (klaxon.labels), in his review.
+  alarm. Recorded responses. Aravind's verdicts on them come from make label (klaxon.labels), in his review: they are
+  the person's check on both graders.
 
 The judge sees each item's right answer and remedy for the system it was written for, and the diagnosis (a sentence is
-a hypothesis alone): one recorded call each. The rule grades each with the newest rubric written for that system
-(grading.newest_for): version 4, but version 1 for fault 3 before the breaker, which only version 1 has. Version 4's
-new patterns were written knowing these sentences, so on them the rule shows that each fix works, not that it reads
-meaning. The judge never saw them. Aravind's verdicts on the 13 are the check on both.
+a hypothesis alone): one recorded call each. A call that gives no reply Klaxon can use stops the calibration, and what
+was judged is kept. The rule grades each item with the newest rubric written for that system (grading.newest_for):
+version 4, but version 1 for fault 3 before the breaker, which only version 1 has. Version 4's new patterns were written
+knowing these sentences (and the false alarm's, knowing week 3's first diagnosis), so on them the rule shows that each
+fix works, not that it reads meaning. The judge's prompt was written by the session that knew them too, though it names
+none of them.
+
+Until Aravind has labeled a saved run, the report holds back both graders' verdicts on it, so he gives his own first
+(the independent review's finding M6).
 
 Run: python -m klaxon.calibration run              live: the judge on every sentence and saved run (his OK first)
      python -m klaxon.calibration report [FOLDER]  offline: each grader against the expected verdicts and his own
@@ -48,20 +56,22 @@ V3_LIMIT = "a known limit of version 3 (week 4, item 4's review)"
 EVIDENCE = REPO / "evidence" / "week5"
 CALIBRATION, RECORDING = "calibration.json", judge.RECORDING
 NO_FIX = {"kind": "none", "target": "none"}  # a sentence has no fix: the rule needs one to compare, and it is not read
+HELD_BACK = "held back until Aravind labels it"
 LABEL = (
     "The judge's calibration on the grading tests' sentences (klaxon.calibration): one recorded call per sentence, each"
-    " with the right answer of the system it was written for and the hypothesis alone. The sentences were written for"
-    " the tests, not by a model; the judgments are recorded responses, in judge-recording.jsonl."
+    " with the right answer of the system it was written for and the hypothesis alone. The sentences and their expected"
+    " verdicts were written by Claude, for the tests (not by Klaxon, and not by Aravind); the judgments are recorded"
+    " responses, in judge-recording.jsonl."
 )
 WHAT = (
     "The judge's calibration: one call per sentence of the grading tests, each with its right answer, on Aravind's"
-    " seat. The sentences were written for the tests."
+    " seat. The sentences were written by Claude, for the tests."
 )
 
 
 @dataclass(frozen=True)
 class Sentence:
-    """A hypothesis written for the grading tests, with the verdict a person gives it."""
+    """A hypothesis written for the grading tests, with the verdict the tests expect."""
 
     name: str  # the fault whose right answer it is graded against
     system: int  # the rubric version whose right answer it was written for: the system it describes
@@ -466,37 +476,43 @@ def rule_on(sentence: Sentence) -> dict:
     return {"verdict": found["verdict"], "rubric_version": version}
 
 
+def _key(item: Sentence | Mapping) -> tuple:
+    if isinstance(item, Sentence):
+        return (item.name, item.system, item.hypothesis, item.expected)
+    return (item["name"], item["system"], item["hypothesis"], item["expected"])
+
+
 def judge_sentences(
-    model: Model, sentences: Sequence[Sentence], done: Callable[[list[dict]], None] = lambda found: None
-) -> list[dict]:
+    model: Model, sentences: Sequence[Sentence], done: Callable[[list[dict], str | None], None] = lambda *_: None
+) -> tuple[list[dict], str | None]:
     """The judge on each sentence, one call each: its right answer for the system it was written for, and the
-    hypothesis alone. done gets what was judged so far, after each."""
+    hypothesis alone. It stops at the first call that gives no reply Klaxon can use. done gets what was judged so far,
+    after each, and why it stopped. Returns both."""
     found: list[dict] = []
     for number, sentence in enumerate(sentences, 1):
-        judgment = judge.judge(
-            model, grading.answer(sentence.name, sentence.system), {"hypothesis": sentence.hypothesis}
-        )
+        try:
+            judgment = judge.judge(
+                model, grading.answer(sentence.name, sentence.system), {"hypothesis": sentence.hypothesis}
+            )
+        except judge.NoReply as exc:
+            stopped = f"at sentence {number}: {exc}"
+            done(found, stopped)
+            return found, stopped
         found.append(
-            {
-                "sentence": number,
-                "name": sentence.name,
-                "system": sentence.system,
-                "hypothesis": sentence.hypothesis,
-                "expected": sentence.expected,
-                "source": sentence.source,
-                "judgment": judgment.to_dict(),
-            }
+            {"sentence": number, "name": sentence.name, "system": sentence.system, "hypothesis": sentence.hypothesis}
+            | {"expected": sentence.expected, "source": sentence.source, "judgment": judgment.to_dict()}
         )
-        done(found)
-    return found
+        done(found, None)
+    return found, None
 
 
-def _write(folder: Path, judged: list[dict]) -> None:
+def _write(folder: Path, judged: list[dict], stopped: str | None = None) -> None:
     """calibration.json, whole or not at all: a temporary file, then moved into place."""
     value = {
         "label": LABEL,
         "judge": {"model": judge.JUDGE_MODEL, "version": judge.VERSION, "sha256": judge.fingerprint()},
         "sentences": judged,
+        "stopped": stopped,
     }
     temporary = folder / f".{CALIBRATION}.writing"
     temporary.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -527,73 +543,63 @@ def _matrix(pairs: Sequence[tuple[str, str]]) -> dict:
 
 
 def _run_row(relative: str) -> dict:
+    """One saved run by each grader: the rule's verdict worked out again; the judge's and Aravind's, each counted only
+    when it graded this very diagnosis, against this right answer (and, the judge's, by the judge as committed)."""
     folder = REPO / relative
     item = grading.saved(folder)
     version = grading.newest_for(item.name, item.version)
     found = grading.compare(item.name, item.diagnosis, version)
-    judged, mine = judge.read(folder), labels.read(folder)
-    sha = grading.digest(item.diagnosis)
-    row = {
+    judged, judge_problem = judge.counted(folder, item)
+    mine, label_problem = labels.counted(folder, item)
+    return {
         "run": relative,
         "name": item.name,
         "system": item.version,
         "rule": {"verdict": found["verdict"], "fix_fits": found.get("fix_fits_the_remedy"), "rubric_version": version},
-        "judge": None,
-        "aravind": None,
-        "problems": [],
+        "judge": None if judged is None else {key: judged["judgment"][key] for key in ("verdict", "fix_fits", "why")},
+        "aravind": None if mine is None else {key: mine[key] for key in ("verdict", "fix_fits", "why")},
+        "problems": [problem for problem in (judge_problem, label_problem) if problem is not None],
     }
-    if judged is not None and judged.get("diagnosis_sha256") != sha:
-        row["problems"].append("the judge graded another diagnosis than the run's evidence holds now: not counted")
-    elif judged is not None:
-        row["judge"] = {key: judged["judgment"][key] for key in ("verdict", "fix_fits", "why")}
-    if mine is not None and mine.get("diagnosis_sha256") != sha:
-        row["problems"].append(
-            "Aravind's verdict is on another diagnosis than the run's evidence holds now: not counted"
-        )
-    elif mine is not None:
-        row["aravind"] = {key: mine[key] for key in ("verdict", "fix_fits", "why")}
-    return row
 
 
 def report(folder: Path | None) -> dict:
-    """Each grader against the expected verdicts (the sentences) and against Aravind's (the saved runs): worked out
-    from saved files, offline. The rule's verdicts are worked out again; the judge's and his are read."""
-    if folder is None:  # not judged yet: the sentences, and the rule's verdicts on them
-        judged = [
-            {"sentence": number, "name": s.name, "system": s.system, "hypothesis": s.hypothesis}
-            | {"expected": s.expected, "source": s.source, "judgment": None}
-            for number, s in enumerate(SENTENCES, 1)
-        ]
-    else:
-        judged = json.loads((folder / CALIBRATION).read_text(encoding="utf-8"))["sentences"]
-    sentences = []
-    for item in judged:
-        rule = rule_on(Sentence(item["name"], item["system"], item["hypothesis"], item["expected"], item["source"]))
-        sentences.append(item | {"rule": rule})
+    """Each grader against the expected verdicts (all 66 sentences, judged or not yet) and against Aravind's (the
+    saved runs): worked out from saved files, offline. The rule's verdicts are worked out again; the judge's and his
+    are read."""
+    saved = {} if folder is None else json.loads((folder / CALIBRATION).read_text(encoding="utf-8"))
+    judged = {_key(item): item["judgment"] for item in saved.get("sentences", [])}
+    sentences = [
+        {"sentence": number, "name": s.name, "system": s.system, "hypothesis": s.hypothesis, "expected": s.expected}
+        | {"source": s.source, "judgment": judged.pop(_key(s), None), "rule": rule_on(s)}
+        for number, s in enumerate(SENTENCES, 1)
+    ]
+    unknown = [f"a judged sentence the tests no longer hold: {clean_text(key[2], 120)}" for key in judged]
     runs = [_run_row(relative) for relative in SAVED_RUNS]
+    labeled = [r for r in runs if r["aravind"] is not None]
 
     def verdict(side: Mapping | None) -> str | None:
         return None if side is None else side["verdict"]
 
-    given = [(s["expected"], verdict(s["judgment"])) for s in sentences]
-
     def fits(side: Mapping | None) -> bool | None:
         return None if side is None or side.get("verdict") == judge.NO_VERDICT else side.get("fix_fits")
 
+    given = [(s["expected"], verdict(s["judgment"])) for s in sentences]
     return {
         "label": (
             "Worked out offline by klaxon.calibration from saved files: no model was called. The rule's verdicts are"
             " klaxon.grading's, worked out again; the judge's are Claude's, recorded; Aravind's were typed at a terminal"
-            " (make label)."
+            " (make label). The sentences' expected verdicts were written by Claude, for the tests."
         ),
         "from": None if folder is None else grading_shown(folder),
+        "stopped": saved.get("stopped"),
+        "problems": unknown,
         "sentences": sentences,
         "runs": runs,
         "agreement": {
             "sentences": {
                 "count": len(sentences),
-                "rule_with_expected": _agree([(s["expected"], s["rule"]["verdict"]) for s in sentences]),
                 "judged": sum(1 for _, by in given if by is not None),
+                "rule_with_expected": _agree([(s["expected"], s["rule"]["verdict"]) for s in sentences]),
                 "judge_with_expected": _agree(given),
                 "judge_no_verdict": sum(1 for _, by in given if by == judge.NO_VERDICT),
                 "rule_matrix": _matrix([(s["expected"], s["rule"]["verdict"]) for s in sentences]),
@@ -602,12 +608,13 @@ def report(folder: Path | None) -> dict:
             "runs": {
                 "count": len(runs),
                 "judged": sum(1 for r in runs if r["judge"] is not None),
-                "labeled": sum(1 for r in runs if r["aravind"] is not None),
-                "rule_with_judge": _agree([(r["rule"]["verdict"], verdict(r["judge"])) for r in runs]),
-                "rule_with_aravind": _agree([(r["rule"]["verdict"], verdict(r["aravind"])) for r in runs]),
-                "judge_with_aravind": _agree([(verdict(r["judge"]), verdict(r["aravind"])) for r in runs]),
-                "rule_fix_with_aravind": _agree([(r["rule"]["fix_fits"], fits(r["aravind"])) for r in runs]),
-                "judge_fix_with_aravind": _agree([(fits(r["judge"]), fits(r["aravind"])) for r in runs]),
+                "labeled": len(labeled),
+                # On the runs he labeled only: nothing here tells him a grader's verdict before he gives his own.
+                "rule_with_judge": _agree([(r["rule"]["verdict"], verdict(r["judge"])) for r in labeled]),
+                "rule_with_aravind": _agree([(r["rule"]["verdict"], verdict(r["aravind"])) for r in labeled]),
+                "judge_with_aravind": _agree([(verdict(r["judge"]), verdict(r["aravind"])) for r in labeled]),
+                "rule_fix_with_aravind": _agree([(r["rule"]["fix_fits"], fits(r["aravind"])) for r in labeled]),
+                "judge_fix_with_aravind": _agree([(fits(r["judge"]), fits(r["aravind"])) for r in labeled]),
             },
         },
     }
@@ -630,7 +637,8 @@ def _cell(text: object) -> str:
 
 
 def markdown(found: Mapping) -> str:
-    """The report as a page: the agreement, each grader's verdicts by the expected ones, then every disagreement."""
+    """The report as a page: the agreement, each grader's verdicts by the expected ones, every disagreement, then the
+    saved runs, with both graders' verdicts held back on a run Aravind has not labeled yet."""
     said = found["agreement"]
     lines = ["# Klaxon's graders, checked", "", found["label"], ""]
     s = said["sentences"]
@@ -642,6 +650,8 @@ def markdown(found: Mapping) -> str:
         f"- The judge agrees on {_of(s['judge_with_expected'])}; no verdict on {s['judge_no_verdict']};"
         f" judged {s['judged']} of {s['count']}.",
     ]
+    if found["stopped"]:
+        lines.append(f"- The calibration stopped {_cell(found['stopped'])}: the sentences after it were not judged.")
     for who in ("rule", "judge"):
         matrix = s[f"{who}_matrix"]
         lines += ["", f"The {who}'s verdicts (rows: the expected verdict):", ""]
@@ -668,24 +678,29 @@ def markdown(found: Mapping) -> str:
         "",
         f"## The {r['count']} saved diagnoses",
         "",
-        f"Judged: {r['judged']} of {r['count']}. Labeled by Aravind: {r['labeled']} of {r['count']}.",
+        f"Judged: {r['judged']} of {r['count']}. Labeled by Aravind: {r['labeled']} of {r['count']}. A run's verdicts"
+        " are held back until he labels it.",
         "",
-        f"- The rule and the judge agree on {_of(r['rule_with_judge'])}.",
+        f"- The rule and the judge agree on {_of(r['rule_with_judge'])} of the runs he labeled.",
         f"- The rule agrees with Aravind on {_of(r['rule_with_aravind'])}; on the fix, {_of(r['rule_fix_with_aravind'])}.",
-        f"- The judge agrees with Aravind on {_of(r['judge_with_aravind'])}; on the fix, {_of(r['judge_fix_with_aravind'])}.",
+        f"- The judge agrees with Aravind on {_of(r['judge_with_aravind'])}; on the fix,"
+        f" {_of(r['judge_fix_with_aravind'])}.",
         "",
         "| Run | Graded as | Rule | Judge | Aravind |",
         "|---|---|---|---|---|",
     ]
     for row in found["runs"]:
-        rule = f"{row['rule']['verdict']} (v{row['rule']['rubric_version']}), fix {row['rule']['fix_fits']}"
-        cells = [rule]
-        for side in (row["judge"], row["aravind"]):
-            cells.append("-" if side is None else f"{side['verdict']}, fix {side['fix_fits']}")
+        if row["aravind"] is None:
+            cells = [HELD_BACK, HELD_BACK if row["judge"] is not None else "-", "-"]
+        else:
+            cells = [f"{row['rule']['verdict']} (v{row['rule']['rubric_version']}), fix {row['rule']['fix_fits']}"]
+            for side in (row["judge"], row["aravind"]):
+                cells.append("-" if side is None else f"{side['verdict']}, fix {side['fix_fits']}")
         lines.append(
             f"| {_cell(Path(row['run']).name)} | {_cell(row['name'])} | " + " | ".join(_cell(c) for c in cells) + " |"
         )
     problems = [(row["run"], problem) for row in found["runs"] for problem in row["problems"]]
+    problems += [("the calibration", problem) for problem in found["problems"]]
     if problems:
         lines += ["", "Problems:", ""] + [f"- {_cell(run)}: {_cell(problem)}" for run, problem in problems]
     return "\n".join(lines) + "\n"
@@ -696,17 +711,20 @@ def markdown(found: Mapping) -> str:
 
 def replay(folder: Path) -> list[str]:
     """Judge every sentence again from the calibration's recording, offline, and every saved run judged so far from
-    its own: how they differ from what was saved ([] when all are reproduced)."""
+    its own: how they differ from what was saved ([] when all are reproduced). A calibration that stopped is asked for
+    the sentence it stopped at too, and must stop there again."""
     saved = json.loads((folder / CALIBRATION).read_text(encoding="utf-8"))
     differences = []
     model = ReplayModel(folder / RECORDING)
-    sentences = [
-        Sentence(x["name"], x["system"], x["hypothesis"], x["expected"], x["source"]) for x in saved["sentences"]
-    ]
-    again = judge_sentences(model, sentences)
-    for before, after in zip(saved["sentences"], again, strict=True):
+    asked = [Sentence(x["name"], x["system"], x["hypothesis"], x["expected"], x["source"]) for x in saved["sentences"]]
+    if saved.get("stopped"):
+        asked.append(SENTENCES[len(asked)])  # the one it stopped at: its call gave no reply
+    again, stopped = judge_sentences(model, asked)
+    for before, after in zip(saved["sentences"], again, strict=False):
         if before != after:
             differences.append(f"sentence {before['sentence']}: the judgment differs")
+    if len(again) != len(saved["sentences"]) or stopped != saved.get("stopped"):
+        differences.append(f"it judged {len(again)} sentences and stopped {stopped}, not as recorded")
     if model.unused:
         differences.append(f"{model.unused} recorded call(s) were not asked for again")
     for relative in SAVED_RUNS:
@@ -736,21 +754,27 @@ def _run(argv: Sequence[str]) -> int:
         **_provenance(),
     }
     print(
-        f"The calibration's folder: {clean_text(str(folder))}; {len(SENTENCES)} sentences, then {len(SAVED_RUNS)} saved runs",
+        f"The calibration's folder: {clean_text(str(folder))}; {len(SENTENCES)} sentences, then {len(SAVED_RUNS)} saved"
+        " runs",
         flush=True,
     )
     adapter = ClaudeCode(Recording(folder / RECORDING, header), model=judge.JUDGE_MODEL, binary=binary)
     try:
-        judged = judge_sentences(adapter, SENTENCES, lambda found: _write(folder, found))
+        judged, stopped = judge_sentences(adapter, SENTENCES, lambda found, why: _write(folder, found, why))
         none = sum(1 for x in judged if x["judgment"]["verdict"] == judge.NO_VERDICT)
         print(f"Sentences judged: {len(judged) - none}; no verdict: {none}.", flush=True)
-        done = judge.judge_runs([REPO / relative for relative in SAVED_RUNS], argv, binary)
+        if stopped:
+            print(f"Stopped {stopped}: no saved run was judged.", file=sys.stderr)
+            return 1
+        done = judge.judge_runs([REPO / relative for relative in SAVED_RUNS], binary, held_back=True)
     except KeyboardInterrupt:
         print(f"Interrupted: {CALIBRATION} and each {RECORDING} keep what was judged", file=sys.stderr)
         return 130
-    print(f"Saved runs judged: {done[0]}; no verdict: {done[1]}; passed over: {done[2]}.\n")
+    print(f"Saved runs judged: {done.judged}; no verdict: {done.no_verdict}; passed over: {done.passed_over}.\n")
     print(markdown(report(folder)))
-    return 0 if none == 0 and done[1] == 0 else 1
+    if done.stopped:
+        print(f"Stopped {done.stopped}: nothing after it was asked.", file=sys.stderr)
+    return 0 if none == 0 and done.no_verdict == 0 and done.stopped is None else 1
 
 
 def _folder(given: Path | None) -> Path | None:
@@ -765,13 +789,14 @@ def _report(given: Path | None, write: bool) -> int:
         folder = _folder(given)
         found = report(folder)
         if write and folder is not None:
-            (folder / "calibration-report.json").write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n")
             (folder / "calibration-report.md").write_text(markdown(found))
+            if found["agreement"]["runs"]["labeled"] == found["agreement"]["runs"]["count"]:  # nothing held back
+                (folder / "calibration-report.json").write_text(json.dumps(found, indent=2, ensure_ascii=False) + "\n")
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"Cannot make the report: {type(exc).__name__}: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
     if folder is None:
-        print("No calibration folder yet: the saved runs only.\n")
+        print("No calibration folder yet: the rule on the sentences, and the saved runs.\n")
     print(markdown(found))
     return 0
 

@@ -431,6 +431,11 @@ def test_a_false_alarms_evidence_is_saved_and_printed(tmp_path, capsys):
     assert printed[0] == "Klaxon week 5: an evaluation run (case false-alarm, seed 7): a false alarm"
     assert any("written by the harness, not raised by the rules" in line for line in printed)
     assert "Saved in" in capsys.readouterr().out
+    # The review's finding L2: a false alarm's run is graded by the rule, as a fault run is, and says so.
+    assert saved["comparison"]["fault"] == "false-alarm" and saved["comparison"]["rubric"]["version"] == 4
+    assert saved["comparison"]["verdict"] == "names the cause" and saved["comparison"]["fix_fits_the_remedy"] is True
+    assert "compared with the case's right answer by a rule (klaxon.grading)" in saved["label"]
+    assert any(line.startswith("Compared by a rule (klaxon.grading, rubric version 4") for line in printed)
 
 
 # An evaluation run on a fault: the real fault deploys into the made-up docker, and the dry gate plans on it
@@ -509,9 +514,9 @@ def test_an_evaluation_run_is_graded_as_its_case_and_missing_deploys_asks_more_t
 
 def test_make_grade_run_grades_an_evaluation_run_as_its_case(tmp_path, capsys):
     # Week 3's run of fault 1 (a recorded response), copied and marked as a missing-deploys run graded by version 4.
-    folder = Path(
-        shutil.copytree(REPO / "evidence/week3/2026-10-19T022933Z_fault-run_duplicate-delivery", tmp_path / "r")
-    )
+    source = REPO / "evidence/week3/2026-10-19T022933Z_fault-run_duplicate-delivery"
+    ignore = shutil.ignore_patterns("judgment.json", "judge-recording.jsonl", "label.json")  # as before any grader
+    folder = Path(shutil.copytree(source, tmp_path / "r", ignore=ignore))
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     saved |= {"case": {"name": "missing-deploys"}, "comparison": {"rubric": {"version": 4}}}
     (folder / fault_runs.RUN_FILE).write_text(json.dumps(saved))
@@ -1130,40 +1135,56 @@ def test_the_evaluations_make_targets_pass_their_values_through_the_environment(
 
 def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_they_disagree(tmp_path):
     # The judgments and Aravind's verdict here are written by the test (made up), as klaxon.judge and make label save
-    # them beside a run.
+    # them beside a run. Each run here was graded by rubric version 3: its system's right answer is version 3's.
     from klaxon import judge, labels
 
-    def judged(folder, verdict, sha=None, why="Made up for the test."):
+    right = grading.answer("duplicate-delivery", 3)
+
+    def judged(folder, verdict, sha=None, why="Made up for the test.", judge_sha=None):
         diagnosis = json.loads((folder / fault_runs.RUN_FILE).read_text())["loop"]["diagnosis"]
         said = {"verdict": verdict, "fix_fits": True, "why": why}
         value = {"diagnosis_sha256": sha or grading.digest(diagnosis), "judgment": said}
+        value |= {"judge": {"sha256": judge_sha or judge.fingerprint()}}
+        value |= {"graded": {"name": "duplicate-delivery", "rubric_version": 3}}
         (folder / judge.SAVED).write_text(json.dumps(value))
         return grading.digest(diagnosis)
 
-    agree, split, other, none = (saved_run(tmp_path / name) for name in ("a", "b", "c", "d"))
+    agree, split, other, none, older, broken = (saved_run(tmp_path / name) for name in "abcdef")
     judged(agree, "names the cause")
     sha = judged(split, "partly", why="It never says why the webhooks come again.")
     mine = {"verdict": "partly", "fix_fits": True, "how": "typed at a terminal", "diagnosis_sha256": sha}
+    mine |= {"right_answer_sha256": grading.digest([right.cause, right.remedy])}
     (split / labels.LABEL_FILE).write_text(json.dumps(mine))
     judged(other, "misses the cause", sha="another diagnosis")
     (other / labels.LABEL_FILE).write_text(json.dumps(mine | {"diagnosis_sha256": "another diagnosis"}))
     judged(none, judge.NO_VERDICT)
+    judged(older, "misses the cause", judge_sha="an older judge")  # the review's finding L3
+    (broken / judge.SAVED).write_text("{")  # the review's finding L7: said, and the report is still made
     found = evaluation.report([tmp_path])
     rows = {row["folder"]: row for row in found["runs"]}
-    assert {name: row["verdict"] for name, row in rows.items()} == dict.fromkeys("abcd", "names the cause")
-    assert [rows[name]["judge"] for name in "abcd"] == ["names the cause", "partly", None, judge.NO_VERDICT]
-    assert [rows[name]["graders_disagree"] for name in "abcd"] == [False, True, False, False]
+    assert {name: row["verdict"] for name, row in rows.items()} == dict.fromkeys("abcdef", "names the cause")
+    assert [rows[name]["judge"] for name in "abcdef"] == [
+        "names the cause",
+        "partly",
+        None,
+        judge.NO_VERDICT,
+        None,
+        None,
+    ]
+    assert [rows[name]["graders_disagree"] for name in "abcdef"] == [False, True, False, False, False, False]
     assert rows["b"]["aravind"] == "partly" and rows["a"]["aravind"] is None
     assert rows["c"]["grader_problems"] == [
         "the judge graded another diagnosis than this run's: not counted",
         "Aravind's verdict is on another diagnosis than this run's: not counted",
     ]
     assert rows["c"]["aravind"] is None
+    assert rows["e"]["grader_problems"] == ["another version of the judge made this judgment: not counted"]
+    assert rows["f"]["grader_problems"] == ["its judgment.json cannot be read (JSONDecodeError): not counted"]
     [entry] = found["summary"]
     assert (entry["judged"], entry["judge_names_the_cause"], entry["graders_disagree"]) == (2, 1, 1)
     assert (entry["judge_no_verdict"], entry["labeled"]) == (1, 1)
     page = evaluation.markdown(found)
-    assert "| duplicate-delivery | gated, week 4 | 4 ran, 0 not run | 4 of 4 | 4 of 4 | 1 of 2 | 1 | 4 of 4 |" in page
+    assert "| duplicate-delivery | gated, week 4 | 6 ran, 0 not run | 6 of 6 | 6 of 6 | 1 of 2 | 1 | 6 of 6 |" in page
     assert (
         "- b (duplicate-delivery): the rule (version 4): names the cause; the judge: partly (It never says why the"
         " webhooks come again.); Aravind: partly." in page
