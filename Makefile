@@ -27,7 +27,8 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
-	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem eval-cases eval eval-report rehearse-case
+	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem eval-cases eval eval-report rehearse-case \
+	judge-prompt judge replay-judge label calibrate calibration-report replay-calibration
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -49,7 +50,8 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/agent tests/agent src/klaxon/alerts.py src/klaxon/fault_runs.py src/klaxon/grading.py \
 		tests/test_alerts.py tests/test_fault_runs.py tests/test_grading.py tests/conftest.py \
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
-		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py
+		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
+		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -136,6 +138,33 @@ eval-report: ## the evaluation's report, worked out offline from saved runs: mak
 
 rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week5/ (his OK first): make rehearse-case CASE=false-alarm
 	$(PY) -m klaxon.evaluation rehearse "$$CASE" $${SEED:+--seed "$$SEED"}
+
+# The graders (week 5, item 2). RUN may name several folders, or a folder of runs: it is split on spaces, never pasted
+# into the shell's text.
+judge-prompt: ## the exact prompt the judge gets for a saved run's diagnosis; calls nothing: make judge-prompt RUN=evidence/week4/<folder>
+	@test -n "$$RUN" || { echo "make judge-prompt RUN=<a saved run's folder>: RUN is missing" >&2; exit 2; }
+	$(PY) -m klaxon.judge prompt "$$RUN"
+
+judge: ## Claude as a judge, live: one recorded call per saved run not judged yet, saved beside it (his OK first): make judge RUN=<folders>
+	@test -n "$$RUN" || { echo "make judge RUN=<saved runs, or folders of them>: RUN is missing" >&2; exit 2; }
+	$(PY) -m klaxon.judge run $$RUN
+
+replay-judge: ## replay recorded judgments offline, and check they reproduce: make replay-judge RUN=<folders>
+	@test -n "$$RUN" || { echo "make replay-judge RUN=<judged runs, or folders of them>: RUN is missing" >&2; exit 2; }
+	$(PY) -m klaxon.judge replay $$RUN
+
+label: ## your own verdict on a run's diagnosis, typed in your terminal (refused without one), saved beside it once: make label RUN=<folders>
+	@test -n "$$RUN" || { echo "make label RUN=<saved runs, or folders of them>: RUN is missing" >&2; exit 2; }
+	$(PY) -m klaxon.labels $$RUN
+
+calibrate: ## the judge, live, on the grading tests' 66 sentences and the 13 saved diagnoses: 79 calls (his OK first)
+	$(PY) -m klaxon.calibration run
+
+calibration-report: ## each grader against the expected verdicts and yours, offline (FOLDER=, the newest by default; WRITE=1 saves it)
+	$(PY) -m klaxon.calibration report $${FOLDER:+"$$FOLDER"} $${WRITE:+--write}
+
+replay-calibration: ## replay the calibration's recorded judgments offline, and check they reproduce (FOLDER=, the newest by default)
+	$(PY) -m klaxon.calibration replay $${FOLDER:+"$$FOLDER"}
 
 postmortem-facts: ## the facts of a gated run's postmortem, filled in by code, and the exact prompt; calls nothing: make postmortem-facts RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.agent.postmortem facts "$$RUN"

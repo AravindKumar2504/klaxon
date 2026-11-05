@@ -1,13 +1,15 @@
 """The rule that compares a diagnosis with the cause a fault records. The hypotheses here are written for the tests,
-except one: the first live run's, a recorded response from Claude (claude-opus-5-5, 2026-10-18), read from its
-evidence as data."""
+except the saved runs' (the first live run's, a recorded response from Claude, claude-opus-5-5, 2026-10-18, and the
+fault runs'), read from their evidence as data. The 66 sentences with an expected verdict are kept in
+klaxon.calibration, where the judge is checked on them too (week 5, item 2)."""
 
 import json
 import re
+from pathlib import Path
 
 import pytest
 
-from klaxon import alerts, faults, grading
+from klaxon import alerts, calibration, evaluation, faults, grading
 from klaxon.agent.tools import HOME
 from klaxon.agent.trace import read_trace
 from klaxon.patient.stack import REPO
@@ -32,8 +34,10 @@ def verdict(fault, hypothesis, version=grading.RUBRIC_VERSION):
 
 VERSIONS = sorted(grading.VERSIONS)
 FIRST_THREE = ("duplicate-delivery", "poison-message", "provider-outage")
-# The faults each version grades: versions 1 and 2 came before faults 4 to 6 (week 4, item 4).
-GRADES = {1: FIRST_THREE, 2: FIRST_THREE, 3: tuple(faults.FAULTS)}
+# The faults each version grades: versions 1 and 2 came before faults 4 to 6 (week 4, item 4), and version 4 also
+# grades the evaluation's two new cases (week 5, item 2).
+CASES = ("false-alarm", "missing-deploys")
+GRADES = {1: FIRST_THREE, 2: FIRST_THREE, 3: tuple(faults.FAULTS), 4: (*faults.FAULTS, *CASES)}
 GRADED = [(name, version) for version in VERSIONS for name in GRADES[version]]
 PAIRS = [(name, other, version) for version in VERSIONS for name in GRADES[version] for other in GRADES[version]]
 
@@ -41,24 +45,28 @@ PAIRS = [(name, other, version) for version in VERSIONS for name in GRADES[versi
 @pytest.mark.parametrize("version", VERSIONS)
 def test_every_fault_has_a_rubric_with_three_required_elements(version):
     assert set(grading.VERSIONS[version]) == set(GRADES[version])
-    assert set(grading.VERSIONS[grading.RUBRIC_VERSION]) == set(faults.FAULTS)  # the latest grades every fault
+    assert set(grading.VERSIONS[grading.RUBRIC_VERSION]) == {*faults.FAULTS, *CASES}  # the latest grades every case
     for rubric in grading.VERSIONS[version].values():
         assert sum(element.required for element in rubric.elements) == 3
-        for element in rubric.elements:
-            for pattern in element.patterns:
+        for element in (*rubric.elements, *rubric.wrong, *rubric.also):
+            for pattern in (*element.patterns, *element.unless):
                 re.compile(pattern)
 
 
 @pytest.mark.parametrize("name, version", GRADED)
 def test_each_faults_own_recorded_cause_names_the_cause(name, version):
-    found = grading.compare(name, diagnosis(faults.FAULTS[name].recorded(version).cause), version)
+    found = grading.compare(name, diagnosis(grading.answer(name, version).cause), version)
     assert found["verdict"] == "names the cause"
     assert all(item["named"] for item in found["elements"])
 
 
-@pytest.mark.parametrize("name, other, version", [(a, b, v) for a, b, v in PAIRS if a != b])
+# Missing-deploys' right answer holds fault 1's cause, word for word: it names fault 1, and more.
+OVERLAP = {("missing-deploys", "duplicate-delivery")}
+
+
+@pytest.mark.parametrize("name, other, version", [(a, b, v) for a, b, v in PAIRS if a != b and (a, b) not in OVERLAP])
 def test_no_faults_cause_names_another_faults_cause(name, other, version):
-    assert verdict(other, faults.FAULTS[name].recorded(version).cause, version) != "names the cause"
+    assert verdict(other, grading.answer(name, version).cause, version) != "names the cause"
 
 
 @pytest.mark.parametrize("version", [1, 2])
@@ -76,60 +84,19 @@ def test_the_first_live_runs_wrong_diagnosis_misses_every_faults_cause(version):
         assert grading.compare(name, recorded, version)["verdict"] == "misses the cause", name
 
 
-@pytest.mark.parametrize(
-    "fault, hypothesis, expected",
-    [
-        (
-            "duplicate-delivery",
-            "A redeploy of the ledger consumer switched it to a handler without dedupe, so every webhook the provider"
-            " redelivers after a lost ack is booked a second time.",
-            "names the cause",
-        ),
-        (
-            "duplicate-delivery",
-            "The ledger consumer no longer checks idempotency keys, so some events are posted twice.",
-            "partly",
-        ),
-        ("duplicate-delivery", "The ledger is posting some events twice.", "misses the cause"),
-        (
-            "poison-message",
-            "One malformed payment.updated event is retried forever by the ledger consumer (BAD_EVENTS=retry after a"
-            " deploy), so nothing behind it is booked.",
-            "names the cause",
-        ),
-        ("poison-message", "The ledger consumer keeps retrying and is stuck.", "partly"),
-        ("poison-message", "The ledger consumer has stalled and its lag grows.", "misses the cause"),
-        (
-            "provider-outage",
-            "The payment provider is timing out, and with no circuit breaker each payment waits through three attempts.",
-            "names the cause",
-        ),
-        ("provider-outage", "The provider is down.", "partly"),
-        ("provider-outage", "The database connection pool is exhausted.", "misses the cause"),
-    ],
-)
+def sentences(source):
+    """The sentences of one source in klaxon.calibration, as (fault, hypothesis, expected)."""
+    return [(s.name, s.hypothesis, s.expected) for s in calibration.SENTENCES if s.source == source]
+
+
+@pytest.mark.parametrize("fault, hypothesis, expected", sentences(calibration.V1_TESTS))
 def test_hypotheses_written_for_the_test_get_the_expected_verdict(fault, hypothesis, expected):
     assert verdict(fault, hypothesis, version=1) == expected
     if fault != "provider-outage":  # version 2 changed only fault 3
         assert verdict(fault, hypothesis, version=2) == expected
 
 
-@pytest.mark.parametrize(
-    "hypothesis, expected",
-    [
-        (
-            "The payment provider hangs: our calls to it time out, the circuit breaker opened, and payments-api now"
-            " fails fast with 503.",
-            "names the cause",
-        ),
-        ("The provider is unavailable, and our breaker is open.", "names the cause"),
-        ("The provider is down.", "partly"),
-        ("payments-api short-circuits every payment with a 503.", "partly"),
-        ("The database connection pool is exhausted.", "misses the cause"),
-        # Version 1's right answer, before the breaker: in version 2's system, it misses how the API fails.
-        ("The provider times out and payments-api waits through three attempts, its workers tied up.", "partly"),
-    ],
-)
+@pytest.mark.parametrize("hypothesis, expected", [(h, e) for _, h, e in sentences(calibration.V2_TESTS)])
 def test_version_2_hypotheses_written_for_the_test_get_the_expected_verdict(hypothesis, expected):
     assert verdict("provider-outage", hypothesis, version=2) == expected
 
@@ -268,17 +235,16 @@ def test_version_2_is_version_1_but_for_fault_3():
     )
 
 
-def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6_and_new_comparisons_use_it():
+def test_version_3_is_version_2_and_a_rubric_for_each_of_faults_4_to_6():
     # Week 4, item 4: committed before any live run on faults 4 to 6. Pinned the same way.
-    assert grading.RUBRIC_VERSION == 3 and grading.RUBRICS is grading.VERSIONS[3]
-    assert grading.fingerprint() == grading.fingerprint(3)
     assert grading.fingerprint(3) == V3_FINGERPRINT
     assert {name: grading.VERSIONS[3][name] for name in FIRST_THREE} == grading.VERSIONS[2]
     assert set(grading.VERSIONS[3]) - set(FIRST_THREE) == {"money-unit", "secret-rotation", "pool-exhaustion"}
     for name in faults.FAULTS:
-        found = grading.compare(name, diagnosis("x"))
+        found = grading.compare(name, diagnosis("x"), version=3)
         assert found["rubric"] == {"version": 3, "sha256": grading.fingerprint(3)}
         assert (found["recorded_cause"], found["remedy"]) == (faults.FAULTS[name].cause, faults.FAULTS[name].remedy)
+        assert "wrong_causes" not in found and all("cancelled" not in item for item in found["elements"])
     assert "rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6" in grading.BY[3]
 
 
@@ -286,196 +252,7 @@ V3_FINGERPRINT = "9cd4375a58cc3b1cb2b7a2da52835d398b24c544a14855cc2f0b72b56f19d4
 
 
 # Version 3's sentences: written for the tests (not model output), with the independent review's and its re-check's.
-V3_SENTENCES = [
-    # Fault 4: right, in many word orders.
-    (
-        "money-unit",
-        "A deploy of payments-api reads our amounts, already in cents, as dollars, so the provider charges each"
-        " customer 100 times the amount.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "Since its deploy, payments-api sends 100x amounts: the provider's charges are 100x ours.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "The payments-api deploy multiplies each amount by 100: each charge sent to the provider is 100x our recorded"
-        " amount.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "After the payments-api deploy (CHARGE_AMOUNT_UNIT=dollars), customers are charged 100 times the amount.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "payments-api has a money-unit bug since its deploy: the provider bills customers 100x.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "The payments API now treats cents as dollars, so every charge is 100 times the payment amount.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "A deploy of the payments API converts amounts to cents twice; charges at the provider are 100x ours.",
-        "names the cause",
-    ),
-    ("money-unit", "Since its deploy, payments-api sends amount_cents*100 to the provider.", "names the cause"),
-    (
-        "money-unit",
-        "The payments API reads cents as dollars: every customer is charged a hundredfold.",
-        "names the cause",
-    ),
-    (
-        "money-unit",
-        "The payments API's charge unit changed to dollars: the provider charged $4,500.00 for a $45.00 payment.",
-        "names the cause",
-    ),
-    # Fault 4: partly, or wrong.
-    ("money-unit", "payments-api overcharges customers.", "partly"),
-    ("money-unit", "Our payments disagree with the provider's charges.", "misses the cause"),
-    ("money-unit", "The payment confirmer converts amounts to dollars and fails a unit test.", "misses the cause"),
-    ("money-unit", "The payments API has a unit test failure.", "misses the cause"),
-    # Fault 5: right.
-    (
-        "secret-rotation",
-        "The webhook receiver was deployed with a rotated secret the provider does not sign with, so it refuses every"
-        " webhook with a 400.",
-        "names the cause",
-    ),
-    (
-        "secret-rotation",
-        "A deploy rotated our webhook secret on the receiver only; the provider still signs with the old one, so every"
-        " signature check fails.",
-        "names the cause",
-    ),
-    (
-        "secret-rotation",
-        "The webhook receiver's signing secret was rotated, but the provider still signs with the old one, so every"
-        " webhook fails its signature check and is refused.",
-        "names the cause",
-    ),
-    (
-        "secret-rotation",
-        "The secret was rotated on our side only: the webhook receiver now checks v2, and rejects every webhook the"
-        " provider signs with v1.",
-        "names the cause",
-    ),
-    (
-        "secret-rotation",
-        "webhook-receiver was redeployed with WEBHOOK_SECRET_VERSION=v2; every webhook gets a 400 bad_signature.",
-        "names the cause",
-    ),
-    (
-        "secret-rotation",
-        "A recent config change moved the receiver to a new HMAC secret, so it rejects every webhook as a signature"
-        " mismatch.",
-        "names the cause",
-    ),
-    # Fault 5: partly, or wrong (the provider rotating, not us; a webhook format; a count of 400).
-    ("secret-rotation", "Webhooks fail their signature check at the receiver.", "partly"),
-    ("secret-rotation", "Our books are behind the provider: its webhooks are not acknowledged.", "misses the cause"),
-    (
-        "secret-rotation",
-        "The provider rotated its webhook signing key and our webhook receiver still checks the old one, so it rejects"
-        " every webhook.",
-        "partly",
-    ),
-    ("secret-rotation", "The receiver is down; 400 of the provider's webhooks are pending.", "misses the cause"),
-    (
-        "secret-rotation",
-        "No recent deploy touched the receiver; the provider must have rotated its signing secret, so every signature"
-        " check fails.",
-        "partly",
-    ),
-    (
-        "secret-rotation",
-        "The provider moved to v2 of its webhook format, and our receiver rejects the new payloads.",
-        "partly",
-    ),
-    (
-        "secret-rotation",
-        "The provider rotated its secret; our receiver's config still has the old key, so it rejects every webhook.",
-        "partly",
-    ),
-    (
-        "secret-rotation",
-        "The provider rotated its signing key, so our secret is now stale and the receiver rejects every webhook.",
-        "partly",
-    ),
-    # Fault 6: right, with or without the word "pool".
-    (
-        "pool-exhaustion",
-        "A payments-api deploy leaks database connections in its refund path: its pool runs dry, and requests wait"
-        " for a connection until they time out.",
-        "names the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "Since its deploy, payments-api leaks database connections: the connection pool is exhausted and every request"
-        " hits PoolTimeout.",
-        "names the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "The payments API's refund path does not return its database connection to the pool, so the pool of 10 runs"
-        " out and requests fail.",
-        "names the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "payments-api never releases the connections it takes for refunds (REFUND_CONNECTION=kept), so its psycopg"
-        " pool is empty and requests fail with PoolTimeout.",
-        "names the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "A deploy of payments-api leaks database connections, until it runs out of connections and requests fail with"
-        " PoolTimeout.",
-        "names the cause",
-    ),
-    # Fault 6: partly, or wrong (a thread pool, an HTTP client's pool, Redis's, a slow query, a late release).
-    ("pool-exhaustion", "The payments API's database pool is exhausted.", "partly"),
-    ("pool-exhaustion", "Payments are slow and fail with 500s.", "misses the cause"),
-    ("pool-exhaustion", "The provider is down, and our breaker is open.", "misses the cause"),
-    (
-        "pool-exhaustion",
-        "Slow database queries in payments-api are holding connections, so requests hit PoolTimeout.",
-        "misses the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "The provider hangs; our API's worker threads hold their connections while they wait, the thread pool is"
-        " exhausted, and requests fail.",
-        "misses the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "payments-api leaks Redis connections, until the Redis connection pool is exhausted.",
-        "partly",
-    ),
-    (
-        "pool-exhaustion",
-        "The provider never returns an answer, so the payments API's HTTP connection pool to it is exhausted and"
-        " requests fail.",
-        "misses the cause",
-    ),
-    (
-        "pool-exhaustion",
-        "Database connections are not released in time, so the connection pool is exhausted and requests fail.",
-        "partly",
-    ),
-    (
-        "pool-exhaustion",
-        "A long-running transaction keeps database connections busy, exhausting the connection pool.",
-        "partly",
-    ),
-]
+V3_SENTENCES = sentences(calibration.V3_TESTS)
 
 
 @pytest.mark.parametrize("fault, hypothesis, expected", V3_SENTENCES)
@@ -530,11 +307,12 @@ def test_a_comparison_by_version_1_reads_the_cause_fault_3_recorded_then():
 @pytest.mark.parametrize(
     "saved, version",
     [
-        (None, 3),  # no comparison saved: the latest
+        (None, 4),  # no comparison saved: the latest
         ({"verdict": "names the cause"}, 1),  # saved before comparisons recorded a version: the week 3 runs
         ({"rubric": {"version": 1, "sha256": "x"}}, 1),
         ({"rubric": {"version": 2, "sha256": "x"}}, 2),
         ({"rubric": {"version": 3, "sha256": "x"}}, 3),
+        ({"rubric": {"version": 4, "sha256": "x"}}, 4),
     ],
 )
 def test_a_saved_comparison_is_graded_again_with_its_own_version(saved, version):
@@ -573,6 +351,14 @@ MADE = [
     ),
     ("secret-rotation", alerts.books({"outcome": "could not settle", "webhooks_not_acknowledged": 52}).sentence),
     ("pool-exhaustion", f"{alerts.errors(3.0, 3.0).sentence} {alerts.latency(5.0).sentence}"),
+    # The evaluation's two cases: the false alarm's alert, in the lag rule's words, and fault 1's, for missing-deploys.
+    ("false-alarm", evaluation.false_alert("2026-11-04T00:00:00Z").summary),
+    (
+        "missing-deploys",
+        alerts.money(
+            {"outcome": "failed", "invariants": 5, "failed": {"posted_exactly_once": 7}, "money_off_cents": 1}
+        ).sentence,
+    ),
 ]
 
 
@@ -584,7 +370,7 @@ def test_an_alerts_own_words_never_name_enough_of_its_faults_cause(version):
     saved = [json.loads(path.read_text()) for path in sorted(runs)]
     recorded = [(run["fault"]["name"], run["alert"]["summary"]) for run in saved if run["alert"] is not None]
     assert set(FIRST_THREE) <= {fault for fault, _ in recorded}  # a run that stopped before its alert has none
-    assert {fault for fault, _ in MADE} == set(faults.FAULTS)
+    assert {fault for fault, _ in MADE} == set(GRADES[grading.RUBRIC_VERSION])
     for fault, sentence in [*recorded, *MADE]:
         if fault in GRADES[version]:
             assert verdict(fault, sentence, version) == "misses the cause", (fault, sentence)
@@ -592,39 +378,7 @@ def test_an_alerts_own_words_never_name_enough_of_its_faults_cause(version):
 
 # Finding 2's examples: what a person would say, and version 1 does not. Each is a known limit, kept as a test that
 # fails today (strict: one that starts to pass fails too), for the week 5 grader to do better on.
-KNOWN_LIMITS = [
-    (
-        "poison-message",
-        "The ledger consumer could not process events while PostgreSQL was down; it is retrying.",
-        "misses the cause",
-    ),
-    (
-        "duplicate-delivery",
-        "Redis lost its idempotency keys, so the ledger books webhooks the provider re-sends a second time.",
-        "misses the cause",
-    ),
-    (
-        "provider-outage",
-        "PostgreSQL is slow and payments-api requests wait on it; fake-provider looks healthy.",
-        "misses the cause",
-    ),
-    (
-        "provider-outage",
-        "payments-api is slow because a traffic spike exhausted its worker threads.",
-        "misses the cause",
-    ),
-    (
-        "poison-message",
-        "The ledger consumer retries forever one payment.updated event whose amount is not positive integer cents.",
-        "names the cause",
-    ),
-    ("poison-message", "The ledger consumer retries forever one event whose amount is a string.", "names the cause"),
-    (
-        "duplicate-delivery",
-        "A deploy turned off the ledger consumer's duplicate check, so webhooks the provider sends again are booked twice.",
-        "names the cause",
-    ),
-]
+KNOWN_LIMITS = sentences(calibration.V1_LIMIT)
 
 
 @pytest.mark.xfail(
@@ -638,24 +392,12 @@ def test_a_known_limit_of_version_1(fault, hypothesis, right):
 
 
 # Version 2's own: in a system with the breaker, a hypothesis that says there is none names the word, and is wrong.
-KNOWN_LIMITS_V2 = [
-    (
-        "The provider times out, and payments-api has no circuit breaker, so every payment waits through three tries.",
-        "partly",
-    ),
-]
+KNOWN_LIMITS_V2 = [(h, e) for _, h, e in sentences(calibration.V2_LIMIT)]
 
 
 # Version 3's own (the independent review's sentence): a wrong cause that names every element. It blames the payment
 # confirmer, but says "a unit bug", "the amounts differ" and, in passing, "the payments API's records".
-KNOWN_LIMITS_V3 = [
-    (
-        "money-unit",
-        "A deploy of the payment confirmer has a unit bug: it reads the provider's amounts as dollars, so the amounts"
-        " differ from the payments API's records.",
-        "partly",
-    ),
-]
+KNOWN_LIMITS_V3 = sentences(calibration.V3_LIMIT)
 
 
 @pytest.mark.xfail(
@@ -676,3 +418,315 @@ def test_a_known_limit_of_version_3(fault, hypothesis, right):
 @pytest.mark.parametrize("hypothesis, right", KNOWN_LIMITS_V2)
 def test_a_known_limit_of_version_2(hypothesis, right):
     assert verdict("provider-outage", hypothesis, version=2) == right
+
+
+# Version 4 (week 5, item 2): the nine known limits fixed where a rule can, words that cancel an element (unless), known
+# wrong causes (wrong), and the evaluation's two cases. Its sentences below are written for these tests, not model
+# output. Its new patterns were written knowing the known limits: these tests show each mechanism works, nothing more.
+
+V4_FINGERPRINT = "bd8fbb2889171fa1597236c8c908a51165f195fb47638db1501d72ee92a17e72"  # pinned before any week 5 live run
+CHANGED_IN_4 = ("duplicate-delivery", "poison-message", "provider-outage", "money-unit")
+V1_OUTAGE = {
+    h for f, h, _ in sentences(calibration.V1_TESTS) if f == "provider-outage"
+}  # written for version 1's system
+
+
+def test_version_4_is_version_3_with_its_limits_fixed_and_two_new_cases_and_new_comparisons_use_it():
+    assert grading.RUBRIC_VERSION == 4 and grading.RUBRICS is grading.VERSIONS[4]
+    assert grading.fingerprint() == grading.fingerprint(4) == V4_FINGERPRINT
+    assert set(grading.VERSIONS[4]) == {*faults.FAULTS, *CASES}
+    for name in set(faults.FAULTS) - set(CHANGED_IN_4):  # no known limit: unchanged
+        assert grading.VERSIONS[4][name] == grading.VERSIONS[3][name]
+    for name in CHANGED_IN_4:  # every pattern of version 3 kept, and added to
+        old, new = grading.VERSIONS[3][name], grading.VERSIONS[4][name]
+        assert (old.fix_kinds, old.fix_target) == (new.fix_kinds, new.fix_target) and new != old
+        for before, after in zip(old.elements, new.elements, strict=True):
+            assert (before.name, before.required) == (after.name, after.required)
+            assert set(before.patterns) <= set(after.patterns)
+    for name in GRADES[4]:
+        found = grading.compare(name, diagnosis("x"))
+        right = grading.answer(name)
+        assert found["rubric"] == {"version": 4, "sha256": grading.fingerprint(4)}
+        assert (found["recorded_cause"], found["remedy"]) == (right.cause, right.remedy)
+        assert found["wrong_causes"] == [] and all(item["cancelled"] is False for item in found["elements"])
+    assert "rubric version 4, committed" in grading.BY[4] and "before any week 5 live run" in grading.BY[4]
+
+
+def test_version_4s_new_fields_are_left_out_of_an_earlier_versions_fingerprint_where_they_are_empty():
+    # So the fingerprints pinned before the earlier versions' runs still hold (the tests above pin each).
+    for version in (1, 2, 3):
+        for rubric in grading.VERSIONS[version].values():
+            shape = grading._shape(rubric)
+            assert "wrong" not in shape and "also" not in shape
+            assert all("unless" not in element for element in shape["elements"])
+    shape = grading._shape(grading.VERSIONS[4]["money-unit"])
+    assert shape["elements"][0]["unless"] and "unless" not in shape["elements"][1]
+    shape = grading._shape(grading.VERSIONS[4]["missing-deploys"])
+    assert shape["wrong"] and shape["also"]
+
+
+@pytest.mark.parametrize(
+    "fault, hypothesis, right",
+    [*KNOWN_LIMITS, *(("provider-outage", h, r) for h, r in KNOWN_LIMITS_V2), *KNOWN_LIMITS_V3],
+)
+def test_version_4_gets_each_known_limit_right(fault, hypothesis, right):
+    # Two were written for fault 3 before the breaker: they blame the database or a traffic spike, wrong in either
+    # system. Version 4 grades them in its own.
+    assert verdict(fault, hypothesis, version=4) == right
+
+
+@pytest.mark.parametrize(
+    "fault, hypothesis, expected",
+    [
+        *((f, h, e) for f, h, e in sentences(calibration.V1_TESTS) if h not in V1_OUTAGE),
+        *sentences(calibration.V2_TESTS),
+        *V3_SENTENCES,
+    ],
+)
+def test_version_4_keeps_every_earlier_sentences_verdict(fault, hypothesis, expected):
+    assert verdict(fault, hypothesis, version=4) == expected
+
+
+@pytest.mark.parametrize(
+    "fault, hypothesis, expected",
+    [
+        # Fault 1: Redis losing its keys is another cause, in any word order; a denial is not one.
+        (
+            "duplicate-delivery",
+            "The ledger consumer's dedupe keys were evicted from Redis, so webhooks the provider sends again are booked"
+            " twice.",
+            "misses the cause",
+        ),
+        (
+            "duplicate-delivery",
+            "Redis did not lose any keys: a deploy turned off the ledger consumer's dedupe, so webhooks the provider"
+            " sends again are booked twice.",
+            "names the cause",
+        ),
+        (
+            "duplicate-delivery",
+            "A deploy switched off the ledger consumer's duplicate detection, so redelivered webhooks are booked twice.",
+            "names the cause",
+        ),
+        # Fault 2: a database outage is another cause; a denial is not one; "a decimal string" is its message.
+        (
+            "poison-message",
+            "While the database was unavailable, the ledger consumer kept retrying one malformed event forever.",
+            "misses the cause",
+        ),
+        (
+            "poison-message",
+            "The ledger consumer retries one malformed event forever; PostgreSQL was not down.",
+            "names the cause",
+        ),
+        (
+            "poison-message",
+            "The ledger consumer retries forever one event whose amount was a decimal string.",
+            "names the cause",
+        ),
+        # Fault 3, with the breaker: a breaker denied is not the breaker failing fast; a slow database is another cause.
+        ("provider-outage", "The provider hangs, and payments-api runs without a breaker.", "partly"),
+        ("provider-outage", "The provider hangs, and the breaker is disabled (PROVIDER_BREAKER=off).", "partly"),
+        (
+            "provider-outage",
+            "PostgreSQL is slow, so payments-api waits; the provider times out and our breaker opened.",
+            "misses the cause",
+        ),
+        (
+            "provider-outage",
+            "PostgreSQL was not slow: the provider times out, and the breaker opened.",
+            "names the cause",
+        ),
+        # Fault 4: a bug put in another service of ours does not name the payments API, though it is mentioned.
+        (
+            "money-unit",
+            "A deploy of the ledger consumer has a unit bug: it reads the provider's amounts as dollars, so the amounts"
+            " differ from the payments API's records.",
+            "partly",
+        ),
+        (
+            "money-unit",
+            "A deploy of payments-api reads cents as dollars, so the provider charges 100 times our amount; the payment"
+            " confirmer then marks them succeeded.",
+            "names the cause",
+        ),
+    ],
+)
+def test_version_4s_unless_and_wrong_causes_each_work(fault, hypothesis, expected):
+    assert verdict(fault, hypothesis, version=4) == expected
+
+
+FALSE_ALARM_SENTENCES = [
+    (
+        "The alert is false: the ledger consumer group's lag reads 0 under traffic, so nothing is behind.",
+        "names the cause",
+    ),
+    ("A false alarm: the ledger group is caught up, with no consumer lag.", "names the cause"),
+    ("Nothing is wrong: the ledger consumer keeps up.", "names the cause"),
+    ("The ledger consumer is not stalled: its lag is 0, so the alert is false.", "names the cause"),
+    ("The ledger consumer group's lag is 0.", "partly"),  # it does not say the alert is false
+    ("The ledger consumer appears hung or silently stalled.", "misses the cause"),
+    ("The alert is false, but the ledger consumer is stuck on a poison message.", "misses the cause"),  # a real fault
+    ("The ledger consumer group is 250 messages behind on provider-events.", "misses the cause"),  # the alert, restated
+]
+
+
+@pytest.mark.parametrize("hypothesis, expected", FALSE_ALARM_SENTENCES)
+def test_the_false_alarms_rubric_asks_that_the_alert_be_called_false_from_its_lag(hypothesis, expected):
+    assert verdict("false-alarm", hypothesis, 4) == expected
+
+
+MISSING_DEPLOYS_SENTENCES = [
+    (
+        "The ledger consumer books every webhook the provider sends again: its dedupe is gone. Docker did not answer,"
+        " so I could not check the deploy list.",
+        "names the cause",
+    ),
+    (
+        "The ledger consumer double-books redelivered webhooks: its idempotency check is gone. That a deploy did it is"
+        " unverified: service_health and recent_deploys failed.",
+        "names the cause",
+    ),
+    # The cause, and nothing of what it could not check.
+    (
+        "The ledger consumer books every webhook the provider sends again: its dedupe is gone, after a deploy.",
+        "partly",
+    ),
+    # Saying what it could not check never lifts a wrong cause.
+    ("The ledger consumer appears hung; I could not check the deploy list.", "misses the cause"),
+    (
+        "Redis lost its keys, so the ledger books webhooks the provider sends again; recent_deploys timed out.",
+        "misses the cause",
+    ),
+]
+
+
+@pytest.mark.parametrize("hypothesis, expected", MISSING_DEPLOYS_SENTENCES)
+def test_missing_deploys_needs_fault_1s_cause_and_what_it_could_not_check(hypothesis, expected):
+    assert verdict("missing-deploys", hypothesis, 4) == expected
+
+
+def test_what_it_could_not_check_is_marked_as_required_only_to_name_the_cause():
+    found = grading.compare("missing-deploys", diagnosis(MISSING_DEPLOYS_SENTENCES[2][0]))
+    last = found["elements"][-1]
+    assert last["only_to_name_the_cause"] is True and last["named"] is False and last["required"] is True
+    assert all("only_to_name_the_cause" not in item for item in found["elements"][:-1])
+    printed = grading.render(found)
+    assert any("not named (required to name the cause) what it could not check" in line for line in printed)
+    assert printed[-1] == "  verdict: PARTLY"
+
+
+def test_a_comparison_by_version_4_says_which_words_were_cancelled_and_which_wrong_cause_it_names():
+    found = grading.compare("money-unit", diagnosis(KNOWN_LIMITS_V3[0][1]))
+    assert [item["cancelled"] for item in found["elements"]] == [True, False, False, False]
+    assert found["verdict"] == "partly" and found["wrong_causes"] == []
+    printed = "\n".join(grading.render(found))
+    assert "not named (required) where: the payments API (its words are there, but put elsewhere or denied)" in printed
+    found = grading.compare("duplicate-delivery", diagnosis(KNOWN_LIMITS[1][1]))
+    assert found["wrong_causes"] == ["a wrong cause: Redis lost the keys"] and found["verdict"] == "misses the cause"
+    assert "  names a known wrong cause as the cause: a wrong cause: Redis lost the keys" in grading.render(found)
+
+
+@pytest.mark.parametrize(
+    "case, kind, target, fits",
+    [
+        ("false-alarm", "none", "ledger-consumer", True),  # nothing to fix, on any target
+        ("false-alarm", "none", "nothing", True),
+        ("false-alarm", "restart", "ledger-consumer", False),
+        ("false-alarm", "other", "the alert rule", False),
+        ("missing-deploys", "rollback", "ledger-consumer", True),  # as fault 1
+        ("missing-deploys", "config_change", "the ledger consumer", True),
+        ("missing-deploys", "restart", "ledger-consumer", False),
+    ],
+)
+def test_in_version_4_whether_the_proposed_fix_fits_the_two_new_cases(case, kind, target, fits):
+    assert grading.compare(case, diagnosis("x", kind=kind, target=target))["fix_fits_the_remedy"] is fits
+
+
+def test_the_two_cases_right_answers_come_from_the_evaluations_cases():
+    for name in CASES:
+        case = evaluation.CASES[name]
+        assert grading.answer(name) == faults.Recorded(case.right_answer, case.remedy)
+    assert grading.answer("missing-deploys").remedy == faults.FAULTS["duplicate-delivery"].remedy
+    assert grading.answer("false-alarm").remedy == evaluation.NOTHING_TO_FIX
+    assert grading.answer("provider-outage", 1) == faults.FAULTS["provider-outage"].recorded(1)
+    with pytest.raises(ValueError, match="no fault or evaluation case 'nope'"):
+        grading.answer("nope")
+    with pytest.raises(ValueError, match="no fault or evaluation case 'nope'"):
+        grading.compare("nope", diagnosis("x"))
+    with pytest.raises(ValueError, match="rubric version 3 has no rubric for false-alarm"):
+        grading.compare("false-alarm", diagnosis("x"), 3)
+
+
+@pytest.mark.parametrize(
+    "name, version, newest",
+    [
+        ("duplicate-delivery", 1, 4),  # its cause never changed
+        ("poison-message", 2, 4),
+        ("provider-outage", 1, 1),  # before the breaker: only version 1 has that system
+        ("provider-outage", 2, 4),
+        ("money-unit", 3, 4),
+        ("false-alarm", 4, 4),
+    ],
+)
+def test_a_saved_run_is_graded_again_with_the_newest_version_written_for_its_system(name, version, newest):
+    assert grading.newest_for(name, version) == newest
+
+
+def test_newest_for_refuses_a_version_with_no_rubric_for_the_name():
+    with pytest.raises(ValueError, match="rubric version 1 has no rubric for money-unit"):
+        grading.newest_for("money-unit", 1)
+
+
+SAVED_RUNS = [REPO / relative for relative in calibration.SAVED_RUNS]
+
+
+def test_the_13_saved_diagnoses_by_the_newest_rubric_for_their_system():
+    # The verdicts the rule gives the calibration's saved runs: every fault run names its cause, as recorded when it
+    # ran (week 3's fault 3 by version 1, the only rubric for its system); week 3's first live run misses the false
+    # alarm's, and its restart does not fit.
+    found = {}
+    for folder in SAVED_RUNS:
+        item = grading.saved(folder)
+        found[folder.name] = grading.compare(item.name, item.diagnosis, grading.newest_for(item.name, item.version))
+    first = found.pop("2026-10-18T112951Z_loop_ledgerlaghigh")
+    assert first["fault"] == "false-alarm" and first["rubric"]["version"] == 4
+    assert first["verdict"] == "misses the cause" and first["fix_fits_the_remedy"] is False
+    assert first["wrong_causes"] == [
+        "a wrong cause: a real fault in the ledger consumer (stuck, hung, stalled, crashed)"
+    ]
+    assert len(found) == 12 and {c["verdict"] for c in found.values()} == {"names the cause"}
+    assert found["2026-10-19T024001Z_fault-run_provider-outage"]["rubric"]["version"] == 1
+    assert {c["rubric"]["version"] for name, c in found.items() if "024001Z" not in name} == {4}
+
+
+def test_saved_reads_a_runs_fault_its_version_and_its_diagnosis(tmp_path):
+    item = grading.saved(REPO / calibration.SAVED_RUNS[3])  # week 3's fault 3, graded by version 1
+    assert (item.name, item.version) == ("provider-outage", 1) and "fake-provider" in item.diagnosis["hypothesis"]
+    item = grading.saved(REPO / calibration.SAVED_RUNS[0])  # week 3's first live run: no run.json
+    assert (item.name, item.version) == ("false-alarm", 4) and item.diagnosis["confidence"] == 0.3
+    (tmp_path / "run.json").write_text(json.dumps({"fault": {"name": "x"}, "case": {"name": "false-alarm"}}))
+    assert grading.saved(tmp_path) == grading.Saved(tmp_path, "false-alarm", 4, None)  # no trace: the loop never ran
+    (tmp_path / "run.json").write_text("[]")
+    with pytest.raises(ValueError, match="is not an object"):
+        grading.saved(tmp_path)
+    with pytest.raises(ValueError, match="holds no run.json"):
+        grading.saved(tmp_path / "nothing")
+
+
+def test_run_folders_walks_a_weeks_runs_and_passes_over_rehearsals(tmp_path):
+    week3 = grading.run_folders([REPO / "evidence" / "week3"])
+    assert [f.name for f in week3] == [Path(relative).name for relative in calibration.SAVED_RUNS[:4]]
+    week4 = grading.run_folders([REPO / "evidence" / "week4", REPO / "evidence" / "week4"])  # named twice: once
+    assert len(week4) == 9 and not any("_rehearsal_" in f.name for f in week4)
+    suite = tmp_path / "suite" / "a_run"
+    suite.mkdir(parents=True)
+    (suite / "run.json").write_text("{}")
+    assert grading.run_folders([tmp_path]) == [suite]  # two levels down: a week's suites
+    assert grading.run_folders([tmp_path / "missing"]) == []
+
+
+def test_digest_names_a_value_whatever_the_order_of_its_keys():
+    assert grading.digest({"a": 1, "b": [2]}) == grading.digest({"b": [2], "a": 1})
+    assert grading.digest({"a": 1}) != grading.digest({"a": 2})
+    assert len(grading.digest(None)) == 64

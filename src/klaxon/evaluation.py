@@ -32,9 +32,10 @@ what came of each run, and the report is written there at the end.
 The report is worked out from saved runs, offline, so a grader can change and every result be graded again without a
 new run: per run, the verdict, the fix and the action, the gate, the times, the model calls, the cost, the damage; per
 case and model, counts ("2 of 3") and medians, never a percentage of three runs. It reads week 3's and week 4's runs
-too. The grading rule (klaxon.grading, rubric version 3) grades the six faults, and missing-deploys as fault 1 (its
-cause and its fix). Whether a false alarm was called false, and whether a diagnosis said what it could not check, wait
-for week 5's grader (item 2).
+too. Two graders, side by side (week 5, item 2): the rule (klaxon.grading), worked out again with the newest rubric
+written for the system each run ran on (version 4 grades all eight cases), and the judge (klaxon.judge), whose recorded
+judgment is read from beside each run judged. Where they disagree, the report lists the run, with Aravind's own verdict
+when he gave one (klaxon.labels).
 
 Rehearsals (no model): a case's steps without the loop, as `make rehearse-fault` does for a fault. For the false alarm,
 the quiet stack, the alert it would give, and the rules read for a minute more. For missing-deploys, fault 1's
@@ -61,7 +62,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from klaxon import alerts, fault_runs, faults, traffic
+from klaxon import alerts, fault_runs, faults, grading, judge, labels, traffic
 from klaxon.agent import catalog, gate, loop, verify
 from klaxon.agent.claude_code import DEFAULT_MODEL
 from klaxon.agent.loop import Alert, Budgets, RunResult
@@ -89,8 +90,7 @@ SIMULATED = "klaxon.evaluation.Withheld: an outage simulated for an evaluation c
 # The loop's stops that say nothing of Klaxon's judgment: its run is "not run". The first three also stop a suite.
 STOPS_A_SUITE = ("model_error", "tools_failed", "crashed")
 NOT_RUN = (*STOPS_A_SUITE, "interrupted")
-NOT_GRADED = "not graded yet: week 5's grader (item 2)"
-CAUSE_ONLY = "whether a diagnosis said what it could not check is item 2's to grade"
+NOTHING_TO_FIX = "nothing to fix: the alert was false, so no fix (of kind none) and no action"
 
 
 @dataclass(frozen=True)
@@ -105,6 +105,12 @@ class Case:
     fault: str | None = None  # the fault injected (klaxon.faults); a false alarm injects none
     withheld: tuple[str, ...] = ()  # tools whose every call gets the error their source gives when it does not answer
 
+    @property
+    def remedy(self) -> str:
+        """What fixes it (week 5, item 2: the graders read it): the remedy its fault records; for a false alarm,
+        nothing."""
+        return NOTHING_TO_FIX if self.fault is None else faults.FAULTS[self.fault].remedy
+
     def describe(self) -> dict:
         return {
             "name": self.name,
@@ -114,6 +120,7 @@ class Case:
             "right_action": None if self.right_action is None else list(self.right_action),
             "fault": self.fault,
             "withheld": {name: OUTAGES[name][0] for name in self.withheld},
+            "remedy": self.remedy,
         }
 
 
@@ -623,8 +630,38 @@ def not_run(saved: Mapping, used: Mapping | None = None) -> str | None:
     return None
 
 
+def _graders(folder: Path, saved: Mapping, name: str, diagnosis: object) -> dict:
+    """The run's diagnosis by each grader: the rule's, worked out again with the newest rubric for the system the run
+    ran on; the judge's and Aravind's, read from beside the run, each counted only if it graded this very diagnosis."""
+    out: dict = {"verdict": None, "rubric": None, "fix_fits": None, "judge": None, "judge_fix_fits": None}
+    out |= {"judge_why": None, "aravind": None, "aravind_fix_fits": None, "grader_problems": []}
+    if not isinstance(diagnosis, Mapping):
+        return out
+    version = grading.newest_for(name, grading.version_of(saved.get("comparison")))
+    found = grading.compare(name, diagnosis, version)
+    out |= {"verdict": found["verdict"], "rubric": version, "fix_fits": found["fix_fits_the_remedy"]}
+    sha = grading.digest(diagnosis)
+    judged, mine = judge.read(folder), labels.read(folder)
+    if judged is not None and judged.get("diagnosis_sha256") != sha:
+        out["grader_problems"].append("the judge graded another diagnosis than this run's: not counted")
+    elif judged is not None:
+        said = judged["judgment"]
+        out |= {"judge": said["verdict"], "judge_fix_fits": said["fix_fits"], "judge_why": said["why"]}
+    if mine is not None and mine.get("diagnosis_sha256") != sha:
+        out["grader_problems"].append("Aravind's verdict is on another diagnosis than this run's: not counted")
+    elif mine is not None:
+        out |= {"aravind": mine["verdict"], "aravind_fix_fits": mine["fix_fits"]}
+    return out
+
+
+def disagree(row: Mapping) -> bool:
+    """Whether the rule and the judge both gave a verdict on the run's cause, and different ones."""
+    return row["verdict"] is not None and row["judge"] in judge.VERDICTS and row["judge"] != row["verdict"]
+
+
 def run_row(folder: Path) -> dict:
-    """One saved run, in the numbers the report counts. Reads its run.json and model recording; calls nothing."""
+    """One saved run, in the numbers the report counts. Reads its run.json and model recording, and any judgment and
+    verdict of Aravind's saved beside it; calls nothing."""
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     if not isinstance(saved, dict):
         raise ValueError(f"{folder.name}'s run.json is not an object")
@@ -633,8 +670,6 @@ def run_row(folder: Path) -> dict:
     known = CASES.get(name)
     found = saved.get("loop") or {}
     diagnosis = found.get("diagnosis")
-    comparison = saved.get("comparison") or {}
-    graded = comparison.get("verdict") not in (None, "no diagnosis")
     offered = bool(saved.get("gated"))
     named = None if diagnosis is None else diagnosis.get("fix_action")
     named_pair = None if named is None else [named.get("name"), (named.get("arguments") or {}).get("service")]
@@ -646,7 +681,7 @@ def run_row(folder: Path) -> dict:
     used = usage(folder)
     asked_for = case.get("model")
     damage = saved.get("damage") or {}
-    return {
+    row = {
         "folder": folder.name,
         "case": name,
         "kind": case.get("kind") or (known.kind if known else FAULT),
@@ -660,9 +695,7 @@ def run_row(folder: Path) -> dict:
         "loop": found.get("reason"),
         "diagnosed": diagnosis is not None,
         "confidence": None if diagnosis is None else diagnosis.get("confidence"),
-        "verdict": comparison["verdict"] if graded else None,
-        "rubric": (comparison.get("rubric") or {}).get("version") if graded else None,
-        "fix_fits": comparison.get("fix_fits_the_remedy") if graded else None,
+        **_graders(folder, saved, name, diagnosis),
         "offered": offered,
         "named_action": named_pair,
         "right_action": right,
@@ -682,6 +715,7 @@ def run_row(folder: Path) -> dict:
         "damage_at_alert": _findings(damage.get("at_alert")),
         "damage_at_diagnosis": _findings(damage.get("at_diagnosis") or damage.get("at_request")),
     }
+    return row | {"graders_disagree": disagree(row)}
 
 
 def _subfolders(path: Path) -> list[Path]:
@@ -752,6 +786,7 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
     for (model, name, mode), group in groups.items():
         ran = [row for row in group if row["not_run"] is None]
         graded = [row for row in ran if row["verdict"] is not None]
+        judged = [row for row in ran if row["judge"] in judge.VERDICTS]
         acted = [row for row in ran if row["action_right"] is not None]
         out.append(
             {
@@ -768,6 +803,12 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
                 "partly": sum(1 for row in graded if row["verdict"] == "partly"),
                 "misses_the_cause": sum(1 for row in graded if row["verdict"] == "misses the cause"),
                 "fix_fits": sum(1 for row in graded if row["fix_fits"] is True),
+                "judged": len(judged),
+                "judge_names_the_cause": sum(1 for row in judged if row["judge"] == "names the cause"),
+                "judge_fix_fits": sum(1 for row in judged if row["judge_fix_fits"] is True),
+                "judge_no_verdict": sum(1 for row in ran if row["judge"] == judge.NO_VERDICT),
+                "graders_disagree": sum(1 for row in ran if row["graders_disagree"]),
+                "labeled": sum(1 for row in ran if row["aravind"] is not None),
                 "action_judged": len(acted),
                 "action_right": sum(1 for row in acted if row["action_right"]),
                 "action_where_none_fits": sum(1 for row in ran if row["action_where_none_fits"]),
@@ -806,8 +847,10 @@ def report(paths: Sequence[Path]) -> dict:
     return {
         "label": (
             "Worked out offline from saved runs by klaxon.evaluation: no model was called and nothing was run. The"
-            " verdicts are the grading rule's (klaxon.grading), not a person's or a model's. The costs are Claude"
-            " Code's estimates at API prices; the seat is not billed per call."
+            " rule's verdicts are klaxon.grading's, worked out again with the newest rubric for each run's system; the"
+            " judge's are Claude's (klaxon.judge), recorded responses saved beside the runs it judged; Aravind's were"
+            " typed at a terminal (make label). The costs are Claude Code's estimates at API prices; the seat is not"
+            " billed per call; they leave out the judge's calls."
         ),
         "made_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "from": [shown(path) for path in paths],
@@ -854,17 +897,19 @@ def markdown(found: Mapping) -> str:
             "",
             f"## {model}",
             "",
-            "| Case | Mode | Runs | Diagnosed | Named the cause | Fix fits | Action right | Named where none fits"
-            " | Refused by code | Median s, fault to alert | Median s to diagnose | Median calls | Cost |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+            "| Case | Mode | Runs | Diagnosed | Named the cause: rule | Named the cause: judge | Graders disagree"
+            " | Fix fits: rule | Action right | Named where none fits | Refused by code | Median s, fault to alert"
+            " | Median s to diagnose | Median calls | Cost |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         entries = [e for e in found["summary"] if e["model"] == model]
         for entry in entries:
             graded = entry["graded"]
-            named = _of(entry["names_the_cause"], graded) if graded else NOT_GRADED.split(":")[0]
             lines.append(
                 f"| {_cell(entry['case'])} | {entry['mode']} | {entry['ran']} ran, {entry['not_run']} not run |"
-                f" {_of(entry['diagnosed'], entry['ran'])} | {named} | {_of(entry['fix_fits'], graded)} |"
+                f" {_of(entry['diagnosed'], entry['ran'])} | {_of(entry['names_the_cause'], graded)} |"
+                f" {_of(entry['judge_names_the_cause'], entry['judged'])} | {entry['graders_disagree']} |"
+                f" {_of(entry['fix_fits'], graded)} |"
                 f" {_of(entry['action_right'], entry['action_judged'])} | {entry['action_where_none_fits']} |"
                 f" {entry['refused_by_code']} | {_number(entry['median_alert_after_fault_seconds'])} |"
                 f" {_number(entry['median_diagnosis_seconds'])} | {_number(entry['median_calls'])} |"
@@ -878,24 +923,39 @@ def markdown(found: Mapping) -> str:
             lines[-1] += f" Planned and never started: {never} (Suites, above)."
     lines += [
         "",
-        "Named the cause: the rule's verdict, of the runs it graded: the six faults, and missing-deploys as fault 1, by"
-        f" its cause and its fix ({CAUSE_ONLY}). The false alarm is {NOT_GRADED}. Diagnosed: the runs that ended in a"
-        " diagnosis; a run out of steps, tool calls or time ran, and gave none. A run that did not run counts only in"
-        " the Runs column and the totals. Medians are over the runs that ran and have the number.",
+        "Named the cause: of the runs each grader graded. The rule (klaxon.grading) grades every diagnosis, by the"
+        " newest rubric written for the system its run ran on; the judge (klaxon.judge) only those it has judged, and"
+        ' its "no verdict" counts in neither. Graders disagree: runs where both gave a verdict on the cause, and'
+        " different ones (listed below). Diagnosed: the runs that ended in a diagnosis; a run out of steps, tool calls or"
+        " time ran, and gave none. A run that did not run counts only in the Runs column and the totals. Medians are"
+        " over the runs that ran and have the number.",
         "",
         "## Each run",
         "",
-        "| Run | Case | Seed | Mode | Verdict | Action named | Gate | s to diagnose | Calls | Cost |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| Run | Case | Seed | Mode | Rule | Judge | Aravind | Action named | Gate | s to diagnose | Calls | Cost |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for row in found["runs"]:
-        verdict = row["verdict"] or ("not run" if row["not_run"] else "not graded")
+        verdict = row["verdict"] or ("not run" if row["not_run"] else "no diagnosis")
         action = "-" if row["named_action"] is None else " ".join(str(part) for part in row["named_action"])
         lines.append(
             f"| {_cell(row['folder'])} | {_cell(row['case'])} | {row['seed']} | {row['mode']} | {verdict} |"
-            f" {_cell(action)} | {row['gate'] or '-'} | {_number(row['diagnosis_seconds'])} | {row['calls']} |"
-            f" ${row['cost_usd']:.2f} |"
+            f" {row['judge'] or '-'} | {row['aravind'] or '-'} | {_cell(action)} | {row['gate'] or '-'} |"
+            f" {_number(row['diagnosis_seconds'])} | {row['calls']} | ${row['cost_usd']:.2f} |"
         )
+    split = [row for row in found["runs"] if row["graders_disagree"]]
+    if split:
+        lines += ["", "## Where the graders disagree", ""]
+        for row in split:
+            said = f"- {_cell(row['folder'])} ({_cell(row['case'])}): the rule (version {row['rubric']}): {row['verdict']};"
+            said += f" the judge: {row['judge']} ({_cell(row['judge_why'])})"
+            if row["aravind"] is not None:
+                said += f"; Aravind: {row['aravind']}"
+            lines.append(said + ".")
+    problems = [(row["folder"], problem) for row in found["runs"] for problem in row["grader_problems"]]
+    if problems:
+        lines += ["", "## Grader problems", ""]
+        lines += [f"- {_cell(folder)}: {_cell(problem)}" for folder, problem in problems]
     missing = [row for row in found["runs"] if row["not_run"]]
     if missing:
         lines += ["", "## Not run", ""]

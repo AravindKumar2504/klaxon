@@ -36,6 +36,21 @@ use the latest version; a saved run is graded again with the version that graded
 
 Version 3 (week 4, item 4), committed in 75fedf1 before any live run on faults 4 to 6: version 2, and a rubric for
 each of them. Versions 1 and 2 have none for them: they came before those faults.
+
+Version 4 (week 5, item 2), committed before any week 5 live run: version 3, a rubric for each of the evaluation's two
+new cases (klaxon.evaluation), and the nine known limits fixed where a rule can. Two things are new in it:
+- An element can name words that cancel it (unless): words that put that part of the cause somewhere else, or deny
+  it. "A deploy of the payment confirmer has a unit bug ... the payments API's records" mentions the payments API, but
+  puts the bug in the confirmer; "payments-api has no circuit breaker" names the breaker, and denies it.
+- A rubric can name known wrong causes (wrong): a hypothesis that gives one as the cause misses the cause, whatever
+  else it names. "Redis lost its idempotency keys" uses fault 1's words, and blames Redis.
+The false alarm's rubric asks that the alert be called false, from its lag read near 0, and only a fix of kind none
+fits; blaming a real fault (stuck, hung, stalled) misses. Missing-deploys' asks for fault 1's three elements and a
+fourth: it says what it could not check. The fourth is required to name the cause (also), and never lifts a wrong cause
+to partly. Whether a deploy it claims had evidence, a rule cannot see: that is for the judge (klaxon.judge) and for
+Aravind (Aravind's choice, 2026-11-04). Its new patterns were written knowing the
+sentences they fix, so those sentences show only that each mechanism works, not that the rule now reads meaning: the
+judge and Aravind's own verdicts are the check (klaxon.calibration).
 """
 
 from __future__ import annotations
@@ -43,13 +58,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
-from dataclasses import asdict, dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 
 from klaxon import faults
 from klaxon.agent.tools import clean_text
+from klaxon.agent.trace import read_trace
 
-RUBRIC_VERSION = 3  # the version new comparisons use; each comparison records its own
+RUBRIC_VERSION = 4  # the version new comparisons use; each comparison records its own
 HOW = "keyword patterns per element of the fault's recorded cause. Not a person and not a model: it reads words, not meaning."
 BY = {
     1: (
@@ -61,6 +78,7 @@ BY = {
         f" breaker): {HOW}"
     ),
     3: (f"a rule (klaxon.grading, rubric version 3, committed in 75fedf1 before any live run on faults 4 to 6): {HOW}"),
+    4: f"a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): {HOW}",
 }
 
 
@@ -69,6 +87,7 @@ class Element:
     name: str  # what it stands for, in a few words
     patterns: tuple[str, ...]  # regular expressions; one match is enough
     required: bool = True
+    unless: tuple[str, ...] = ()  # version 4: one match, and the element is not named (it is put elsewhere, or denied)
 
 
 @dataclass(frozen=True)
@@ -76,6 +95,10 @@ class Rubric:
     elements: tuple[Element, ...]
     fix_kinds: tuple[str, ...]  # the kinds of proposed fix that fit the fault's remedy
     fix_target: str  # a regular expression the fix's target must match
+    wrong: tuple[Element, ...] = ()  # version 4: known wrong causes; a hypothesis that names one misses the cause
+    # Version 4: required too, but only to name the cause: without one, "names the cause" is "partly", and none of them
+    # ever lifts a wrong cause to "partly" (missing-deploys: saying what it could not check).
+    also: tuple[Element, ...] = ()
 
 
 LEDGER = Element("where: the ledger consumer", (r"\bledger\b",))
@@ -319,13 +342,192 @@ RUBRICS_V3 = RUBRICS_V2 | {
         fix_target=r"payments",
     ),
 }
-VERSIONS = {1: RUBRICS_V1, 2: RUBRICS_V2, 3: RUBRICS_V3}
+
+
+def _gap(words: int) -> str:
+    """A gap of a few words within one clause (never across a full stop or a semicolon), none of them a negation:
+    "PostgreSQL was down" counts, "PostgreSQL was not down" and "PostgreSQL wasn't down" do not."""
+    return rf"[^\w.;]+((?!(not|never|no|t)\b)\w+[^\w.;]+){{0,{words}}}"
+
+
+def _more(element: Element, *patterns: str, unless: tuple[str, ...] = ()) -> Element:
+    """Version 3's element, with more patterns, or words that cancel it."""
+    return replace(element, patterns=(*element.patterns, *patterns), unless=unless)
+
+
+V3 = RUBRICS_V3
+# Known limit (version 1): "turned off the ledger consumer's duplicate check" is its dedupe gone.
+DEDUPE_GONE = _more(
+    V3["duplicate-delivery"].elements[1], r"duplicate[- ]?(check|detection|filter\w*|guard|suppression)"
+)
+REDIS_LOST = Element(  # known limit (version 1): Redis losing its keys is another cause than the handler's deploy
+    "a wrong cause: Redis lost the keys",
+    (
+        rf"redis{_gap(3)}(lost|loses|lose|losing|dropped|drops|evicted|evicts|flushed|flushes|expired|wiped|forgot)\b",
+        r"\b(lost|dropped|evicted|flushed|expired|wiped) (\w+ ){0,3}(from|in) redis",
+    ),
+)
+DATABASE = r"(postgres\w*|database|\bdb\b)"
+RUBRICS_V4 = RUBRICS_V3 | {
+    "duplicate-delivery": replace(
+        V3["duplicate-delivery"],
+        elements=(V3["duplicate-delivery"].elements[0], DEDUPE_GONE, *V3["duplicate-delivery"].elements[2:]),
+        wrong=(REDIS_LOST,),
+    ),
+    "poison-message": replace(
+        V3["poison-message"],
+        elements=(
+            V3["poison-message"].elements[0],
+            # Known limits (version 1): the services' own words for its amount, and "a string" put another way.
+            _more(
+                V3["poison-message"].elements[1],
+                r"not (a )?(positive )?(integer|whole number)",
+                r"\b(is|was|are|were|as) (a |an )?(decimal |numeric |text |json )?string\b",
+            ),
+            *V3["poison-message"].elements[2:],
+        ),
+        # Known limit (version 1): a database outage that makes the ledger retry is another cause.
+        wrong=(
+            Element(
+                "a wrong cause: the database was down",
+                (rf"{DATABASE}{_gap(2)}(down|unavailable|unreachable|offline|restarting|crashed)\b",),
+            ),
+        ),
+    ),
+    "provider-outage": replace(
+        V3["provider-outage"],
+        elements=(
+            *V3["provider-outage"].elements[:2],
+            # Known limit (version 2): in a system with the breaker, saying there is none names the word, and is wrong.
+            _more(
+                V3["provider-outage"].elements[2],
+                unless=(
+                    r"\b(no|without|lacks?|lacking|missing|has no|had no|have no)\s+(a\s+|an\s+|any\s+|its\s+|the\s+)?"
+                    r"(working\s+)?(circuit[ -]?)?breaker",
+                    rf"breaker{_gap(2)}(missing|absent|disabled|removed|turned off|switched off|off)\b",
+                    r"PROVIDER_BREAKER\W{0,3}off\b",
+                ),
+            ),
+        ),
+        # Known limit (version 1): a slow database is another cause; fake-provider's name holds "provider".
+        wrong=(
+            Element(
+                "a wrong cause: the database is slow or down",
+                (
+                    rf"{DATABASE}{_gap(2)}(slow|down|overloaded|locked|unavailable|saturated)\b",
+                    rf"\bslow {DATABASE}",
+                ),
+            ),
+        ),
+    ),
+    "money-unit": replace(
+        V3["money-unit"],
+        elements=(
+            # Known limit (version 3): "the payments API's records", in a hypothesis that puts the bug elsewhere.
+            _more(
+                V3["money-unit"].elements[0],
+                unless=(
+                    r"(deploy\w*|redeploy\w*|bug|change|regression)\W+(of|in|to|on)\W+(the\W+)?"
+                    r"(payment[-_ ]?confirmer|ledger[-_ ]?consumer|webhook[-_ ]?receiver)",
+                    rf"(payment[-_ ]?confirmer|ledger[-_ ]?consumer|webhook[-_ ]?receiver){_gap(3)}"
+                    r"(has|had|introduced|got|carries|carried)\W+(a\W+|an\W+|the\W+)?(\w+\W+)?(bug|regression)",
+                ),
+            ),
+            *V3["money-unit"].elements[1:],
+        ),
+    ),
+    # The evaluation's two new cases (klaxon.evaluation.CASES has their right answers).
+    "false-alarm": Rubric(
+        elements=(
+            Element("where: the ledger consumer group the alert names", (r"\bledger\b",)),
+            Element(
+                "what: the alert is false, and nothing is wrong",
+                (
+                    r"false (alarm|alert|positive)",
+                    rf"(alert|alarm){_gap(4)}(is|was|looks|seems|appears){_gap(2)}"
+                    r"(wrong|false|mistaken|incorrect|spurious|stale|bogus|unfounded|inaccurate|misleading|untrue)\b",
+                    r"\bnothing (\w+ ){0,3}(wrong|broken|amiss|behind)\b",
+                    r"\bno (real |actual |current |ongoing |live )?(problem|incident|issue|fault|outage)s?\b",
+                    r"\bspurious\b",
+                    r"\bnot (a |an )?(real|genuine|actual|true) (alert|alarm|incident|problem|issue|fault)",
+                ),
+            ),
+            Element(
+                "how it knows: the lag reads near 0, and the group keeps up",
+                (
+                    rf"\blag\b{_gap(4)}(\b0\b|zero|near (0|zero)|normal|low|small|negligible|nil|none|empty)",
+                    r"\b(0|zero) (messages? )?(behind|lag)",
+                    r"\b(caught|catching|catches|keeps?|keeping|kept) up\b",
+                    r"\bup to date\b",
+                    r"\bno (consumer |real )?(lag|backlog)\b",
+                    r"\bnot (actually |really |at all )?(behind|lagging)",
+                ),
+            ),
+        ),
+        fix_kinds=("none",),  # nothing to fix
+        fix_target=r"",  # on any target
+        wrong=(
+            Element(
+                "a wrong cause: a real fault in the ledger consumer (stuck, hung, stalled, crashed)",
+                (
+                    r"(?<!not )(?<!n't )(?<!never )(?<!nothing )(?<!nothing is )(?<!no )(?<!or )(?<!nor )"
+                    r"\b(stuck|hung|hangs|hanging|stall|stalls|stalled|stalling|frozen|freezes|deadlock\w*|crash|crashed"
+                    r"|crashes|crashing|wedged|poison\w*)\b",
+                ),
+            ),
+        ),
+    ),
+    "missing-deploys": Rubric(
+        elements=(
+            V3["duplicate-delivery"].elements[0],
+            DEDUPE_GONE,
+            V3["duplicate-delivery"].elements[2],
+            Element(
+                "a deploy it names (the tools that show deploys did not answer: its evidence is for a person to check)",
+                (*DEPLOY, r"LEDGER_HANDLER", r"handler"),
+                required=False,
+            ),
+        ),
+        fix_kinds=V3["duplicate-delivery"].fix_kinds,
+        fix_target=V3["duplicate-delivery"].fix_target,
+        wrong=(REDIS_LOST,),
+        also=(
+            Element(
+                "what it could not check: docker did not answer the deploy list or the health check",
+                (
+                    r"(could not|couldn't|cannot|can't|unable to|did not|didn't|failed to) (\w+ ){0,2}"
+                    r"(check|read|see|confirm|verify|get|list|reach|query|inspect|retrieve|access)\b",
+                    r"docker[^\w.;]+(\w+[^\w.;]+){0,4}(did not answer|didn't answer|not answer|no answer|timed out"
+                    r"|times out|time ?out|unavailable|unreachable|not responding|unresponsive|down\b)",
+                    r"(recent_deploys|service_health|deploy (list|log|history)|deploy tool|health (check|tool))"
+                    r"[^\w.;]+(\w+[^\w.;]+){0,4}(failed|fails|timed out|times out|errored|error|unavailable|did not"
+                    r" answer|didn't answer|not available|returned nothing)",
+                    r"\b(unverified|unconfirmed|not (been |yet )?(confirmed|verified|checked))\b",
+                ),
+            ),
+        ),
+    ),
+}
+VERSIONS = {1: RUBRICS_V1, 2: RUBRICS_V2, 3: RUBRICS_V3, 4: RUBRICS_V4}
 RUBRICS = VERSIONS[RUBRIC_VERSION]
+
+
+def _shape(rubric: Rubric) -> dict:
+    """A rubric as data, for its fingerprint. Version 4's new fields are left out where they are empty, so each earlier
+    version keeps the fingerprint pinned before its runs."""
+    shape = asdict(rubric)
+    for field in ("wrong", "also"):
+        if not shape[field]:
+            del shape[field]
+    for element in [*shape["elements"], *shape.get("wrong", []), *shape.get("also", [])]:
+        if not element["unless"]:
+            del element["unless"]
+    return shape
 
 
 def fingerprint(version: int = RUBRIC_VERSION) -> str:
     """The SHA-256 of one version of the rubric: every element, pattern, and fitting fix, for every fault."""
-    rubric = {name: asdict(rubric) for name, rubric in sorted(VERSIONS[version].items())}
+    rubric = {name: _shape(rubric) for name, rubric in sorted(VERSIONS[version].items())}
     return hashlib.sha256(json.dumps(rubric, sort_keys=True).encode()).hexdigest()
 
 
@@ -347,18 +549,46 @@ def version_of(saved: object) -> int:
     return version
 
 
+def _found(patterns: tuple[str, ...], text: str) -> bool:
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
 def names(element: Element, text: str) -> bool:
-    return any(re.search(pattern, text, re.IGNORECASE) for pattern in element.patterns)
+    """Whether text names the element: one of its patterns, and none of the words that cancel it (version 4)."""
+    return _found(element.patterns, text) and not _found(element.unless, text)
+
+
+def answer(name: str, version: int = RUBRIC_VERSION) -> faults.Recorded:
+    """The right answer a comparison by this version reads: a fault's recorded cause and remedy, as that version has
+    them, or an evaluation case's right answer and remedy (klaxon.evaluation.CASES, committed before any run on it)."""
+    if name in faults.FAULTS:
+        return faults.FAULTS[name].recorded(version)
+    from klaxon.evaluation import CASES  # here, not at the top: klaxon.evaluation imports this module
+
+    if name not in CASES:
+        raise ValueError(f"no fault or evaluation case {name!r}")
+    return faults.Recorded(CASES[name].right_answer, CASES[name].remedy)
+
+
+def newest_for(name: str, version: int) -> int:
+    """The newest rubric version that grades name against the same right answer as version: the one to grade a saved
+    run again with, on the system it ran on. Week 3's run of fault 3 ran before the circuit breaker, which versions 2
+    to 4 assume: it stays with version 1."""
+    if name not in VERSIONS.get(version, {}):
+        raise ValueError(f"rubric version {version} has no rubric for {name}")
+    same = answer(name, version)
+    return max(v for v in VERSIONS if v >= version and name in VERSIONS[v] and answer(name, v) == same)
 
 
 def compare(fault_name: str, diagnosis: Mapping | None, version: int = RUBRIC_VERSION) -> dict:
-    """The rule's comparison of a diagnosis (as the trace's stop record keeps it) with the cause the fault records,
-    both as one version of the rubric has them: the latest, unless told."""
-    fault = faults.get(fault_name)
+    """The rule's comparison of a diagnosis (as the trace's stop record keeps it) with the cause the fault records (or
+    an evaluation case's right answer), both as one version of the rubric has them: the latest, unless told."""
+    if fault_name not in faults.FAULTS and fault_name not in RUBRICS_V4:
+        raise ValueError(f"no fault or evaluation case {fault_name!r}")
     if fault_name not in VERSIONS[version]:  # a version that came before the fault: it has no rubric for it
         raise ValueError(f"rubric version {version} has no rubric for {fault_name}")
     rubric = VERSIONS[version][fault_name]
-    recorded = fault.recorded(version)
+    recorded = answer(fault_name, version)
     out: dict = {
         "by": BY[version],
         "rubric": {"version": version, "sha256": fingerprint(version)},
@@ -375,14 +605,32 @@ def compare(fault_name: str, diagnosis: Mapping | None, version: int = RUBRIC_VE
     verdict = (
         "names the cause" if hits == len(required) else "partly" if 2 * hits >= len(required) else "misses the cause"
     )
+    also = [(element, names(element, hypothesis)) for element in rubric.also]
+    if verdict == "names the cause" and not all(named for _, named in also):  # version 4: the cause, and not the rest
+        verdict = "partly"
+    wrong = [element.name for element in rubric.wrong if names(element, hypothesis)]
+    if wrong:  # version 4: a hypothesis that gives a known wrong cause as the cause misses it, whatever else it names
+        verdict = "misses the cause"
     fix = diagnosis["proposed_fix"]
     fits = (
         fix["kind"] in rubric.fix_kinds and re.search(rubric.fix_target, str(fix["target"]), re.IGNORECASE) is not None
     )
-    return out | {
+    elements = []
+    for element, named, to_name in [(e, n, False) for e, n in found] + [(e, n, True) for e, n in also]:
+        item = {"element": element.name, "required": element.required, "named": named}
+        if version >= 4:  # its words were there, and cancelled: put elsewhere, or denied
+            item["cancelled"] = _found(element.patterns, hypothesis) and not named
+        if to_name:  # required only to name the cause (Rubric.also)
+            item["only_to_name_the_cause"] = True
+        elements.append(item)
+    out |= {
         "verdict": verdict,
         "hypothesis": hypothesis,
-        "elements": [{"element": e.name, "required": e.required, "named": named} for e, named in found],
+        "elements": elements,
+    }
+    if version >= 4:
+        out["wrong_causes"] = wrong
+    return out | {
         "proposed_fix": {"kind": fix["kind"], "target": fix["target"]},
         "fix_fits_the_remedy": fits,
         "fitting_fixes": {"kinds": list(rubric.fix_kinds), "target_matches": rubric.fix_target},
@@ -397,9 +645,87 @@ def render(comparison: Mapping) -> list[str]:
     lines.append(f"  hypothesis: {clean_text(comparison['hypothesis'])}")  # the model's words: cleaned to print
     for item in comparison["elements"]:
         kind = "required" if item["required"] else "optional"
-        lines.append(f"  {'named   ' if item['named'] else 'not named'} ({kind}) {item['element']}")
+        kind = "required to name the cause" if item.get("only_to_name_the_cause") else kind
+        said = "named   " if item["named"] else "not named"
+        cancelled = " (its words are there, but put elsewhere or denied)" if item.get("cancelled") else ""
+        lines.append(f"  {said} ({kind}) {item['element']}{cancelled}")
+    for name in comparison.get("wrong_causes", []):
+        lines.append(f"  names a known wrong cause as the cause: {name}")
     fix = comparison["proposed_fix"]
     fits = comparison["fix_fits_the_remedy"]
     lines.append(f"  proposed fix: {fix['kind']} on {clean_text(str(fix['target']), 200)}; fits the remedy: {fits}")
     lines.append(f"  verdict: {comparison['verdict'].upper()}")
     return lines
+
+
+# A saved run, as a grader reads it.
+
+RUN_FILE, TRACE = "run.json", "trace.jsonl"  # as klaxon.fault_runs and klaxon.agent.loop name them
+# Week 3's first live run (make investigate, 2026-10-18) saved no run.json: an alert given by hand ("the ledger
+# consumer's lag on provider-events is above 100 messages") on a healthy stack, which is the false alarm's case.
+HAND_GIVEN = {"2026-10-18T112951Z_loop_ledgerlaghigh": "false-alarm"}
+
+
+@dataclass(frozen=True)
+class Saved:
+    """A saved run, as a grader reads it: its fault or case; the rubric version whose right answer is the system it
+    ran on (the version that graded it, or the latest); and the diagnosis it ended in (None when it gave none)."""
+
+    folder: Path
+    name: str
+    version: int
+    diagnosis: dict | None
+
+
+def saved(folder: Path | str) -> Saved:
+    """Read a saved run's folder: its run.json, whose loop keeps the diagnosis the trace's stop record holds; or, for
+    week 3's first live run, what HAND_GIVEN says, and its trace. ValueError, KeyError or OSError when it is not a run a
+    grader can read."""
+    folder = Path(folder)
+    if (folder / RUN_FILE).is_file():
+        run = json.loads((folder / RUN_FILE).read_text())
+        if not isinstance(run, dict):
+            raise ValueError(f"{folder.name}'s {RUN_FILE} is not an object")
+        case = run.get("case") or {}
+        name = case.get("name") if isinstance(case, Mapping) and case.get("name") else run["fault"]["name"]
+        version = version_of(run.get("comparison"))
+        found = (run.get("loop") or {}).get("diagnosis")  # None: the loop never ran, did not finish, or gave none
+    elif folder.name in HAND_GIVEN:
+        name, version = HAND_GIVEN[folder.name], RUBRIC_VERSION
+        stop = read_trace(folder / TRACE)[-1]
+        found = stop.get("diagnosis") if stop.get("kind") == "stop" else None
+    else:
+        raise ValueError(f"{folder.name} holds no {RUN_FILE}: not a run a grader can read")
+    if name not in VERSIONS[version]:
+        raise ValueError(f"rubric version {version} has no rubric for {name}")
+    return Saved(folder, name, version, found if isinstance(found, dict) else None)
+
+
+def run_folders(paths: Iterable[Path | str]) -> list[Path]:
+    """The saved runs in these paths, each once, in order: a run's own folder, or the runs inside a folder of them (a
+    week's, a suite's, or a week's suites). Rehearsals (no model) and folders that are not runs are passed over."""
+    found: list[Path] = []
+    seen: set[Path] = set()
+
+    def visit(path: Path, depth: int) -> None:
+        key = path.resolve()
+        if key in seen or not path.is_dir():
+            return
+        seen.add(key)
+        if (path / RUN_FILE).is_file() or path.name in HAND_GIVEN:
+            if "_rehearsal_" not in path.name:
+                found.append(path)
+        elif depth < 2:
+            for child in sorted(child for child in path.iterdir() if child.is_dir()):
+                visit(child, depth + 1)
+
+    for path in paths:
+        visit(Path(path), 0)
+    return found
+
+
+def digest(value: object) -> str:
+    """The SHA-256 of a value as compact JSON with sorted keys: how a judgment and a person's verdict name the
+    diagnosis they graded, so a later change to the evidence shows."""
+    text = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()

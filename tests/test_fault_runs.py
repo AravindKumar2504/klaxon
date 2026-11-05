@@ -197,7 +197,7 @@ def test_the_diagnosis_is_compared_with_the_faults_recorded_cause_by_the_rule():
     assert record.comparison == grading.compare("provider-outage", DIAGNOSIS.as_dict())
     assert record.comparison["verdict"] == "names the cause"
     assert record.comparison["by"] == grading.BY[grading.RUBRIC_VERSION]
-    assert record.comparison["rubric"]["version"] == 3 and record.comparison["fix_fits_the_remedy"] is True
+    assert record.comparison["rubric"]["version"] == 4 and record.comparison["fix_fits_the_remedy"] is True
     assert record.loop == {
         "reason": "diagnosed",
         "detail": "confidence 0.7",
@@ -479,14 +479,14 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     assert "what" not in saved  # the loop's own files say what a loop run is; run.json says what this run did
     assert saved["fault"]["cause"] == faults.FAULTS["provider-outage"].cause
     assert saved["alert"]["name"] == "PaymentsLatencyHigh" and saved["stopped"] == "the loop stopped: diagnosed"
-    assert saved["comparison"]["by"] == grading.BY[3] and saved["comparison"]["verdict"] == "names the cause"
+    assert saved["comparison"]["by"] == grading.BY[4] and saved["comparison"]["verdict"] == "names the cause"
     assert saved["rerun_command"].startswith("python -m klaxon.fault_runs run provider-outage")
     [(alert, header, model_id)] = given
     assert model_id == "claude-opus-5-5" and header["alert"]["summary"] == alert.summary
     assert header["fault_name"] == "provider-outage" and header["budgets"]["steps"] == 12
     assert read_trace(folder / loop.TRACE)[-1]["reason"] == "diagnosed"
     out = capsys.readouterr().out
-    assert "Compared by a rule (klaxon.grading, rubric version 3" in out and "verdict: NAMES THE CAUSE" in out
+    assert "Compared by a rule (klaxon.grading, rubric version 4" in out and "verdict: NAMES THE CAUSE" in out
     assert fault_runs.main(["grade", str(folder)]) == 0
     assert "verdict: NAMES THE CAUSE" in capsys.readouterr().out
 

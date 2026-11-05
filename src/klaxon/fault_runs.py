@@ -269,7 +269,9 @@ def run(
                 result = investigate(alert)  # the alert as the rules raised it: the loop's only goal
                 record.timings["loop_ended_at"] = since()
                 record.loop = summary(result)
-                record.comparison = grading.compare(fault.name, record.loop["diagnosis"])
+                # An evaluation run is graded as its case (missing-deploys asks more than fault 1), any other as its fault.
+                graded = fault.name if record.case is None else record.case["name"]
+                record.comparison = grading.compare(graded, record.loop["diagnosis"])
                 record.stopped = f"the loop stopped: {result.reason}"
                 if gated is not None and result.diagnosis is not None:  # the fault stays in place while Klaxon acts
                     _act(result.diagnosis, alert, gated, record, since, stack.alerting, lambda: evaluate("verify"))
@@ -929,7 +931,8 @@ def _grade(folder: Path) -> int:
             raise ValueError("its run.json is not an object")
         stop = read_trace(folder / loop.TRACE)[-1]
         version = grading.version_of(saved.get("comparison"))  # the version that graded it, so the verdict is the same
-        comparison = grading.compare(saved["fault"]["name"], stop.get("diagnosis"), version)
+        graded = (saved.get("case") or {}).get("name") or saved["fault"]["name"]  # an evaluation run: its case
+        comparison = grading.compare(graded, stop.get("diagnosis"), version)
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError) as exc:
         print(
             f"Cannot grade {clean_text(str(folder))}: {type(exc).__name__}: {clean_text(str(exc), 300)}",

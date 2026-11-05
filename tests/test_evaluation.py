@@ -8,6 +8,7 @@ docker (tests/fake_docker.py), and Klaxon's real MCP server code serving made-up
 
 import json
 import re
+import shutil
 import subprocess
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -495,6 +496,31 @@ def test_an_evaluation_run_stopped_inside_its_gate_says_so(tmp_path):
     assert world.docker.settings(LEDGER) == GOOD[LEDGER]  # cleared all the same
 
 
+def test_an_evaluation_run_is_graded_as_its_case_and_missing_deploys_asks_more_than_fault_1(tmp_path):
+    _, record = fault_case_run(tmp_path, MISSING)
+    assert (record.comparison["fault"], record.comparison["rubric"]["version"]) == ("missing-deploys", 4)
+    assert record.comparison["recorded_cause"] == MISSING.right_answer
+    assert record.comparison["elements"][-1]["only_to_name_the_cause"] is True  # what it could not check
+    (tmp_path / "fault-1").mkdir()
+    _, record = fault_case_run(tmp_path / "fault-1", evaluation.CASES["duplicate-delivery"])
+    assert record.comparison["fault"] == "duplicate-delivery"
+    assert not any(item.get("only_to_name_the_cause") for item in record.comparison["elements"])
+
+
+def test_make_grade_run_grades_an_evaluation_run_as_its_case(tmp_path, capsys):
+    # Week 3's run of fault 1 (a recorded response), copied and marked as a missing-deploys run graded by version 4.
+    folder = Path(
+        shutil.copytree(REPO / "evidence/week3/2026-10-19T022933Z_fault-run_duplicate-delivery", tmp_path / "r")
+    )
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    saved |= {"case": {"name": "missing-deploys"}, "comparison": {"rubric": {"version": 4}}}
+    (folder / fault_runs.RUN_FILE).write_text(json.dumps(saved))
+    assert fault_runs.main(["grade", str(folder)]) == 0
+    out = capsys.readouterr().out
+    assert "rubric version 4" in out and f"recorded cause: {MISSING.right_answer}" in out
+    assert "(required to name the cause) what it could not check" in out
+
+
 def test_an_evaluation_runs_label_says_which_tools_the_harness_withheld(tmp_path):
     _, record = fault_case_run(tmp_path, MISSING)
     assert fault_runs.withheld_sentence(MISSING.describe()["withheld"]) in fault_runs.label(record)
@@ -822,7 +848,23 @@ def test_the_report_reads_weeks_3_and_4s_saved_runs_and_their_measured_numbers()
     )
     assert len(found["summary"]) == 9  # 3 cases of week 3, and 6 of week 4
     page = evaluation.markdown(found)
-    assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | 0 of 1 |" in page
+    assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | - | 0 | 0 of 1 |" in page
+    # Graded again by the newest rubric for each run's system: version 1 for week 3's fault 3 (before the breaker).
+    assert {(row["case"], row["rubric"]) for row in rows if row["rubric"] != 4} == {("provider-outage", 1)}
+
+
+def made_up(confidence, action=None, hypothesis=None, kind="rollback"):
+    """A diagnosis of the shape a run saves, written for the tests: by default, fault 1's cause in other words."""
+    return {
+        "hypothesis": hypothesis
+        or "A deploy turned off the ledger consumer's dedupe, so every webhook the provider sends again is booked twice.",
+        "evidence": [{"call_id": "c1", "tool": "recent_deploys", "arguments": {}, "shows": "made up"}],
+        "confidence": confidence,
+        "proposed_fix": {"kind": kind, "target": LEDGER, "summary": "made up", "applied": False},
+        "blast_radius": "made up",
+        "rollback_plan": "made up",
+        "fix_action": action,
+    }
 
 
 def saved_run(folder, fault_name="duplicate-delivery", **changes):
@@ -840,10 +882,7 @@ def saved_run(folder, fault_name="duplicate-delivery", **changes):
             "steps": 5,
             "tool_calls": 4,
             "seconds": 40.04,
-            "diagnosis": {
-                "confidence": 0.8,
-                "fix_action": {"name": "rollback_deploy", "arguments": {"service": LEDGER}},
-            },
+            "diagnosis": made_up(0.8, {"name": "rollback_deploy", "arguments": {"service": LEDGER}}),
         },
         "comparison": {"verdict": "names the cause", "fix_fits_the_remedy": True, "rubric": {"version": 3}},
         "gate": {"result": "not asked"},
@@ -891,7 +930,7 @@ def test_a_run_that_says_nothing_of_klaxon_counts_apart_never_as_wrong(tmp_path)
     assert (entry["graded"], entry["names_the_cause"]) == (1, 1)
     page = evaluation.markdown(found)
     # Diagnosed: 1 of the 2 that ran (d ran out of steps), then the cause, of the 1 the rule graded.
-    assert "| duplicate-delivery | gated, week 4 | 2 ran, 2 not run | 1 of 2 | 1 of 1 | 1 of 1 |" in page
+    assert "| duplicate-delivery | gated, week 4 | 2 ran, 2 not run | 1 of 2 | 1 of 1 | - | 0 | 1 of 1 |" in page
     assert "## Not run" in page
 
 
@@ -902,16 +941,18 @@ def test_the_report_counts_an_action_named_where_none_fits_and_a_plan_code_refus
         "steps": 4,
         "tool_calls": 3,
         "seconds": 30.0,
-        "diagnosis": {"confidence": 0.4, "fix_action": {"name": "rollback_deploy", "arguments": {"service": LEDGER}}},
+        "diagnosis": made_up(
+            0.4, {"name": "rollback_deploy", "arguments": {"service": LEDGER}}, "The ledger consumer is stuck."
+        ),
     }
     case = FALSE.describe() | {"seed": 8, "model": "claude-sonnet-5-5"}
     saved_run(tmp_path / "a", "false-alarm", case=case, loop=named, comparison=None, gate={"result": "refused"})
     [row] = evaluation.report([tmp_path])["runs"]
     assert row["action_where_none_fits"] is True and row["action_right"] is False and row["gate"] == "refused"
-    assert row["verdict"] is None and row["model"] == "claude-sonnet-5-5" and row["mode"] == "evaluation"
+    assert row["model"] == "claude-sonnet-5-5" and row["mode"] == "evaluation"
+    assert (row["verdict"], row["rubric"], row["fix_fits"]) == ("misses the cause", 4, False)  # a real fault blamed
     [entry] = evaluation.summarize([row])
     assert (entry["action_where_none_fits"], entry["refused_by_code"], entry["action_right"]) == (1, 1, 0)
-    assert "not graded yet" in evaluation.markdown(evaluation.report([tmp_path]))
 
 
 def test_the_report_sums_every_call_and_its_cost_and_gives_medians(tmp_path):
@@ -922,7 +963,7 @@ def test_the_report_sums_every_call_and_its_cost_and_gives_medians(tmp_path):
             "steps": len(costs) + 1,
             "tool_calls": 1,
             "seconds": seconds,
-            "diagnosis": {"confidence": 0.8, "fix_action": None},
+            "diagnosis": made_up(0.8),
         }
         responses(saved_run(tmp_path / name, loop=loop_), *costs)
     with (tmp_path / "c" / loop.RECORDING).open("a") as recording:  # a call that failed: counted, with no cost
@@ -977,7 +1018,7 @@ def test_the_report_reads_a_suites_runs_and_says_what_it_planned_and_did_not_run
     week = tmp_path / "week5"
     suite = week / "2026-11-05T000000Z_suite_claude-opus-5-5"
     case = FALSE.describe() | {"seed": 7, "model": "claude-opus-5-5"}
-    saved_run(suite / "2026-11-05T000100Z_false-alarm_seed7", "false-alarm", case=case)
+    saved_run(suite / "2026-11-05T000100Z_false-alarm_seed7", "false-alarm", case=case, comparison=None)
     (suite / evaluation.SUITE_FILE).write_text(
         json.dumps(
             {
@@ -1085,3 +1126,49 @@ def test_the_evaluations_make_targets_pass_their_values_through_the_environment(
     ]:
         shown = subprocess.run(["make", "-n", target, value], cwd=REPO, capture_output=True, text=True, check=True)
         assert "pwned" not in shown.stdout and name in shown.stdout, target
+
+
+def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_they_disagree(tmp_path):
+    # The judgments and Aravind's verdict here are written by the test (made up), as klaxon.judge and make label save
+    # them beside a run.
+    from klaxon import judge, labels
+
+    def judged(folder, verdict, sha=None, why="Made up for the test."):
+        diagnosis = json.loads((folder / fault_runs.RUN_FILE).read_text())["loop"]["diagnosis"]
+        said = {"verdict": verdict, "fix_fits": True, "why": why}
+        value = {"diagnosis_sha256": sha or grading.digest(diagnosis), "judgment": said}
+        (folder / judge.SAVED).write_text(json.dumps(value))
+        return grading.digest(diagnosis)
+
+    agree, split, other, none = (saved_run(tmp_path / name) for name in ("a", "b", "c", "d"))
+    judged(agree, "names the cause")
+    sha = judged(split, "partly", why="It never says why the webhooks come again.")
+    mine = {"verdict": "partly", "fix_fits": True, "how": "typed at a terminal", "diagnosis_sha256": sha}
+    (split / labels.LABEL_FILE).write_text(json.dumps(mine))
+    judged(other, "misses the cause", sha="another diagnosis")
+    (other / labels.LABEL_FILE).write_text(json.dumps(mine | {"diagnosis_sha256": "another diagnosis"}))
+    judged(none, judge.NO_VERDICT)
+    found = evaluation.report([tmp_path])
+    rows = {row["folder"]: row for row in found["runs"]}
+    assert {name: row["verdict"] for name, row in rows.items()} == dict.fromkeys("abcd", "names the cause")
+    assert [rows[name]["judge"] for name in "abcd"] == ["names the cause", "partly", None, judge.NO_VERDICT]
+    assert [rows[name]["graders_disagree"] for name in "abcd"] == [False, True, False, False]
+    assert rows["b"]["aravind"] == "partly" and rows["a"]["aravind"] is None
+    assert rows["c"]["grader_problems"] == [
+        "the judge graded another diagnosis than this run's: not counted",
+        "Aravind's verdict is on another diagnosis than this run's: not counted",
+    ]
+    assert rows["c"]["aravind"] is None
+    [entry] = found["summary"]
+    assert (entry["judged"], entry["judge_names_the_cause"], entry["graders_disagree"]) == (2, 1, 1)
+    assert (entry["judge_no_verdict"], entry["labeled"]) == (1, 1)
+    page = evaluation.markdown(found)
+    assert "| duplicate-delivery | gated, week 4 | 4 ran, 0 not run | 4 of 4 | 4 of 4 | 1 of 2 | 1 | 4 of 4 |" in page
+    assert (
+        "- b (duplicate-delivery): the rule (version 4): names the cause; the judge: partly (It never says why the"
+        " webhooks come again.); Aravind: partly." in page
+    )
+    assert (
+        "## Grader problems" in page
+        and "| b | duplicate-delivery | 7 | gated, week 4 | names the cause | partly |" in page
+    )
