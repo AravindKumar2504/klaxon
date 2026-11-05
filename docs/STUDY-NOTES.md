@@ -847,3 +847,35 @@ Each right answer is written and committed before any run on it, as each rubric 
 - *Why not let Klaxon act in the evaluation?* Every write needs your typed approval (CLAUDE.md). 48 runs would need 48 approvals, and would measure how fast you answer. Planning without acting still shows what it would do, and what code would refuse.
 - *Isn't the withheld tool a fake?* Yes, and the run says so, in its label and in its tool recording. Its answer is word for word what the real tool sends when docker does not answer, after the same wait. Faking the outage keeps the stack untouched and the case repeatable.
 - *How do you know the harness counts right?* Its report on weeks 3 and 4 gives the numbers measured then, and a test pins them. Each guard has a test that fails when it is broken on purpose (a mutant), and a separate review read it all.
+
+## Week 5, item 2 (built 2026-11-04 and 05): the grader
+
+**What it is.** Two graders, and a check on both. The rule (rubric version 4) reads a diagnosis's words. The judge (Claude, Opus 5.5) reads its meaning. Your own verdicts, typed in your terminal, check both.
+
+**Why two graders.** A rule is free, exact and the same every time, but it reads words: "the database was not down" names the database. A judge reads meaning, but it is Claude grading Claude, and each call costs. Where they disagree, a person looks. A grader nobody has checked measures nothing, which is why your verdicts come into it.
+
+**Rubric version 4.** Version 3, and:
+- *The false alarm.* Right when it calls the alert false, from the lag read near 0. Only "no fix" fits. Blaming a real fault (stuck, hung, stalled) misses.
+- *Missing-deploys.* Fault 1's cause, and it must say what it could not check. Whether a deploy it claims had evidence, a rule cannot see: that is the judge's and yours.
+- *The nine known limits, fixed where a rule can.* Words that put a part of the cause elsewhere, or deny it, cancel it ("a deploy of the payment confirmer has a unit bug" no longer names the payments API). A known wrong cause given as the cause misses ("Redis lost its keys"). Offered only as a maybe, it makes a right cause "partly".
+- *Negation, within its part of the sentence.* "Not hung, stalled or crashed" denies all three, but "The provider is not down, the database is overloaded" still blames the database: a negation stops at a comma, except through a list of the same kind. "But", "and" or "while" end its reach too. A rule still reads words: the judge is there for meaning.
+
+Versions 1 to 3 stay as they were. A saved run is graded again with the newest rubric written for the system it ran on: week 3's fault 3 ran before the circuit breaker, so only version 1 fits it.
+
+**The judge.** One recorded call per diagnosis, through the same locked-down adapter as the loop. It sees the right answer, the remedy and the whole diagnosis, never the model that wrote it, nor the rule's verdict. It answers in a checked shape: the verdict, whether the fix fits, and one sentence why. A reply out of shape is "no verdict". A call with no reply stops the batch, and nothing is saved for that run. Every judgment replays offline. Its prompt and model are pinned by a fingerprint: a change is a new version, checked again.
+
+**Your verdicts (`make label`).** In your own terminal only. Claude's shell has no terminal, so it cannot label. It is blind: the right answer, the remedy and the diagnosis, never a grader's verdict or the model, in a shuffled order. Each verdict is saved once, beside its run, never overwritten. Until you label a run, the reports hold back both graders' verdicts on it, so you give yours first.
+
+**The calibration.** The judge on the grading tests' 66 sentences and on the 13 saved diagnoses: 79 calls, with your OK. Claude wrote those sentences and their expected verdicts, so on them the judge is checked against Claude. Your verdicts on the 13 are the check by a person.
+
+**What the review caught.** A diagnosis that rules a cause out ("not hung, stalled or crashed") was graded as blaming it. A judging batch would have kept calling after the seat's limit, and left "no verdict" files behind. The reports would have shown you the graders' verdicts before you gave your own. And the calibration said its sentences were "not by a model": Claude wrote them. Each is fixed, with a test. Then its re-check found the first fix went too far: a negation reached across commas, so "The provider is not down, the database is overloaded" was graded as naming fault 3. That overstates Klaxon's accuracy, the worst kind of error for a result. Now a negation stops at a comma, except through a list. The lesson: a fix to a grader needs new test sentences, written before you run them, not the ones that showed the bug.
+
+**What the live calibration showed** (79 calls on your seat, 2026-11-05 UTC, about 4 minutes, $1.11 at API prices by Claude Code's estimate). Every reply was in the checked shape. On the 66 sentences, the judge agrees with the verdicts the tests expect on 51. It is never two steps off. 12 of its 15 differences are stricter: it wants every part of the recorded cause, the deploy included, before "names the cause". The tests (and the rule) count three parts and leave the deploy optional. Which is right is a question of definition, and your verdicts settle it. The rule agrees on 64 of 66, but it was written knowing those sentences, so that number says little. The judge's verdicts on the 13 saved runs are held back until you label them.
+
+**What to read in the code.** In `src/klaxon/grading.py`: `RUBRICS_V4`, `_negated`, `_hedged`, `_stance` and `compare`. In `src/klaxon/judge.py`: `SYSTEM`, `document`, `read_judgment`, `judge`, `counted`. In `src/klaxon/labels.py`: `screen`, `label_one`, `label`. In `src/klaxon/calibration.py`: `report` and `markdown`.
+
+**Likely questions.**
+- *Why not use only the judge?* It is Claude grading Claude, and it costs a call each time. The rule is free and gives the same answer every time. Each covers what the other misses, and you check both.
+- *Isn't a rule tested on its own examples circular?* Yes. That is why its 64 of 66 says little, and why your verdicts on real diagnoses are the check that counts.
+- *Can the judge favor its own model?* It never sees which model wrote a diagnosis. That removes the easy bias, not every bias: a model may still like text that reads like its own. Your verdicts are the check.
+- *Why are the graders' verdicts hidden from you?* So you give yours first. A verdict you saw first pulls yours toward it.
