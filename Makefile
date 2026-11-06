@@ -28,7 +28,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem eval-cases eval eval-report rehearse-case \
-	judge-prompt judge replay-judge label calibrate calibration-report replay-calibration
+	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -156,6 +156,9 @@ replay-judge: ## replay recorded judgments offline, and check they reproduce: ma
 label: ## your own verdict on a run's diagnosis, typed in your terminal (refused without one), saved beside it once: make label RUN=<folders>
 	@test -n "$$RUN" || { echo "make label RUN=<saved runs, or folders of them>: RUN is missing" >&2; exit 2; }
 	$(PY) -m klaxon.labels $$RUN
+
+label-pick: ## the runs for your next make label: every run the graders disagree on, and a random draw (TOTAL=17); prints the command, never a verdict
+	$(PY) -m klaxon.evaluation pick $${RUNS:-evidence/week5} $${TOTAL:+--total "$$TOTAL"}
 
 calibrate: ## the judge, live, on the grading tests' 66 sentences and the 13 saved diagnoses: 79 calls (his OK first)
 	$(PY) -m klaxon.calibration run

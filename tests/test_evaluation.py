@@ -1211,3 +1211,59 @@ def test_the_report_puts_the_rule_and_the_judge_side_by_side_and_lists_where_the
         "## Grader problems" in page
         and "| b | duplicate-delivery | 7 | gated, week 4 | names the cause | partly |" in page
     )
+
+
+# The pick for his next labels (week 5, item 3): made-up runs and judgments; nothing is called
+
+
+def _judged_by(folder, verdict):
+    """A judgment by the judge as committed, of the run's own diagnosis, made up for the test."""
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    right = grading.answer(saved["fault"]["name"], 3)
+    value = {"diagnosis_sha256": grading.digest(saved["loop"]["diagnosis"])}
+    value |= {"judgment": {"verdict": verdict, "fix_fits": True, "why": "Made up for the test."}}
+    value |= {"judge": {"sha256": judge.fingerprint()}, "graded": {"name": saved["fault"]["name"], "rubric_version": 3}}
+    value |= {"right_answer": {"cause": right.cause, "remedy": right.remedy}}
+    (folder / judge.SAVED).write_text(json.dumps(value))
+
+
+def _labeled(folder):
+    """A verdict of his on the run's own diagnosis, written by the test (standing in for his, typed at a terminal)."""
+    from klaxon import labels
+
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    right = grading.answer(saved["fault"]["name"], 3)
+    mine = {"verdict": "partly", "fix_fits": True, "how": "typed at a terminal"}
+    mine |= {"diagnosis_sha256": grading.digest(saved["loop"]["diagnosis"])}
+    mine |= {"right_answer_sha256": grading.digest([right.cause, right.remedy])}
+    (folder / labels.LABEL_FILE).write_text(json.dumps(mine))
+
+
+def test_a_pick_takes_every_disagreement_then_a_seeded_draw_sorted_and_never_a_labeled_run(tmp_path):
+    runs = [saved_run(tmp_path / name) for name in "abcdefgh"]  # the rule says "names the cause" of each
+    for folder in runs:
+        _judged_by(folder, "partly" if folder.name in "be" else "names the cause")  # b and e: the graders disagree
+    _labeled(runs[7])  # h: he has labeled it already
+    picked = [folder.name for folder in evaluation.pick([tmp_path], total=4)]
+    assert {"b", "e"} <= set(picked) and "h" not in picked
+    assert len(picked) == 5 and picked == sorted(picked)  # both, and 3 drawn: never fewer than MIN_DRAWN
+    assert [folder.name for folder in evaluation.pick([tmp_path], total=4)] == picked  # the same seed, the same pick
+    assert len(evaluation.pick([tmp_path], total=6)) == 6
+    assert [folder.name for folder in evaluation.pick([tmp_path], total=40)] == list("abcdefg")  # every one but h
+
+
+def test_make_label_pick_prints_the_command_never_a_verdict_and_refuses_runs_not_judged(tmp_path, capsys):
+    runs = [saved_run(tmp_path / name) for name in ("run-a", "run-b", "run-c", "run-d")]
+    assert evaluation.main(["pick", str(tmp_path)]) == 2  # none judged: a disagreement could be missed
+    assert "Nothing picked: 4 runs are not judged yet (make judge first)" in capsys.readouterr().err
+    for folder in runs:
+        _judged_by(folder, "partly" if folder.name == "run-c" else "names the cause")
+    assert evaluation.main(["pick", str(tmp_path), "--total", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "Picked 4 runs, sorted by folder" in out and "(seed 11)" in out and "make label RUN=" in out
+    assert all(evaluation.shown(folder) in out for folder in runs)
+    assert "partly" not in out and "names the cause" not in out  # never a verdict
+    for folder in runs:
+        _labeled(folder)
+    assert evaluation.main(["pick", str(tmp_path)]) == 2
+    assert "Nothing picked: no run you have not labeled ended in a diagnosis." in capsys.readouterr().err

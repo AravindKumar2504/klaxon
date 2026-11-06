@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import shlex
 import statistics
 import sys
@@ -897,6 +898,39 @@ def _cell(text: object) -> str:
     return clean_text(str(text), 300).replace("|", "/")
 
 
+# Aravind's next labels (week 5, item 3): every run the graders disagree on, and runs drawn at random
+
+PICK_SEED = 11  # the seed of the random part of each pick (week 5, item 3)
+MIN_DRAWN = 3  # at least this many drawn at random, so a pick is never only the runs the graders disagree on
+
+
+class NotJudged(ValueError):
+    """A pick needs each run judged first: a run not judged could be a disagreement it misses."""
+
+
+def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED) -> list[Path]:
+    """The runs Aravind labels next: every run where the rule and the judge give different verdicts on the cause, then
+    runs drawn at random (a fixed seed) from his other runs, up to total, and never fewer than MIN_DRAWN. Only runs
+    that ended in a diagnosis and that he has not labeled. Sorted by folder, so the list says nothing of which runs
+    disagree. NotJudged when such a run has no judgment a report would count."""
+    rows = []
+    for folder in grading.run_folders(paths):
+        try:
+            row = run_row(folder)
+        except (OSError, ValueError, KeyError, TypeError):  # a run the report leaves out, and says so
+            continue
+        if row["verdict"] is None or row["aravind"] is not None:
+            continue
+        rows.append((folder, row))
+    unjudged = [folder.name for folder, row in rows if row["judge"] is None]
+    if unjudged:
+        raise NotJudged(f"{len(unjudged)} runs are not judged yet (make judge first), such as {unjudged[0]}")
+    must = [folder for folder, row in rows if row["graders_disagree"]]
+    rest = [folder for folder, row in rows if not row["graders_disagree"]]
+    random.Random(seed).shuffle(rest)
+    return sorted(must + rest[: max(total - len(must), MIN_DRAWN)])
+
+
 def markdown(found: Mapping) -> str:
     """The report as a page: the suites; per model, a table of its cases; then every run, and the runs that did not
     run."""
@@ -1133,6 +1167,24 @@ def _run(args: argparse.Namespace) -> int:
     return 1 if done["stopped"] else 0
 
 
+def _pick(args: argparse.Namespace) -> int:
+    try:
+        chosen = pick(args.folders, args.total)
+    except NotJudged as exc:
+        print(f"Nothing picked: {clean_text(str(exc), 300)}", file=sys.stderr)
+        return 2
+    if not chosen:
+        print("Nothing picked: no run you have not labeled ended in a diagnosis.", file=sys.stderr)
+        return 2
+    print(
+        f"Picked {len(chosen)} runs, sorted by folder: every run where the rule and the judge give different verdicts"
+        f" on the cause, and runs drawn at random (seed {PICK_SEED}). Which is which is not said. In your own"
+        " terminal:\n"
+    )
+    print("make label RUN=" + shlex.quote(" ".join(shown(path) for path in chosen)))
+    return 0
+
+
 def _report(args: argparse.Namespace) -> int:
     try:
         found = report(args.folders, args.show_judge)
@@ -1177,6 +1229,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     again.add_argument(
         "--show-judge", action="store_true", help="show the judge's verdicts on runs Aravind has not labeled too"
     )
+    chosen = actions.add_parser("pick", help="the runs for his next make label: every disagreement, and a draw")
+    chosen.add_argument("folders", type=Path, nargs="+", help="run folders, or folders of them")
+    chosen.add_argument("--total", type=int, default=17, help="how many to pick, at least (default 17)")
     rehearsal = actions.add_parser("rehearse", help="one case under traffic, with the rules and no model")
     rehearsal.add_argument("case", choices=list(CASES))
     rehearsal.add_argument("--seed", type=int, default=SEEDS[0])
@@ -1188,6 +1243,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cases()
     if args.action == "report":
         return _report(args)
+    if args.action == "pick":
+        return _pick(args)
     if args.action == "rehearse":
         return _rehearse(args, argv)
     return _run(args)
