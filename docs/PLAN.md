@@ -1,6 +1,6 @@
 # Klaxon plan
 
-Decided 2026-10-09: full build by mid-December 2026, then keep improving it after the courses end.
+Decided 2026-10-09: full build by mid-December 2026, then keep improving it after the courses end. Moved up on 2026-11-06 (Aravind): everything by Fri Dec 4, before his finals week (Mon Dec 7), with no scope cut. The dated schedule follows the week table.
 
 ## What gets built
 
@@ -41,9 +41,31 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
 | 9 | Dec 8-14 | Safety pass (prompt injection planted in logs, budgets); Terraform; INFO ten-artifact packet | CSYE 12/9 eval, 12/16 safety |
 | 10 | Dec 15-~19 | Both finals; public write-up; 2-minute demo video; resume bullets with measured numbers | Finals (check Canvas for exact dates) |
 
-**Cut order if a week slips:** Terraform first, then the Go service, then the web panel. Keep Kubernetes (it is part of what Klaxon does: undoing a bad rollout).
+## The schedule to Dec 4 (Aravind, 2026-11-06)
 
-**Time budget:** Claude about 2-2.5 hours a day, 6 days a week. Aravind 1-1.5 hours a day: kick off a milestone, do other work while Claude builds, then 30-45 minutes reviewing (run it, read the files Claude points to, make the decisions Claude brings).
+It replaces the dates in the table above. Nothing is cut. Each week is planned on its first day and reviewed on its last.
+
+| Dates (2026) | PLAN week | What gets built | Aravind's part |
+|---|---|---|---|
+| Fri Nov 6 to Tue Nov 10 | 5, the rest | Item 3: first results (the 40 runs left, the judge, his labels). Item 4: his postmortem corrections. Item 5: a start on Kubernetes. Item 6: docs | OK the runs; label about 17 runs; type his corrections; review on Tue |
+| Wed Nov 11 to Sun Nov 15 | 6 | LangGraph version; Klaxon runs on Kubernetes and can undo a bad rollout | Plan on Wed, review on Sun |
+| Mon Nov 16 to Thu Nov 19 | 7 | Web control panel; CI pipeline | Plan on Mon, review on Thu |
+| Fri Nov 20 to Fri Nov 27 | 8 | Multi-agent version; the Go service; comparison runs (plain Python, LangGraph, multi-agent; OpenHands on one comparable task) | Plan on Fri; OK the overnight runs; review on Fri (Thanksgiving, Thu Nov 26, off) |
+| Sat Nov 28 to Tue Dec 1 | 9 | Safety pass (prompt injection planted in logs, budgets); Terraform; INFO ten-artifact packet | Plan on Sat, review on Tue |
+| Wed Dec 2 to Fri Dec 4 | 10 | Public write-up; 2-minute demo video (real footage); resume bullets with measured numbers; both finals' materials | The video; final review on Fri |
+| Sat Dec 5 to Sun Dec 6 | Buffer | Anything late | |
+
+How it can go about twice as fast as weeks 4 and 5 (his choice, 2026-11-06):
+- Independent pieces are built in parallel sessions. Live runs and stack steps still go one at a time (one demo stack on this Mac), mostly overnight.
+- He reviews the same day: about 1.5 to 2 hours a day, weekends included.
+- The Mac stays plugged in, with its lid open, on every night with runs.
+- The separate-Claude review and the full mutation run come once per week, not per item.
+
+Reminders: scheduled tasks in the Claude app at 9 am and 8 pm, his local time, read this schedule and STATUS, and send him one line each: days left to Dec 7, today's targets, what waits on him, and whether the schedule is on track. They only read.
+
+**Cut order if a week slips:** Terraform first, then the Go service, then the web panel. Keep Kubernetes (it is part of what Klaxon does: undoing a bad rollout). Not used: on 2026-11-06 Aravind chose no scope cut, and the schedule above instead.
+
+**Time budget:** Claude about 2-2.5 hours a day, 6 days a week. Aravind 1-1.5 hours a day: kick off a milestone, do other work while Claude builds, then 30-45 minutes reviewing (run it, read the files Claude points to, make the decisions Claude brings). From 2026-11-06: Aravind about 1.5 to 2 hours a day, weekends included (the schedule above).
 
 ## Course requirements this must satisfy
 
@@ -66,4 +88,4 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
 
 ## After December
 
-Kubernetes hardening, more incident types, a public write-up, and resume numbers from the measured evaluation.
+Kubernetes hardening, more incident types, and search over runbooks and past incidents, with the comparison with and without it (moved here on 2026-11-06). The public write-up and resume numbers are due by Dec 4 now, and keep improving after.

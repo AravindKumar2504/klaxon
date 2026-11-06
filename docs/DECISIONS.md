@@ -784,3 +784,13 @@ In item 2's session, at his request ("can we start review"), after his verdicts 
 - **Item 2: "Accept"** (Aravind).
 - **"Record, merge and push"** (Aravind): this review recorded in STATUS and DECISIONS, then `main` fast-forwarded to the branch's tip and pushed; `main` only. The branch is kept, like the others. CLAUDE.md's rule still holds: Claude asks before every push.
 - **Claude's final check before the merge** (2026-11-06): `main`, `origin/main` and GitHub's `main` at `3837f1a`, so a fast-forward; a privacy scan of the branch's ten commits and these notes found nothing private. Not run: `make e2e` and `make test-integration` (item 2 changed nothing the stack runs).
+
+## 2026-11-06 (the schedule to Dec 4)
+
+In week 5, item 3's session, at his request: everything done before Dec 7, his finals week, with no scope cut, and constant reminders. Claude drafted a dated schedule. His answers, in one multiple-choice batch, each Claude's recommendation:
+
+- **The schedule: "Approve as drafted"** (Aravind). PLAN's weeks 5 to 10 by Fri Dec 4, with Dec 5 and 6 as a buffer before his finals week (Mon Dec 7). No scope cut. In PLAN, "The schedule to Dec 4"; the week table's first dates stay as a record.
+- **How to go faster: "All four changes"** (Aravind). Parallel sessions for independent pieces; his review the same day (about 1.5 to 2 hours a day, weekends included); the Mac plugged in with its lid open on run nights; the separate-Claude review and the full mutation run once per week, not per item.
+- **Reminders: "Morning and evening"** (Aravind). Scheduled tasks in the Claude app at 9 am and 8 pm, his local time. Each only reads, and sends one line.
+- **The two unscheduled pieces: "OpenHands yes, runbooks later"** (Aravind). OpenHands on one comparable task joins week 8's comparison runs (CSYE 7374 lists the comparison as a learning outcome). Search over runbooks and past incidents stays after December.
+- **Why the pace changes** (Claude, from STATUS and the commits). Week 3 ended Oct 19, 14 days before PLAN's date; week 4 ended Nov 3, 6 days before. Week 4 took 15 days, and week 5 looks like about 8 (an estimate). At those paces the full plan would have ended between about Dec 21 and early January. This schedule needs about 5 days a week.
