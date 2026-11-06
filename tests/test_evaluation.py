@@ -1267,3 +1267,38 @@ def test_make_label_pick_prints_the_command_never_a_verdict_and_refuses_runs_not
         _labeled(folder)
     assert evaluation.main(["pick", str(tmp_path)]) == 2
     assert "Nothing picked: no run you have not labeled ended in a diagnosis." in capsys.readouterr().err
+
+
+# The live runs of week 5, item 3, replayed: regression tests from evidence. Each suite found is in, the pilot's
+# first (2026-11-06 UTC); a suite run later joins on its own.
+
+WEEK5_RUNS = sorted(path.parent for path in evaluation.EVIDENCE.glob("*_suite_*/*/run.json"))
+
+
+@pytest.mark.parametrize("folder", WEEK5_RUNS, ids=lambda folder: f"{folder.parent.name[-17:]}/{folder.name[18:]}")
+def test_each_week_5_live_run_replays_exactly_and_is_graded_as_it_was(folder, tmp_path):
+    """Replies received from Claude through Claude Code on Aravind's seat (each suite's model), the tool results of
+    each run and its gate's log, as the run saved them. Nothing is called. An evaluation run plans any action it
+    names, asks nobody and runs nothing."""
+    from klaxon.agent.model import text_sha256
+
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    suite = json.loads((folder.parent / evaluation.SUITE_FILE).read_text())
+    recorded = read_trace(folder / loop.TRACE)
+    assert recorded[0]["model"] == suite["model"] == saved["case"]["model"]
+    offered = loop.offered_actions(recorded[0]["extra"]["loop"])
+    specs = loop.allowed_tools(mc.ReplayTools(folder / loop.TOOL_RESULTS).open())
+    if text_sha256(loop.system_prompt(specs, offered)) != recorded[0]["system"]["sha256"]:
+        pytest.skip("the system prompt changed since this run: record new runs to replay")
+    result, whole, differences = loop.replay(folder, tmp_path / "replay.jsonl")
+    assert (whole, differences, result.reason) == (True, [], saved["loop"]["reason"])
+    # Nobody was asked and nothing ran: no request, no decision; the gate's log holds what it planned, or that the
+    # diagnosis named no action.
+    assert not (folder / gate.REQUEST).exists() and not (folder / gate.DECISION).exists()
+    events = [json.loads(line)["event"] for line in (folder / gate.LOG).read_text().splitlines()]
+    assert events == [saved["gate"]["result"]] and events[0] in ("not asked", "no action")
+    # The rule grades the kept diagnosis as the run did: rubric version 4.
+    assert saved["comparison"]["rubric"]["version"] == 4
+    again = grading.compare(saved["case"]["name"], recorded[-1]["diagnosis"], 4)
+    kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy")
+    assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
