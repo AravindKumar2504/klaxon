@@ -856,8 +856,12 @@ def test_the_report_reads_weeks_3_and_4s_saved_runs_and_their_measured_numbers()
     assert "| provider-outage | diagnosis only, week 3 | 1 ran, 0 not run | 1 of 1 | 1 of 1 | " in page
     # Each was judged in the live calibration (2026-11-05 UTC), by the judge as committed. Until Aravind labels them,
     # the report holds those verdicts back (the re-check's finding M2), and they are pinned nowhere here.
-    assert all(row["judge"] is None and row["judge_held_back"] and not row["grader_problems"] for row in rows)
-    assert found["judge_held_back"] == 12 and "The judge's verdicts on 12 runs are held back" in page
+    held = [row for row in rows if row["aravind"] is None]  # the runs he has not labeled yet
+    assert all(row["judge"] is None and row["judge_held_back"] for row in held)
+    assert all(row["judge"] in judge.VERDICTS and "judge_held_back" not in row for row in rows if row["aravind"])
+    assert not any(row["grader_problems"] for row in rows)  # each saved verdict of his is counted
+    assert found["judge_held_back"] == len(held)
+    assert ("The judge's verdicts on" in page) == bool(held)
     shown = evaluation.report([REPO / "evidence" / "week3", REPO / "evidence" / "week4"], show_judge=True)["runs"]
     assert all(row["judge"] in judge.VERDICTS and "judge_held_back" not in row for row in shown)
     # Graded again by the newest rubric for each run's system: version 1 for week 3's fault 3 (before the breaker).
