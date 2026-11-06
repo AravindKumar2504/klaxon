@@ -27,7 +27,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
-	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem eval-cases eval eval-report rehearse-case \
+	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
 	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration
 
 help: ## list the commands
@@ -159,6 +159,10 @@ label: ## your own verdict on a run's diagnosis, typed in your terminal (refused
 
 label-pick: ## the runs for your next make label: every run the graders disagree on, and a random draw (TOTAL=17); prints the command, never a verdict
 	$(PY) -m klaxon.evaluation pick $${RUNS:-evidence/week5} $${TOTAL:+--total "$$TOTAL"}
+
+review-postmortem: ## your marks on a postmortem draft, paragraph by paragraph, typed in your terminal (refused without one), saved beside it once: make review-postmortem RUN=evidence/week4
+	@test -n "$$RUN" || { echo "make review-postmortem RUN=<the drafts' run folders, or folders of them>: RUN is missing" >&2; exit 2; }
+	$(PY) -m klaxon.agent.postmortem_review $$RUN
 
 calibrate: ## the judge, live, on the grading tests' 66 sentences and the 13 saved diagnoses: 79 calls (his OK first)
 	$(PY) -m klaxon.calibration run
