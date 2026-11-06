@@ -794,3 +794,15 @@ In week 5, item 3's session, at his request: everything done before Dec 7, his f
 - **Reminders: "Morning and evening"** (Aravind). Scheduled tasks in the Claude app at 9 am and 8 pm, his local time. Each only reads, and sends one line.
 - **The two unscheduled pieces: "OpenHands yes, runbooks later"** (Aravind). OpenHands on one comparable task joins week 8's comparison runs (CSYE 7374 lists the comparison as a learning outcome). Search over runbooks and past incidents stays after December.
 - **Why the pace changes** (Claude, from STATUS and the commits). Week 3 ended Oct 19, 14 days before PLAN's date; week 4 ended Nov 3, 6 days before. Week 4 took 15 days, and week 5 looks like about 8 (an estimate). At those paces the full plan would have ended between about Dec 21 and early January. This schedule needs about 5 days a week.
+
+## 2026-11-06 (week 5, items 3 and 4: his choices)
+
+In item 2's session, which went on to items 3 and 4 at his request ("Do this task here"). Each answer was Claude's recommendation, in one multiple-choice batch per item:
+
+- **Item 3, how the live work is OK'd: "Pilot first, then the rest"** (Aravind): the sign-in checks and the pilot (8 runs on Opus 5.5 at seed 7) first; Claude checks the pilot; then one OK for the other 40 runs and the 48 judge calls.
+- **Item 3, the pilot's runs: "Yes, they count"** (Aravind): only a change to the harness after the pilot voids them. The pilot found no harness problem, so they count as Opus's seed 7.
+- **Item 3, his labels: "Disagreements + sample"** (Aravind): every run the graders disagree on, and runs drawn at random up to about 17 (`make label-pick`, seed 11, at least 3 drawn).
+- **Item 3, the other 40 runs: "Yes, start now"** (Aravind), then stopped by Claude before they began: he travels at 4 pm and cannot keep the lid open, and a run caught by sleep breaks. They wait for a night with the Mac plugged in and its lid open.
+- **Item 3, `make judge`** (Claude): it says only "judged" of a run he has not labeled, as the reports already hold those verdicts back; the judge itself is unchanged.
+- **Item 4, his marks: "Each paragraph", "Right or wrong, why if wrong", "Paragraph + its facts", "New files beside the draft"** (Aravind). Six paragraphs a draft; r or w, one sentence required when wrong; each paragraph with the code-filled facts it draws on, never a finding about it; saved once as `postmortem-review.json`, with `postmortem-reviewed.md`, the draft's page with his mark under each paragraph. The draft never changes.
+- **Docker on only when needed** (Aravind's request): Claude starts Docker before stack work and stops the stack and Docker after it. The stack had been idle for 2 days on battery.
