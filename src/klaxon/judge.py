@@ -41,7 +41,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from klaxon import faults, grading
+from klaxon import faults, grading, labels
 from klaxon.agent import gate
 from klaxon.agent.contract import MAX_PROBLEMS, check, parse_object
 from klaxon.agent.loop import find_live_model, one_line
@@ -354,8 +354,9 @@ class Batch:
 
 def judge_runs(folders: Sequence[Path], binary: Path, held_back: bool = False) -> Batch:
     """Judge each run not judged yet, live. It stops at the first call that gives no reply Klaxon can use, and saves
-    nothing for that run. held_back: say only that each run was judged, never its verdict, so the person who labels
-    these runs afterwards does not see it first (the independent review's finding M6)."""
+    nothing for that run. A verdict is printed only for a run Aravind has labeled: of any other, it says only that
+    it was judged, so he never sees a verdict before giving his own (week 5, item 3). held_back: of every run (the
+    calibration; the independent review's finding M6)."""
     from klaxon.agent.claude_code import ClaudeCode, _provenance
     from klaxon.agent.model import Recording
 
@@ -384,7 +385,9 @@ def judge_runs(folders: Sequence[Path], binary: Path, held_back: bool = False) -
             print(f"{clean_text(folder.name)}: judged meanwhile by another process: nothing was written")
             counts[2] += 1
             continue
-        if held_back:
+        # A verdict on a run he has not labeled stays unseen; "no verdict" is none, and is said.
+        unseen = judgment.verdict != NO_VERDICT and not (folder / labels.LABEL_FILE).exists()
+        if held_back or unseen:
             print(f"{clean_text(folder.name)}: judged (its verdict is held back until Aravind labels this run)")
         else:
             print(f"{clean_text(folder.name)}: {said(judgment.to_dict())}")

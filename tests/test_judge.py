@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from klaxon import calibration, faults, grading, judge
+from klaxon import calibration, faults, grading, judge, labels
 from klaxon.agent import claude_code
 from klaxon.agent.model import ModelMismatch, ModelTimeout, ScriptedModel, read_records
 from klaxon.patient.stack import REPO
@@ -243,10 +243,14 @@ def judging(monkeypatch):
 
 def test_the_run_command_judges_each_run_once_records_it_and_replays(judging, tmp_path, capsys):
     first, fault_1 = copy_run(FIRST_LIVE_RUN, tmp_path), copy_run(FAULT_1, tmp_path)
-    script = [reply("misses the cause", False, "It calls an idle consumer hung."), reply()]
+    (first / labels.LABEL_FILE).write_text("{}")  # he labeled the first: its verdict may be shown
+    script = [reply("misses the cause", False, "It calls an idle consumer hung."), reply(why="Made up.")]
     assert judging(tmp_path, script=script) == 0
     out = capsys.readouterr().out
     assert f"{first.name}: misses the cause; the fix does not fit: It calls an idle consumer hung." in out
+    # Week 5, item 3: of a run he has not labeled, make judge says only that it was judged.
+    assert f"{fault_1.name}: judged (its verdict is held back until Aravind labels this run)" in out
+    assert "Made up." not in out
     assert "Judged: 2; no verdict: 0; passed over: 0." in out
     records = read_records(fault_1 / judge.RECORDING)
     assert records[0]["kind"] == "header" and records[0]["run"] == fault_1.name and records[0]["what"] == judge.WHAT
@@ -405,6 +409,7 @@ def test_each_runs_recording_names_the_command_that_judges_that_run_again(judgin
 
 def test_a_held_back_batch_says_each_run_was_judged_and_never_its_verdict(judging, tmp_path, monkeypatch, capsys):
     folder = copy_run(FAULT_1, tmp_path)
+    (folder / labels.LABEL_FILE).write_text("{}")  # held back even of a run he has labeled: the calibration's batch
     RecordedScript.script = [reply("partly", True, "Made up.")]
     done = judge.judge_runs([folder], Path("/nonexistent/claude"), held_back=True)
     assert done == judge.Batch(1, 0, 0) and judge.read(folder)["judgment"]["verdict"] == "partly"
