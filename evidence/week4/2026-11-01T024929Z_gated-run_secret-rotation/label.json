@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "secret-rotation",
+    "rubric_version": 3
+  },
+  "right_answer_sha256": "d7ff1e8d3e74adaea562fe14069079d785336b9f80abb32f9c609382317abec0",
+  "diagnosis_sha256": "7f0ead1e4e2c945f2f6115aef3de05f8c4f2b9b9c0bcf6954bd8d404362a6d30",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "The model accurately identifies the webhook secret version mismatch (WEBHOOK_SECRET_VERSION=v2 vs. provider's v1) and prescribes rolling back the deployment to accept signatures again.",
+  "at": "2026-11-06T17:45:57Z",
+  "how": "typed at a terminal"
+}

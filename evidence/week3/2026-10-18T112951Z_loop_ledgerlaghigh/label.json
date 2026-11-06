@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "false-alarm",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "1088b715519aed9673c745ad66764e3903aee9c6516573c0aeed0ff27b049b63",
+  "diagnosis_sha256": "c14374c532082caf4a129e0c45d4de86c81025ddaa6d6991daa645e25de7ae40",
+  "verdict": "misses the cause",
+  "fix_fits": false,
+  "why": "The model incorrectly assumes the ledger consumer is silently hung and proposes a restart, completely missing the fact that nothing is wrong and the alert is false.",
+  "at": "2026-11-06T17:57:37Z",
+  "how": "typed at a terminal"
+}

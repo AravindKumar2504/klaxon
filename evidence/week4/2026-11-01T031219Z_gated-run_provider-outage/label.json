@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "provider-outage",
+    "rubric_version": 3
+  },
+  "right_answer_sha256": "62189df02256ea75c5e0e51c9a1ba6d785cf0efd46388e1d1e34e74b981fb98f",
+  "diagnosis_sha256": "3a61d1440d8f64e391a57700de4a7994ccffdb4dee181e03665e1b1d25ea3aeb",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "The model accurately identifies the upstream provider degradation causing requests to time out and trigger the circuit breaker, correctly concluding that no local fix or rollback is required.",
+  "at": "2026-11-06T17:47:20Z",
+  "how": "typed at a terminal"
+}

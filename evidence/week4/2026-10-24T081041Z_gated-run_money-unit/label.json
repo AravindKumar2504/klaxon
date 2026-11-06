@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "money-unit",
+    "rubric_version": 3
+  },
+  "right_answer_sha256": "cc0d4fe38b4183008c9e3a138671b1302e88c7a6f84cfa53d1b7cd985c5964d5",
+  "diagnosis_sha256": "38f9a4954f3e72a94e5936f70b2bae2ebd362dbd5edbdecb3128749a5d186d9b",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "The model accurately identifies that the payments API was deployed with CHARGE_AMOUNT_UNIT=dollars, causing customers to be overcharged by 100x, and correctly prescribes rolling back the deployment and refunding the excess charges.",
+  "at": "2026-11-06T17:55:51Z",
+  "how": "typed at a terminal"
+}

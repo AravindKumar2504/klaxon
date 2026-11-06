@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "poison-message",
+    "rubric_version": 1
+  },
+  "right_answer_sha256": "9fed6f8602339860e40f73ddc2bba11566f124ad4323c294612a546e39caea2f",
+  "diagnosis_sha256": "841c0d47cc58bc3832b13fb77da456d1e4ac95b634194c1be12b1e21792c0d06",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "The model explicitly prescribes rolling the ledger consumer back to dead-lettering (BAD_EVENTS=dead_letter), which directly fulfills the right remedy of routing the poison message to the dead-letter topic and draining the backlog.",
+  "at": "2026-11-06T17:41:29Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "pool-exhaustion",
+    "rubric_version": 3
+  },
+  "right_answer_sha256": "1e72b7c33b810963e5e3883c1de5e21bbba4cdec2a35622dbbfaeb53f2a1d418",
+  "diagnosis_sha256": "704dc5abcce07aeb4d9c5dfa7639d66359c1f455e936ebfc589948bc5bc857ac",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "The model accurately identifies the connection pool leak caused by REFUND_CONNECTION=kept and correctly prescribes rolling back payments-api to restore connection returning and clear the pool.",
+  "at": "2026-11-06T17:43:57Z",
+  "how": "typed at a terminal"
+}

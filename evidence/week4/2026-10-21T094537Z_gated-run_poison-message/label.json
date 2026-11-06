@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "poison-message",
+    "rubric_version": 1
+  },
+  "right_answer_sha256": "9fed6f8602339860e40f73ddc2bba11566f124ad4323c294612a546e39caea2f",
+  "diagnosis_sha256": "e9c9780181174052a2881034f4a8a9e46f60bda290527b2c5fd94d0597676aa9",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "The model accurately identifies that ledger-consumer is stuck in an infinite retry loop on a poison message due to BAD_EVENTS=retry, and correctly prescribes rolling back or changing the configuration to dead-lettering.",
+  "at": "2026-11-06T17:55:23Z",
+  "how": "typed at a terminal"
+}
