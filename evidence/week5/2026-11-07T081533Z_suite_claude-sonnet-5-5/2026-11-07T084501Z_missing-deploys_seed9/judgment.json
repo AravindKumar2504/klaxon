@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "The ledger consumer books a second time every webhook the provider sends again: its dedupe is gone (fault 1's recorded cause, which a deploy brought). Docker did not answer the two tools that read it, so the deploy list and the containers' health could not be read: a right diagnosis says what it could not check, and claims no deploy it has no evidence for. Rolling the ledger consumer back still fits the remedy: code plans a rollback from the deploy log, not from the tools.",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "diagnosis_sha256": "b24f35c671bd4f52f19811c45bdbd40daa8eb674e0e466fc5ccfc8589dfc1a63",
+  "judgment": {
+    "verdict": "partly",
+    "fix_fits": false,
+    "why": "It rightly traces the provider's resent webhook to a double booking in the ledger consumer and says it could not check deploys, but it calls the dedupe working and blames a race instead of the lost dedupe, and it rejects the rollback.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:53:01.446Z",
+      "sha256": "721ea8f29b984152eec649569e3a933270da667fd217681bb7330e759c0151c0"
+    },
+    "call": {
+      "reply_sha256": "721ea8f29b984152eec649569e3a933270da667fd217681bb7330e759c0151c0",
+      "problems": []
+    }
+  }
+}

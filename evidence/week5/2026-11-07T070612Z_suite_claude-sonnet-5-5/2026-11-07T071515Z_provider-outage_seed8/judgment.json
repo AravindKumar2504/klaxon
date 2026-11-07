@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "provider-outage",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "the provider's charge and refund API hangs (5 s, then 503): our payments API's calls to it time out, each after 3 attempts, until its circuit breaker opens, after 5 calls in a row got no answer; from then on it fails fast, answering 503 'outcome unknown' at once without calling the provider, and lets one trial call through 10 s after it opened, and again after each trial that fails",
+    "remedy": "nothing to change on our side: the provider must recover (escalate to it). Meanwhile the circuit breaker keeps the API answering at once, and closes again when a trial call gets an answer. After it recovers, the payments and refunds left pending need a decision (retry them with their keys, or mark them failed): a refund left pending blocks new refunds on its payment until it settles"
+  },
+  "diagnosis_sha256": "d7fbb68f7da5c93c2fa65e9deaa27b0ba01928466041efc74e732cf9b4f21bc3",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It places the fault in the provider: calls to it hang until the 3 s timeout, each request retries three times, then the circuit breaker opens and payments-api answers 503 at once, leaving payments pending; it escalates to the provider and plans to reconcile pending payments, as the remedy asks.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:51:32.669Z",
+      "sha256": "406f19c88034f2d4ef17e346c8eb826ada111868504e8b37c99c6d60af959108"
+    },
+    "call": {
+      "reply_sha256": "406f19c88034f2d4ef17e346c8eb826ada111868504e8b37c99c6d60af959108",
+      "problems": []
+    }
+  }
+}

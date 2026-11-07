@@ -1,0 +1,841 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, secret-rotation, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 5 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+  "case": {
+    "name": "secret-rotation",
+    "kind": "fault",
+    "title": "The books stop catching up: our webhook receiver refuses every webhook",
+    "right_answer": "The fault's recorded cause: a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff.",
+    "right_action": [
+      "rollback_deploy",
+      "webhook-receiver"
+    ],
+    "fault": "secret-rotation",
+    "withheld": {},
+    "remedy": "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the provider sends every refused webhook again, and the books catch up by themselves",
+    "seed": 8,
+    "model": "claude-opus-5-5"
+  },
+  "seed": 8,
+  "model": "claude-opus-5-5",
+  "fault_name": "secret-rotation",
+  "rerun_command": "python -m klaxon.evaluation run --model claude-opus-5-5 --cases secret-rotation --seeds 8 --steps 10 --tool-calls 8 --rate 3",
+  "ran_at_utc": "2026-11-07T06:49:05+00:00",
+  "ran_at_local": "2026-11-07T01:49:05-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "57cba8419661bb5ed6aabc6d656cab44105ce7741d532f0da54ebe408c3e10d7",
+  "stack_files_sha256": "3422d244c892a4d48af2168784a3697b6a50f509d096e39ab0fe242ff4c4a7ee",
+  "git_commit": "ef399d7a5f3418c419e7d2985bb910173d813e7a",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:9bda7206e40c0f7b86a583b9ed464aad4c2e0cace7034caedd651593b05b28dd"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:9bda7206e40c0f7b86a583b9ed464aad4c2e0cace7034caedd651593b05b28dd"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:9bda7206e40c0f7b86a583b9ed464aad4c2e0cace7034caedd651593b05b28dd"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:9bda7206e40c0f7b86a583b9ed464aad4c2e0cace7034caedd651593b05b28dd"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:9bda7206e40c0f7b86a583b9ed464aad4c2e0cace7034caedd651593b05b28dd"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      }
+    ]
+  },
+  "fault": {
+    "name": "secret-rotation",
+    "title": "The books stop catching up: our webhook receiver refuses every webhook",
+    "cause": "a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff",
+    "expected_symptoms": [
+      "the books cannot catch up with the provider: the money check cannot settle, the provider's webhooks not acknowledged, and the books rule fires at its second evaluation, about 50 s after the deploy",
+      "the receiver refuses every webhook with a 400, counts it as bad_signature and logs 'webhook refused: bad signature'; the provider sends its growing backlog again and again, tens of times a second",
+      "nothing new is booked or confirmed, and both consumers' lag stays at 0: nothing reaches Kafka",
+      "payments and refunds still go through, but one whose answer was lost cannot be confirmed: its client's retries get 503 again, so the 5xx share of POST /payments about doubles and its p95 climbs to about 0.6 s, both under their thresholds",
+      "after the rollback the books catch up within about three minutes: the provider sends each refused webhook again within a minute of its last try, and one whose acknowledgement is then lost (the traffic's noise) a minute later"
+    ],
+    "expected_money": {
+      "during": "could not run",
+      "after": "passed",
+      "quiet": "passed"
+    },
+    "remedy": "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the provider sends every refused webhook again, and the books catch up by themselves"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 8,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "ecae3d69"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 77.2,
+    "injection_took": 2.2,
+    "alert_evaluation_began": 125.0,
+    "loop_started_at": 141.1,
+    "loop_ended_at": 164.6,
+    "gate_began_at": 164.6,
+    "gate_ended_at": 180.3,
+    "cleared_at": 182.4
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 1.2,
+      "at_utc": "2026-11-07T06:50:06Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.03
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.138,
+            "requests_per_second": 3.058,
+            "share": 0.045
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 76.2,
+      "took": 1.0,
+      "at_utc": "2026-11-07T06:50:22Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.1,
+            "requests_per_second": 3.399,
+            "share": 0.029
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 94.4,
+      "took": 15.6,
+      "at_utc": "2026-11-07T06:50:40Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.12,
+            "requests_per_second": 3.759,
+            "share": 0.032
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "could not settle",
+            "webhooks_not_acknowledged": 66
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": false,
+            "webhooks_not_acknowledged": 66,
+            "messages_behind": null
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 66 of the provider's webhooks up to it had not been acknowledged yet.",
+          "in_a_row": 1,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 125.0,
+      "took": 16.1,
+      "at_utc": "2026-11-07T06:51:11Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.622
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.38,
+            "requests_per_second": 3.879,
+            "share": 0.098
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "could not settle",
+            "webhooks_not_acknowledged": 186
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": false,
+            "webhooks_not_acknowledged": 186,
+            "messages_behind": null
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 186 of the provider's webhooks up to it had not been acknowledged yet.",
+          "in_a_row": 2,
+          "firing": true
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "BooksBehindProvider",
+        "summary": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 186 of the provider's webhooks up to it had not been acknowledged yet.",
+        "fired_at": "2026-11-07T06:51:11Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 272.4,
+      "took": 15.5,
+      "at_utc": "2026-11-07T06:53:38Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.02,
+            "requests_per_second": 3.297,
+            "share": 0.006
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "could not settle",
+            "webhooks_not_acknowledged": 2
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": false,
+            "webhooks_not_acknowledged": 2,
+            "messages_behind": null
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 2 of the provider's webhooks up to it had not been acknowledged yet.",
+          "in_a_row": 1,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "injected": {
+    "redeployed": "webhook-receiver",
+    "WEBHOOK_SECRET_VERSION": "v2"
+  },
+  "cleared": {
+    "redeployed": "webhook-receiver",
+    "WEBHOOK_SECRET_VERSION": "v1"
+  },
+  "alert": {
+    "name": "BooksBehindProvider",
+    "summary": "Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 186 of the provider's webhooks up to it had not been acknowledged yet.",
+    "fired_at": "2026-11-07T06:51:11Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.8",
+    "steps": 5,
+    "tool_calls": 4,
+    "seconds": 23.467,
+    "diagnosis": {
+      "hypothesis": "webhook-receiver was recreated at 06:50:23 with WEBHOOK_SECRET_VERSION=v2. That is the only change in the last 2.8 minutes. The receiver now refuses incoming provider webhooks with 'bad signature: signature mismatch', so it is most likely checking signatures against a secret the provider does not sign with. A refused webhook is not acknowledged, so the provider keeps resending it. Our books therefore cannot catch up to the provider's records, and the money check could not settle (186 webhooks unacknowledged). The webhook rate climbed from about 3.8/s at the deploy to about 25/s, which fits a growing backlog of retries.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "service_health",
+          "arguments": {},
+          "shows": "All containers are healthy, but webhook-receiver started at 06:50:23, about 1.6 min after the rest of the stack (06:48:44-06:48:52)."
+        },
+        {
+          "call_id": "c2",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "The newest deploy is webhook-receiver at 06:50:23 with WEBHOOK_SECRET_VERSION=v2. No other service changed."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"webhook-receiver\"} | severity_text != \"INFO\"",
+            "minutes": 5,
+            "limit": 20
+          },
+          "shows": "webhook-receiver logs a continuous stream of WARNING 'webhook refused: bad signature' (reason: signature mismatch) through 06:51:33, and more lines may exist."
+        },
+        {
+          "call_id": "c4",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (outcome) (rate(klaxon_webhooks_received_total[1m]))",
+            "minutes": 5
+          },
+          "shows": "The webhook receive rate rose from about 3.75/s at 06:50:22 to about 25.3/s by 06:51:37, right after the deploy. This fits the provider retrying refused webhooks. The series has no outcome label, so it does not split accepted from refused."
+        }
+      ],
+      "confidence": 0.8,
+      "proposed_fix": {
+        "kind": "rollback",
+        "target": "webhook-receiver",
+        "summary": "Roll webhook-receiver back to its previous WEBHOOK_SECRET_VERSION so that it verifies signatures with the secret the provider actually uses. The provider's retries should then be acknowledged, and both consumers will book the backlog. Afterwards, run money_check with wait=true to confirm the books settle. Coordinate any secret rotation with the provider before trying v2 again.",
+        "applied": false
+      },
+      "blast_radius": "webhook-receiver pauses briefly while it restarts, and the provider keeps retrying during that time. Once it is back, a burst of webhooks (the retry backlog) will reach Kafka and the consumers. Both consumers are idempotent or keyed by our id, so duplicate deliveries should be safe. If v2 was a deliberate secret rotation, rolling back reverts it.",
+      "rollback_plan": "Redeploy webhook-receiver with WEBHOOK_SECRET_VERSION=v2 again, after the provider has confirmed it signs with the v2 secret.",
+      "fix_action": {
+        "name": "rollback_deploy",
+        "arguments": {
+          "service": "webhook-receiver"
+        },
+        "applied": false
+      }
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "rubric": {
+      "version": 4,
+      "sha256": "88e724b0e5915247a6c9fab35b00d26b2720e5818ee5b7be955feacb3c70112c"
+    },
+    "fault": "secret-rotation",
+    "recorded_cause": "a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff",
+    "remedy": "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the provider sends every refused webhook again, and the books catch up by themselves",
+    "verdict": "names the cause",
+    "hypothesis": "webhook-receiver was recreated at 06:50:23 with WEBHOOK_SECRET_VERSION=v2. That is the only change in the last 2.8 minutes. The receiver now refuses incoming provider webhooks with 'bad signature: signature mismatch', so it is most likely checking signatures against a secret the provider does not sign with. A refused webhook is not acknowledged, so the provider keeps resending it. Our books therefore cannot catch up to the provider's records, and the money check could not settle (186 webhooks unacknowledged). The webhook rate climbed from about 3.8/s at the deploy to about 25/s, which fits a growing backlog of retries.",
+    "elements": [
+      {
+        "element": "where: the webhook receiver",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "what: our side moved it to a secret the provider does not sign with",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "how: it refuses every webhook, so nothing reaches the books",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "the deploy that brought it",
+        "required": false,
+        "named": true,
+        "cancelled": false
+      }
+    ],
+    "wrong_causes": [],
+    "wrong_causes_offered": [],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "webhook-receiver"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "rollback",
+        "config_change"
+      ],
+      "target_matches": "receiver"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 12,
+      "double_clicks.ran_first": 6,
+      "double_clicks.sent": 18,
+      "not_sent.refunds": 4,
+      "payments.arrived": 908,
+      "payments.succeeded": 901,
+      "payments.unknown": 7,
+      "refunds.succeeded": 91,
+      "refunds.unknown": 1,
+      "retries": 44,
+      "retries.after_409": 6,
+      "retries.after_503": 38,
+      "unknown_payments.confirmed_later": 3,
+      "unknown_payments.still_pending": 4,
+      "unknown_refunds.confirmed_later": 1
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": true,
+  "rehearsal": false,
+  "gate": {
+    "result": "not asked",
+    "detail": "redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+    "request_id": null,
+    "deploy": null,
+    "decided": null
+  },
+  "verification": null,
+  "undo": null,
+  "damage": {
+    "at_alert": {
+      "source": "the alert's own evaluation of the rules",
+      "at_utc": "2026-11-07T06:51:11Z",
+      "began": 125.0,
+      "money_check": {
+        "outcome": "could not settle",
+        "webhooks_not_acknowledged": 186
+      },
+      "lag": {
+        "ledger": 0.0,
+        "payment-confirmer": 0.0
+      }
+    },
+    "at_diagnosis": {
+      "at_utc": "2026-11-07T06:51:50Z",
+      "outcome": "could not settle",
+      "cutoff": 1794034310,
+      "findings": [],
+      "money_off_cents": null,
+      "behind": null,
+      "why": "not settled after 15.19 s: webhooks up to its cutoff not acknowledged by our receiver yet",
+      "counts": {}
+    }
+  },
+  "deploys": [
+    {
+      "seq": 61,
+      "at": "2026-11-07T06:50:25Z",
+      "service": "webhook-receiver",
+      "by": "klaxon.faults",
+      "container": "c172359ebee1",
+      "settings": {
+        "WEBHOOK_SECRET_VERSION": "v2"
+      },
+      "replaced_settings": {
+        "WEBHOOK_SECRET_VERSION": "v1"
+      }
+    },
+    {
+      "seq": 62,
+      "at": "2026-11-07T06:52:08Z",
+      "service": "webhook-receiver",
+      "by": "klaxon.faults",
+      "container": "3c909f81034e",
+      "settings": {
+        "WEBHOOK_SECRET_VERSION": "v1"
+      },
+      "replaced_settings": {
+        "WEBHOOK_SECRET_VERSION": "v2"
+      }
+    }
+  ],
+  "removed_by": "the harness's clearing (klaxon.faults)",
+  "printed_output": [
+    "Klaxon week 5: an evaluation run on case secret-rotation, seed 8, a fault: secret-rotation",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, secret-rotation, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 5 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "The fault: The books stop catching up: our webhook receiver refuses every webhook",
+    "  recorded cause: a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.03 s; 5xx share 0.045; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  76.2 s  p95 0.025 s; 5xx share 0.029; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  94.4 s  p95 0.025 s; 5xx share 0.032; lag ledger 0.0, payment-confirmer 0.0; money check could not settle; firing: none",
+    "  during t= 125.0 s  p95 0.622 s; 5xx share 0.098; lag ledger 0.0, payment-confirmer 0.0; money check could not settle; firing: BooksBehindProvider (the books)",
+    "  after  t= 272.4 s  p95 0.024 s; 5xx share 0.006; lag ledger 0.0, payment-confirmer 0.0; money check could not settle; firing: none",
+    "  the fault was injected at t=77.2 s: {\"redeployed\": \"webhook-receiver\", \"WEBHOOK_SECRET_VERSION\": \"v2\"}",
+    "",
+    "Alert BooksBehindProvider, fired at 2026-11-07T06:51:11Z: Our books cannot catch up with the provider: at each of the last 2 evaluations, the money check waited 15 s and could not settle up to its cutoff. At the last one, 186 of the provider's webhooks up to it had not been acknowledged yet.",
+    "",
+    "The loop stopped on diagnosed after 5 steps, 4 tool calls and 23.5 s.",
+    "  hypothesis: webhook-receiver was recreated at 06:50:23 with WEBHOOK_SECRET_VERSION=v2. That is the only change in the last 2.8 minutes. The receiver now refuses incoming provider webhooks with 'bad signature: signature mismatch', so it is most likely checking signatures against a secret the provider does not sign with. A refused webhook is not acknowledged, so the provider keeps resending it. Our books therefore cannot catch up to the provider's records, and the money check could not settle (186 webhooks unacknowledged). The webhook rate climbed from about 3.8/s at the deploy to about 25/s, which fits a growing backlog of retries.",
+    "  confidence: 0.8",
+    "  proposed fix (the model's words): rollback webhook-receiver: Roll webhook-receiver back to its previous WEBHOOK_SECRET_VERSION so that it verifies signatures with the secret the provider actually uses. The provider's retries should then be acknowledged, and both consumers will book the backlog. Afterwards, run money_check with wait=true to confirm the books settle. Coordinate any secret rotation with the provider before trying v2 again.",
+    "  action it names: rollback_deploy {\"service\": \"webhook-receiver\"} (an evaluation run: planned by code, never run)",
+    "",
+    "Compared by a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff",
+    "  hypothesis: webhook-receiver was recreated at 06:50:23 with WEBHOOK_SECRET_VERSION=v2. That is the only change in the last 2.8 minutes. The receiver now refuses incoming provider webhooks with 'bad signature: signature mismatch', so it is most likely checking signatures against a secret the provider does not sign with. A refused webhook is not acknowledged, so the provider keeps resending it. Our books therefore cannot catch up to the provider's records, and the money check could not settle (186 webhooks unacknowledged). The webhook rate climbed from about 3.8/s at the deploy to about 25/s, which fits a growing backlog of retries.",
+    "  named    (required) where: the webhook receiver",
+    "  named    (required) what: our side moved it to a secret the provider does not sign with",
+    "  named    (required) how: it refuses every webhook, so nothing reaches the books",
+    "  named    (optional) the deploy that brought it",
+    "  proposed fix: rollback on webhook-receiver; fits the remedy: True",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "The gate: not asked: redeploy webhook-receiver: WEBHOOK_SECRET_VERSION v2 -> v1",
+    "",
+    "The damage, by the money check:",
+    "  at the alert    2026-11-07T06:51:11Z  money check could not settle; lag ledger 0, payment-confirmer 0",
+    "  at the diagnosis 2026-11-07T06:51:50Z  not known: the money check could not settle (not settled after 15.19 s: webhooks up to its cutoff not acknowledged by our receiver yet)",
+    "",
+    "Deploys during the run (the deploy log):",
+    "  61 2026-11-07T06:50:25Z webhook-receiver by klaxon.faults: WEBHOOK_SECRET_VERSION=v2",
+    "  62 2026-11-07T06:52:08Z webhook-receiver by klaxon.faults: WEBHOOK_SECRET_VERSION=v1",
+    "",
+    "The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "Cleared at t=182.4 s: {\"redeployed\": \"webhook-receiver\", \"WEBHOOK_SECRET_VERSION\": \"v1\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}

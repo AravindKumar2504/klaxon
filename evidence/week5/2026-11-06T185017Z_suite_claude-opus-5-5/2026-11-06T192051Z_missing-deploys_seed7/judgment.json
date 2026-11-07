@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "The ledger consumer books a second time every webhook the provider sends again: its dedupe is gone (fault 1's recorded cause, which a deploy brought). Docker did not answer the two tools that read it, so the deploy list and the containers' health could not be read: a right diagnosis says what it could not check, and claims no deploy it has no evidence for. Rolling the ledger consumer back still fits the remedy: code plans a rollback from the deploy log, not from the tools.",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "diagnosis_sha256": "fe74cf3dd8bec6208caca841b1468e09499a9253ed39cc8a444e89aceb88477f",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": false,
+    "why": "It correctly says the ledger-consumer books each resent webhook again because its event_id dedupe is gone, and it says the deploy log was unreadable without claiming any deploy, but its main fix is a new unique-constraint code change, with the rollback only conditional.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:50:14.466Z",
+      "sha256": "d3679ab51e5f05984d0525317898fc74c4d1fa1c98d13e987b29f967ff5e797c"
+    },
+    "call": {
+      "reply_sha256": "d3679ab51e5f05984d0525317898fc74c4d1fa1c98d13e987b29f967ff5e797c",
+      "problems": []
+    }
+  }
+}

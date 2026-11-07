@@ -1,0 +1,115 @@
+{
+  "label": "A suite of Klaxon's evaluation runs (week 5): one model, its cases and seeds, each run on a fresh stack (make reset, then make up), live through Claude Code on Aravind's seat. In each run code plans any action the diagnosis names, nobody is asked, and nothing runs.",
+  "model": "claude-sonnet-5-5",
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "rate": 3.0,
+  "planned": [
+    {
+      "case": "duplicate-delivery",
+      "seed": 8
+    },
+    {
+      "case": "poison-message",
+      "seed": 8
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8
+    },
+    {
+      "case": "money-unit",
+      "seed": 8
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8
+    }
+  ],
+  "started_at_utc": "2026-11-07T07:06:12Z",
+  "runs": [
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "folder": "2026-11-07T070627Z_duplicate-delivery_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "folder": "2026-11-07T071010Z_poison-message_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "folder": "2026-11-07T071515Z_provider-outage_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "folder": "2026-11-07T071938Z_money-unit_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "folder": "2026-11-07T072326Z_secret-rotation_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "folder": "2026-11-07T072837Z_pool-exhaustion_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "folder": "2026-11-07T073327Z_false-alarm_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "folder": "2026-11-07T073523Z_missing-deploys_seed8",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false
+    }
+  ],
+  "not_run": [],
+  "stopped": null
+}

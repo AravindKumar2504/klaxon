@@ -1,0 +1,1834 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, money-unit, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 7 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+  "case": {
+    "name": "money-unit",
+    "kind": "fault",
+    "title": "Customers charged 100 times the amount: a money-unit bug",
+    "right_answer": "The fault's recorded cause: a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one.",
+    "right_action": [
+      "rollback_deploy",
+      "payments-api"
+    ],
+    "fault": "money-unit",
+    "withheld": {},
+    "remedy": "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the deploy what was charged above the amount, at the provider: our API refunds no more than our recorded amount (a write, so it needs approval)",
+    "seed": 9,
+    "model": "claude-opus-5-5"
+  },
+  "seed": 9,
+  "model": "claude-opus-5-5",
+  "fault_name": "money-unit",
+  "rerun_command": "python -m klaxon.evaluation run --model claude-opus-5-5 --cases money-unit --seeds 9 --steps 10 --tool-calls 8 --rate 3",
+  "ran_at_utc": "2026-11-07T07:53:45+00:00",
+  "ran_at_local": "2026-11-07T02:53:45-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "57cba8419661bb5ed6aabc6d656cab44105ce7741d532f0da54ebe408c3e10d7",
+  "stack_files_sha256": "3422d244c892a4d48af2168784a3697b6a50f509d096e39ab0fe242ff4c4a7ee",
+  "git_commit": "ef399d7a5f3418c419e7d2985bb910173d813e7a",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:8f162ef6bd285737ade853906fc5de5fac55cfd92c0415c971587b53ed39e502"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:8f162ef6bd285737ade853906fc5de5fac55cfd92c0415c971587b53ed39e502"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:8f162ef6bd285737ade853906fc5de5fac55cfd92c0415c971587b53ed39e502"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:8f162ef6bd285737ade853906fc5de5fac55cfd92c0415c971587b53ed39e502"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:8f162ef6bd285737ade853906fc5de5fac55cfd92c0415c971587b53ed39e502"
+      }
+    ]
+  },
+  "fault": {
+    "name": "money-unit",
+    "title": "Customers charged 100 times the amount: a money-unit bug",
+    "cause": "a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "expected_symptoms": [
+      "the money check fails on payments_match_provider, at the first evaluation after the deploy: for each payment since, the provider charged 100 times our amount ('amount differs')",
+      "the ledger books what the provider charged, so it agrees with the provider, and the other invariants pass",
+      "the payment confirmer logs a conflict for each such payment: the provider charged a different amount than our payment's",
+      "a payment whose answer was lost during the fault stays pending for good ('pending but charged, amount differs'): the confirmer refuses the provider's 100 times amount; its client's retries raise the p95 of POST /payments to about 0.6 s, under its threshold",
+      "the API stays healthy, and its answers show the right amount",
+      "refunds send the right amount: a full refund gives back 1% of what was charged"
+    ],
+    "expected_money": {
+      "during": "failed",
+      "after": "failed",
+      "quiet": "failed"
+    },
+    "remedy": "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the deploy what was charged above the amount, at the provider: our API refunds no more than our recorded amount (a write, so it needs approval)"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 9,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "ae6d0d7f"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 76.4,
+    "injection_took": 2.3,
+    "alert_evaluation_began": 93.7,
+    "loop_started_at": 94.4,
+    "loop_ended_at": 133.6,
+    "gate_began_at": 133.6,
+    "gate_ended_at": 134.5,
+    "cleared_at": 136.7
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 0.4,
+      "at_utc": "2026-11-07T07:54:45Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.05
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.133,
+            "requests_per_second": 3.41,
+            "share": 0.039
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 75.4,
+      "took": 1.0,
+      "at_utc": "2026-11-07T07:55:01Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.035
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.155,
+            "requests_per_second": 3.574,
+            "share": 0.043
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 93.7,
+      "took": 0.7,
+      "at_utc": "2026-11-07T07:55:19Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.598
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.271,
+            "requests_per_second": 3.3,
+            "share": 0.082
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 1.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "payments_match_provider": 48
+            },
+            "money_off_cents": 0
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 1 of its 5 invariants: payments_match_provider (48 findings).",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (48 findings).",
+        "fired_at": "2026-11-07T07:55:19Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 226.7,
+      "took": 0.7,
+      "at_utc": "2026-11-07T07:57:32Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.098,
+            "share": 0.013
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "payments_match_provider": 151
+            },
+            "money_off_cents": 0
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 1 of its 5 invariants: payments_match_provider (151 findings).",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (151 findings).",
+        "fired_at": "2026-11-07T07:57:32Z"
+      }
+    }
+  ],
+  "injected": {
+    "redeployed": "payments-api",
+    "CHARGE_AMOUNT_UNIT": "dollars"
+  },
+  "cleared": {
+    "redeployed": "payments-api",
+    "PROVIDER_BREAKER": "on",
+    "CHARGE_AMOUNT_UNIT": "cents",
+    "REFUND_CONNECTION": "returned"
+  },
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (48 findings).",
+    "fired_at": "2026-11-07T07:55:19Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.85",
+    "steps": 7,
+    "tool_calls": 4,
+    "seconds": 39.106,
+    "diagnosis": {
+      "hypothesis": "payments-api was redeployed at 07:55:02Z with CHARGE_AMOUNT_UNIT=dollars. It still stores amounts in cents but sends the provider a value read in the wrong unit, so every charge since then is 100x our amount (pmt_000247: $36.61 ours, $3,661.00 at the provider). payments_match_provider flags each as 'amount differs'. The ledger books the provider's events, so it stays balanced and matches the provider. Findings grew from 48 to 57, so the damage is ongoing. Left open: pmt_000257/258 map to each other's provider charges and pmt_000252 is pending for us but charged at the provider, possibly concurrency side effects. The pre-deploy value ('cents') is inferred, not seen, and the deploy may also have changed PROVIDER_BREAKER or REFUND_CONNECTION.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "money_check",
+          "arguments": {
+            "wait": true,
+            "timeout_seconds": 60
+          },
+          "shows": "Only payments_match_provider fails, with 57 findings from pmt_000247 on. Each provider charge is exactly 100x our amount_cents (3661 vs 366100). The ledger matches the provider, and refunds match."
+        },
+        {
+          "call_id": "c2",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "payments-api was the only service deployed after the 07:53:36 stack start: at 07:55:02Z, with CHARGE_AMOUNT_UNIT=dollars."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"payments-api\"} | payment_id = \"pmt_000247\"",
+            "minutes": 10,
+            "limit": 10
+          },
+          "shows": "pmt_000247, the first bad payment, succeeded at 07:55:03.445Z, about one second after the deploy, with amount_cents=3661 recorded on our side."
+        },
+        {
+          "call_id": "c4",
+          "tool": "get_trace",
+          "arguments": {
+            "trace_id": "7f79e77f1d34160e7f283d0b30ea1ffd"
+          },
+          "shows": "The pmt_000247 trace has payments-api inserting the payment and POSTing to fake-provider /v1/payments, which returned 200. The trace does not show the amount sent."
+        }
+      ],
+      "confidence": 0.85,
+      "proposed_fix": {
+        "kind": "rollback",
+        "target": "payments-api",
+        "summary": "Roll payments-api back to its settings before the 07:55:02 deploy (presumably CHARGE_AMOUNT_UNIT=cents) to stop new 100x charges. Afterwards, separately, refund or correct the overcharged provider charges from pmt_000247 on, using the money check findings as the list. Also look into the pmt_000257/258 swap and pending pmt_000252, then rerun the money check.",
+        "applied": false
+      },
+      "blast_radius": "payments-api restarts and briefly fails or delays payment and refund requests. The rollback also reverts any other setting that changed in that deploy, such as PROVIDER_BREAKER or REFUND_CONNECTION. It repairs none of the 57+ charges already overbilled at 100x; those need a data repair or refunds.",
+      "rollback_plan": "If the rollback makes things worse, redeploy payments-api with the 07:55:02 settings (CHARGE_AMOUNT_UNIT=dollars, PROVIDER_BREAKER=on, REFUND_CONNECTION=returned). Pausing payment traffic is the safer interim step.",
+      "fix_action": {
+        "name": "rollback_deploy",
+        "arguments": {
+          "service": "payments-api"
+        },
+        "applied": false
+      }
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "rubric": {
+      "version": 4,
+      "sha256": "88e724b0e5915247a6c9fab35b00d26b2720e5818ee5b7be955feacb3c70112c"
+    },
+    "fault": "money-unit",
+    "recorded_cause": "a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "remedy": "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the deploy what was charged above the amount, at the provider: our API refunds no more than our recorded amount (a write, so it needs approval)",
+    "verdict": "names the cause",
+    "hypothesis": "payments-api was redeployed at 07:55:02Z with CHARGE_AMOUNT_UNIT=dollars. It still stores amounts in cents but sends the provider a value read in the wrong unit, so every charge since then is 100x our amount (pmt_000247: $36.61 ours, $3,661.00 at the provider). payments_match_provider flags each as 'amount differs'. The ledger books the provider's events, so it stays balanced and matches the provider. Findings grew from 48 to 57, so the damage is ongoing. Left open: pmt_000257/258 map to each other's provider charges and pmt_000252 is pending for us but charged at the provider, possibly concurrency side effects. The pre-deploy value ('cents') is inferred, not seen, and the deploy may also have changed PROVIDER_BREAKER or REFUND_CONNECTION.",
+    "elements": [
+      {
+        "element": "where: the payments API",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "what: our amount in the wrong unit, 100 times over",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "how: the provider charges customers more than our records say",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "the deploy that brought it",
+        "required": false,
+        "named": true,
+        "cancelled": false
+      }
+    ],
+    "wrong_causes": [],
+    "wrong_causes_offered": [],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "payments-api"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "rollback",
+        "config_change"
+      ],
+      "target_matches": "payments"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 8,
+      "double_clicks.ran_first": 8,
+      "double_clicks.sent": 16,
+      "not_sent.refunds": 5,
+      "payments.arrived": 672,
+      "payments.succeeded": 666,
+      "payments.unknown": 6,
+      "refunds.succeeded": 58,
+      "retries": 43,
+      "retries.after_409": 8,
+      "retries.after_503": 32,
+      "retries.after_no_answer": 3,
+      "unknown_payments.no_answer": 1,
+      "unknown_payments.still_pending": 5
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": true,
+  "rehearsal": false,
+  "gate": {
+    "result": "not asked",
+    "detail": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)",
+    "request_id": null,
+    "deploy": null,
+    "decided": null
+  },
+  "verification": null,
+  "undo": null,
+  "damage": {
+    "at_alert": {
+      "source": "the alert's own evaluation of the rules",
+      "at_utc": "2026-11-07T07:55:19Z",
+      "began": 93.7,
+      "money_check": {
+        "outcome": "failed",
+        "invariants": 5,
+        "failed": {
+          "payments_match_provider": 48
+        },
+        "money_off_cents": 0
+      },
+      "lag": {
+        "ledger": 0.0,
+        "payment-confirmer": 1.0
+      }
+    },
+    "at_diagnosis": {
+      "at_utc": "2026-11-07T07:55:59Z",
+      "outcome": "failed",
+      "cutoff": 1794038159,
+      "findings": [
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000247 (pay_000247): amount differs",
+          "created": 1794038103,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000248 (pay_000248): amount differs",
+          "created": 1794038103,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000249 (pay_000249): amount differs",
+          "created": 1794038103,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000250 (pay_000250): amount differs",
+          "created": 1794038103,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000251 (pay_000251): amount differs",
+          "created": 1794038103,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000252 (pay_000252): pending but charged, amount differs",
+          "created": 1794038104,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000253 (pay_000253): amount differs",
+          "created": 1794038104,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000254 (pay_000254): amount differs",
+          "created": 1794038104,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000255 (pay_000255): amount differs",
+          "created": 1794038104,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000256 (pay_000256): amount differs",
+          "created": 1794038105,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000257 (pay_000258): amount differs",
+          "created": 1794038105,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000258 (pay_000257): amount differs",
+          "created": 1794038105,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000259 (pay_000259): amount differs",
+          "created": 1794038106,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000260 (pay_000260): amount differs",
+          "created": 1794038107,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000261 (pay_000261): amount differs",
+          "created": 1794038108,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000262 (pay_000262): amount differs",
+          "created": 1794038108,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000263 (pay_000263): amount differs",
+          "created": 1794038109,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000264 (pay_000264): amount differs",
+          "created": 1794038109,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000265 (pay_000265): pending but charged, amount differs",
+          "created": 1794038109,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000266 (pay_000266): amount differs",
+          "created": 1794038110,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000267 (pay_000267): amount differs",
+          "created": 1794038110,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000268 (pay_000268): amount differs",
+          "created": 1794038111,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000269 (pay_000269): amount differs",
+          "created": 1794038112,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000270 (pay_000270): amount differs",
+          "created": 1794038113,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000271 (pay_000271): amount differs",
+          "created": 1794038113,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000272 (pay_000272): amount differs",
+          "created": 1794038113,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000273 (pay_000273): amount differs",
+          "created": 1794038113,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000274 (pay_000274): amount differs",
+          "created": 1794038114,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000275 (pay_000275): amount differs",
+          "created": 1794038114,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000276 (pay_000276): amount differs",
+          "created": 1794038115,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000277 (pay_000277): amount differs",
+          "created": 1794038115,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000278 (pay_000278): amount differs",
+          "created": 1794038115,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000279 (pay_000279): amount differs",
+          "created": 1794038115,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000280 (pay_000280): amount differs",
+          "created": 1794038115,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000281 (pay_000281): amount differs",
+          "created": 1794038115,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000282 (pay_000282): amount differs",
+          "created": 1794038116,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000283 (pay_000283): amount differs",
+          "created": 1794038116,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000284 (pay_000284): amount differs",
+          "created": 1794038117,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000285 (pay_000285): amount differs",
+          "created": 1794038117,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000286 (pay_000286): amount differs",
+          "created": 1794038117,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000287 (pay_000287): amount differs",
+          "created": 1794038117,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000288 (pay_000288): amount differs",
+          "created": 1794038117,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000289 (pay_000289): amount differs",
+          "created": 1794038118,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000290 (pay_000290): amount differs",
+          "created": 1794038119,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000291 (pay_000291): amount differs",
+          "created": 1794038119,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000292 (pay_000292): amount differs",
+          "created": 1794038119,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000293 (pay_000293): amount differs",
+          "created": 1794038119,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000294 (pay_000294): amount differs",
+          "created": 1794038119,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000295 (pay_000295): amount differs",
+          "created": 1794038120,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000296 (pay_000296): amount differs",
+          "created": 1794038120,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000297 (pay_000297): amount differs",
+          "created": 1794038120,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000298 (pay_000298): amount differs",
+          "created": 1794038121,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000299 (pay_000299): amount differs",
+          "created": 1794038121,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000300 (pay_000300): amount differs",
+          "created": 1794038122,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000301 (pay_000301): amount differs",
+          "created": 1794038122,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000302 (pay_000302): amount differs",
+          "created": 1794038122,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000303 (pay_000303): amount differs",
+          "created": 1794038122,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000304 (pay_000304): amount differs",
+          "created": 1794038123,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000305 (pay_000305): amount differs",
+          "created": 1794038123,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000306 (pay_000306): amount differs",
+          "created": 1794038123,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000307 (pay_000307): amount differs",
+          "created": 1794038125,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000308 (pay_000308): amount differs",
+          "created": 1794038125,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000309 (pay_000309): amount differs",
+          "created": 1794038125,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000310 (pay_000310): amount differs",
+          "created": 1794038126,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000311 (pay_000311): amount differs",
+          "created": 1794038126,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000312 (pay_000312): amount differs",
+          "created": 1794038126,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000313 (pay_000313): amount differs",
+          "created": 1794038126,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000314 (pay_000314): amount differs",
+          "created": 1794038128,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000315 (pay_000315): amount differs",
+          "created": 1794038128,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000316 (pay_000316): amount differs",
+          "created": 1794038128,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000317 (pay_000317): amount differs",
+          "created": 1794038129,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000318 (pay_000318): amount differs",
+          "created": 1794038129,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000319 (pay_000319): amount differs",
+          "created": 1794038130,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000320 (pay_000320): amount differs",
+          "created": 1794038130,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000321 (pay_000321): amount differs",
+          "created": 1794038130,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000322 (pay_000322): amount differs",
+          "created": 1794038130,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000323 (pay_000323): amount differs",
+          "created": 1794038131,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000324 (pay_000324): amount differs",
+          "created": 1794038131,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000325 (pay_000325): amount differs",
+          "created": 1794038132,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000326 (pay_000326): amount differs",
+          "created": 1794038132,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000327 (pay_000327): amount differs",
+          "created": 1794038132,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000328 (pay_000328): amount differs",
+          "created": 1794038132,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000329 (pay_000329): amount differs",
+          "created": 1794038133,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000330 (pay_000330): amount differs",
+          "created": 1794038133,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000331 (pay_000331): pending but charged, amount differs",
+          "created": 1794038134,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000332 (pay_000332): amount differs",
+          "created": 1794038134,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000333 (pay_000333): amount differs",
+          "created": 1794038134,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000334 (pay_000334): amount differs",
+          "created": 1794038135,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000335 (pay_000335): amount differs",
+          "created": 1794038135,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000336 (pay_000336): amount differs",
+          "created": 1794038135,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000337 (pay_000337): amount differs",
+          "created": 1794038136,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000338 (pay_000338): amount differs",
+          "created": 1794038136,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000339 (pay_000339): amount differs",
+          "created": 1794038136,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000340 (pay_000340): amount differs",
+          "created": 1794038137,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000341 (pay_000341): amount differs",
+          "created": 1794038138,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000342 (pay_000342): amount differs",
+          "created": 1794038138,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000343 (pay_000343): amount differs",
+          "created": 1794038139,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000344 (pay_000344): amount differs",
+          "created": 1794038139,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000345 (pay_000345): amount differs",
+          "created": 1794038139,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000346 (pay_000346): amount differs",
+          "created": 1794038139,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000347 (pay_000347): amount differs",
+          "created": 1794038140,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000348 (pay_000348): amount differs",
+          "created": 1794038140,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000349 (pay_000349): amount differs",
+          "created": 1794038141,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000350 (pay_000350): amount differs",
+          "created": 1794038142,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000351 (pay_000351): amount differs",
+          "created": 1794038143,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000352 (pay_000352): amount differs",
+          "created": 1794038143,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000353 (pay_000353): amount differs",
+          "created": 1794038144,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000354 (pay_000354): amount differs",
+          "created": 1794038144,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000355 (pay_000355): amount differs",
+          "created": 1794038146,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000356 (pay_000356): amount differs",
+          "created": 1794038146,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000357 (pay_000357): amount differs",
+          "created": 1794038146,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000358 (pay_000358): amount differs",
+          "created": 1794038147,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000359 (pay_000359): amount differs",
+          "created": 1794038147,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000360 (pay_000360): pending but charged, amount differs",
+          "created": 1794038148,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000361 (pay_000361): amount differs",
+          "created": 1794038148,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000362 (pay_000362): amount differs",
+          "created": 1794038148,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000363 (pay_000363): amount differs",
+          "created": 1794038149,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000364 (pay_000364): amount differs",
+          "created": 1794038149,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000365 (pay_000365): pending but charged, amount differs",
+          "created": 1794038149,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000366 (pay_000366): amount differs",
+          "created": 1794038150,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000367 (pay_000367): amount differs",
+          "created": 1794038150,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000368 (pay_000368): amount differs",
+          "created": 1794038150,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000369 (pay_000369): amount differs",
+          "created": 1794038151,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000370 (pay_000370): amount differs",
+          "created": 1794038151,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000371 (pay_000371): amount differs",
+          "created": 1794038151,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000372 (pay_000372): amount differs",
+          "created": 1794038151,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000373 (pay_000373): amount differs",
+          "created": 1794038152,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000374 (pay_000374): amount differs",
+          "created": 1794038152,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000375 (pay_000375): amount differs",
+          "created": 1794038153,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000376 (pay_000376): amount differs",
+          "created": 1794038153,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000377 (pay_000377): amount differs",
+          "created": 1794038153,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000378 (pay_000378): amount differs",
+          "created": 1794038153,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000379 (pay_000379): amount differs",
+          "created": 1794038153,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000380 (pay_000380): pending but charged, amount differs",
+          "created": 1794038154,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000381 (pay_000381): amount differs",
+          "created": 1794038154,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000382 (pay_000382): amount differs",
+          "created": 1794038154,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000383 (pay_000383): amount differs",
+          "created": 1794038155,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000384 (pay_000384): amount differs",
+          "created": 1794038155,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000385 (pay_000385): amount differs",
+          "created": 1794038155,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000386 (pay_000386): amount differs",
+          "created": 1794038155,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000387 (pay_000387): amount differs",
+          "created": 1794038155,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000388 (pay_000388): amount differs",
+          "created": 1794038156,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000389 (pay_000389): amount differs",
+          "created": 1794038156,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000390 (pay_000390): amount differs",
+          "created": 1794038156,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000391 (pay_000391): amount differs",
+          "created": 1794038157,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000392 (pay_000392): amount differs",
+          "created": 1794038157,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000393 (pay_000393): amount differs",
+          "created": 1794038157,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000394 (pay_000394): amount differs",
+          "created": 1794038159,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000395 (pay_000395): amount differs",
+          "created": 1794038159,
+          "payment": null
+        },
+        {
+          "invariant": "payments_match_provider",
+          "kind": "payment",
+          "key": "payment pmt_000396 (pay_000396): amount differs",
+          "created": 1794038159,
+          "payment": null
+        }
+      ],
+      "money_off_cents": 0,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "payment": 150
+      }
+    }
+  },
+  "deploys": [
+    {
+      "seq": 83,
+      "at": "2026-11-07T07:55:04Z",
+      "service": "payments-api",
+      "by": "klaxon.faults",
+      "container": "12f58d09161b",
+      "settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "dollars",
+        "REFUND_CONNECTION": "returned"
+      },
+      "replaced_settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "cents",
+        "REFUND_CONNECTION": "returned"
+      }
+    },
+    {
+      "seq": 84,
+      "at": "2026-11-07T07:56:02Z",
+      "service": "payments-api",
+      "by": "klaxon.faults",
+      "container": "f97b45913285",
+      "settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "cents",
+        "REFUND_CONNECTION": "returned"
+      },
+      "replaced_settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "dollars",
+        "REFUND_CONNECTION": "returned"
+      }
+    }
+  ],
+  "removed_by": "the harness's clearing (klaxon.faults)",
+  "printed_output": [
+    "Klaxon week 5: an evaluation run on case money-unit, seed 9, a fault: money-unit",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, money-unit, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 7 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "The fault: Customers charged 100 times the amount: a money-unit bug",
+    "  recorded cause: a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.05 s; 5xx share 0.039; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  75.4 s  p95 0.035 s; 5xx share 0.043; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  93.7 s  p95 0.598 s; 5xx share 0.082; lag ledger 0.0, payment-confirmer 1.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  after  t= 226.7 s  p95 0.024 s; 5xx share 0.013; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  the fault was injected at t=76.4 s: {\"redeployed\": \"payments-api\", \"CHARGE_AMOUNT_UNIT\": \"dollars\"}",
+    "",
+    "Alert MoneyCheckFailed, fired at 2026-11-07T07:55:19Z: The money check failed 1 of its 5 invariants: payments_match_provider (48 findings).",
+    "",
+    "The loop stopped on diagnosed after 7 steps, 4 tool calls and 39.1 s.",
+    "  hypothesis: payments-api was redeployed at 07:55:02Z with CHARGE_AMOUNT_UNIT=dollars. It still stores amounts in cents but sends the provider a value read in the wrong unit, so every charge since then is 100x our amount (pmt_000247: $36.61 ours, $3,661.00 at the provider). payments_match_provider flags each as 'amount differs'. The ledger books the provider's events, so it stays balanced and matches the provider. Findings grew from 48 to 57, so the damage is ongoing. Left open: pmt_000257/258 map to each other's provider charges and pmt_000252 is pending for us but charged at the provider, possibly concurrency side effects. The pre-deploy value ('cents') is inferred, not seen, and the deploy may also have changed PROVIDER_BREAKER or REFUND_CONNECTION.",
+    "  confidence: 0.85",
+    "  proposed fix (the model's words): rollback payments-api: Roll payments-api back to its settings before the 07:55:02 deploy (presumably CHARGE_AMOUNT_UNIT=cents) to stop new 100x charges. Afterwards, separately, refund or correct the overcharged provider charges from pmt_000247 on, using the money check findings as the list. Also look into the pmt_000257/258 swap and pending pmt_000252, then rerun the money check.",
+    "  action it names: rollback_deploy {\"service\": \"payments-api\"} (an evaluation run: planned by code, never run)",
+    "",
+    "Compared by a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "  hypothesis: payments-api was redeployed at 07:55:02Z with CHARGE_AMOUNT_UNIT=dollars. It still stores amounts in cents but sends the provider a value read in the wrong unit, so every charge since then is 100x our amount (pmt_000247: $36.61 ours, $3,661.00 at the provider). payments_match_provider flags each as 'amount differs'. The ledger books the provider's events, so it stays balanced and matches the provider. Findings grew from 48 to 57, so the damage is ongoing. Left open: pmt_000257/258 map to each other's provider charges and pmt_000252 is pending for us but charged at the provider, possibly concurrency side effects. The pre-deploy value ('cents') is inferred, not seen, and the deploy may also have changed PROVIDER_BREAKER or REFUND_CONNECTION.",
+    "  named    (required) where: the payments API",
+    "  named    (required) what: our amount in the wrong unit, 100 times over",
+    "  named    (required) how: the provider charges customers more than our records say",
+    "  named    (optional) the deploy that brought it",
+    "  proposed fix: rollback on payments-api; fits the remedy: True",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "The gate: not asked: redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)",
+    "",
+    "The damage, by the money check:",
+    "  at the alert    2026-11-07T07:55:19Z  money check failed: payments_match_provider 48; lag ledger 0, payment-confirmer 1",
+    "  at the diagnosis 2026-11-07T07:55:59Z  150 payments that disagree with the provider's charges",
+    "",
+    "Deploys during the run (the deploy log):",
+    "  83 2026-11-07T07:55:04Z payments-api by klaxon.faults: PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=dollars, REFUND_CONNECTION=returned",
+    "  84 2026-11-07T07:56:02Z payments-api by klaxon.faults: PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=returned",
+    "",
+    "The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "Cleared at t=136.7 s: {\"redeployed\": \"payments-api\", \"PROVIDER_BREAKER\": \"on\", \"CHARGE_AMOUNT_UNIT\": \"cents\", \"REFUND_CONNECTION\": \"returned\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}

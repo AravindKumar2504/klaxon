@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "duplicate-delivery",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "diagnosis_sha256": "b7641eabb8e9a653ad2fd77ee67139a1dd9fddbce9214447c6b73fb99e7445b0",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It names the ledger-consumer deploy with LEDGER_HANDLER=naive, which has no dedupe, as booking every redelivered webhook again, and it proposes the rollback plus reversals of the extra postings.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:49:42.538Z",
+      "sha256": "9a109a72ab4b4892eb12833946a17e2a292e7bd09f54a80149000b7ab283f097"
+    },
+    "call": {
+      "reply_sha256": "9a109a72ab4b4892eb12833946a17e2a292e7bd09f54a80149000b7ab283f097",
+      "problems": []
+    }
+  }
+}

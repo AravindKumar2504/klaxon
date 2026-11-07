@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "false-alarm",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action"
+  },
+  "diagnosis_sha256": "f7f538b6df68fbeba05270abc7cb18df2006529147e320323d6d93e8df01e0d3",
+  "judgment": {
+    "verdict": "partly",
+    "fix_fits": true,
+    "why": "It read the ledger lag as 0 and found no persistent fault, but it did not call the alert false; it blamed a 250-message backlog from the restart that it admits it never observed.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:51:48.359Z",
+      "sha256": "b3f971eb9f222beaf2d7c171dac103b3dd5a7bcf88975d42741aa9a97860de19"
+    },
+    "call": {
+      "reply_sha256": "b3f971eb9f222beaf2d7c171dac103b3dd5a7bcf88975d42741aa9a97860de19",
+      "problems": []
+    }
+  }
+}

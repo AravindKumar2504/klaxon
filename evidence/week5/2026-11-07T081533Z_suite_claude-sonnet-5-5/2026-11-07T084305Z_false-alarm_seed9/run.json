@@ -1,0 +1,599 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. No fault was injected: an evaluation case, a false alarm (week 5). Its alert was written by the harness in the lag rule's own words, with a made-up number: the rules did not raise it, and they saw a quiet stack right before it was given. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 6 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the case's right answer by a rule (klaxon.grading), not by a person or a model. Its diagnosis named no action, so nobody was asked to approve one.",
+  "case": {
+    "name": "false-alarm",
+    "kind": "false alarm",
+    "title": "A false alarm: the ledger consumer group said to be 250 messages behind, on a healthy stack",
+    "right_answer": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "right_action": null,
+    "fault": null,
+    "withheld": {},
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action",
+    "seed": 9,
+    "model": "claude-sonnet-5-5"
+  },
+  "seed": 9,
+  "model": "claude-sonnet-5-5",
+  "fault_name": null,
+  "rerun_command": "python -m klaxon.evaluation run --model claude-sonnet-5-5 --cases false-alarm --seeds 9 --steps 10 --tool-calls 8 --rate 3",
+  "ran_at_utc": "2026-11-07T08:43:05+00:00",
+  "ran_at_local": "2026-11-07T03:43:05-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "57cba8419661bb5ed6aabc6d656cab44105ce7741d532f0da54ebe408c3e10d7",
+  "stack_files_sha256": "3422d244c892a4d48af2168784a3697b6a50f509d096e39ab0fe242ff4c4a7ee",
+  "git_commit": "ef399d7a5f3418c419e7d2985bb910173d813e7a",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:0ceb1bc83276607f332d64766b8ba146f55b2884fa0beb99dedd147bd2ff85a6"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:0ceb1bc83276607f332d64766b8ba146f55b2884fa0beb99dedd147bd2ff85a6"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:0ceb1bc83276607f332d64766b8ba146f55b2884fa0beb99dedd147bd2ff85a6"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:0ceb1bc83276607f332d64766b8ba146f55b2884fa0beb99dedd147bd2ff85a6"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:0ceb1bc83276607f332d64766b8ba146f55b2884fa0beb99dedd147bd2ff85a6"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      }
+    ]
+  },
+  "fault": {
+    "name": "false-alarm",
+    "kind": "false alarm",
+    "title": "A false alarm: the ledger consumer group said to be 250 messages behind, on a healthy stack",
+    "right_answer": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "right_action": null,
+    "fault": null,
+    "withheld": {},
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action",
+    "seed": 9,
+    "model": "claude-sonnet-5-5"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 9,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "8531c3bf"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "alert_given_at": 77.3,
+    "loop_started_at": 77.3,
+    "loop_ended_at": 99.2,
+    "gate_began_at": 99.2,
+    "gate_ended_at": 100.3
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 1.2,
+      "at_utc": "2026-11-07T08:44:06Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.041
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.133,
+            "requests_per_second": 3.439,
+            "share": 0.039
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 76.3,
+      "took": 1.0,
+      "at_utc": "2026-11-07T08:44:22Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.036
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.158,
+            "requests_per_second": 3.616,
+            "share": 0.044
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "after",
+      "began": 100.3,
+      "took": 0.9,
+      "at_utc": "2026-11-07T08:44:46Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.14,
+            "requests_per_second": 3.339,
+            "share": 0.042
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "injected": null,
+  "cleared": null,
+  "alert": {
+    "name": "ConsumerLagHigh",
+    "summary": "The ledger consumer group is 250 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+    "fired_at": "2026-11-07T08:44:22Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.7",
+    "steps": 6,
+    "tool_calls": 5,
+    "seconds": 21.868,
+    "diagnosis": {
+      "hypothesis": "No lasting fault found. All services were recreated together at 08:42:56 (about 100 seconds before the alert). While the ledger consumer restarted and rejoined its group, it fell behind and lag reached about 250. It then caught up. The ledger consumer is now posting events and lag is 0 on all partitions. Some events were redelivered after the restart and the ledger consumer correctly recorded them as already_processed, so nothing was double-booked. The alert's symptom was not seen live. I did not observe the 250 peak, because the lag series only had points after 08:43. The restart as the cause of the backlog is inferred from timing, not shown directly.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (group) (klaxon_kafka_consumer_lag)",
+            "minutes": 30
+          },
+          "shows": "Total consumer lag is 0 at 08:43 and 08:44, so the alert's symptom is no longer present. Only two points exist, which fits a recent restart."
+        },
+        {
+          "call_id": "c2",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "klaxon_kafka_consumer_lag",
+            "minutes": 30
+          },
+          "shows": "Per-partition lag is 0 for both the ledger and payment-confirmer groups on all three partitions."
+        },
+        {
+          "call_id": "c3",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "Every service, including ledger-consumer, kafka and postgres, was created at 08:42:56, and the ledger consumer settings are the safe ones (idempotent, dead_letter). This points to a full stack restart, not a bad config deploy."
+        },
+        {
+          "call_id": "c4",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (consumer, outcome) (rate(klaxon_consumer_events_total[2m]))",
+            "minutes": 10
+          },
+          "shows": "The ledger consumer is posting events at a rising rate with only a few already_processed outcomes and no error or dead-letter outcomes. Processing is healthy and redeliveries are deduplicated."
+        },
+        {
+          "call_id": "c5",
+          "tool": "money_check",
+          "arguments": {
+            "wait": true,
+            "timeout_seconds": 60
+          },
+          "shows": "The money check passed on all five invariants: 311 provider events posted exactly once, the ledger balanced, and payments, refunds and the ledger match the provider. No money was lost or double-booked."
+        }
+      ],
+      "confidence": 0.7,
+      "proposed_fix": {
+        "kind": "none",
+        "target": "ledger-consumer",
+        "summary": "No fix needed now. Lag has cleared and the books reconcile. Find out why the whole stack was recreated at 08:42:56, and consider a longer for-duration on ConsumerLagHigh so a brief restart backlog does not page. If lag comes back, check the ledger-consumer logs and traces.",
+        "applied": false
+      },
+      "blast_radius": "No action is taken, so nothing is affected. A rollback would pause the ledger consumer for no benefit, since the deploy settings show no bad change.",
+      "rollback_plan": "Not applicable, because no change is proposed."
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "rubric": {
+      "version": 4,
+      "sha256": "88e724b0e5915247a6c9fab35b00d26b2720e5818ee5b7be955feacb3c70112c"
+    },
+    "fault": "false-alarm",
+    "recorded_cause": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action",
+    "verdict": "partly",
+    "hypothesis": "No lasting fault found. All services were recreated together at 08:42:56 (about 100 seconds before the alert). While the ledger consumer restarted and rejoined its group, it fell behind and lag reached about 250. It then caught up. The ledger consumer is now posting events and lag is 0 on all partitions. Some events were redelivered after the restart and the ledger consumer correctly recorded them as already_processed, so nothing was double-booked. The alert's symptom was not seen live. I did not observe the 250 peak, because the lag series only had points after 08:43. The restart as the cause of the backlog is inferred from timing, not shown directly.",
+    "elements": [
+      {
+        "element": "where: the ledger consumer group the alert names",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "what: the alert is false, and nothing is wrong",
+        "required": true,
+        "named": false,
+        "cancelled": false
+      },
+      {
+        "element": "how it knows: the lag reads near 0, and the group keeps up",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      }
+    ],
+    "wrong_causes": [],
+    "wrong_causes_offered": [],
+    "proposed_fix": {
+      "kind": "none",
+      "target": "ledger-consumer"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "none"
+      ],
+      "target_matches": ""
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 2,
+      "double_clicks.ran_first": 5,
+      "double_clicks.sent": 7,
+      "not_sent.refunds": 2,
+      "payments.arrived": 313,
+      "payments.succeeded": 313,
+      "refunds.succeeded": 30,
+      "retries": 17,
+      "retries.after_409": 5,
+      "retries.after_503": 12
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": true,
+  "rehearsal": false,
+  "gate": {
+    "result": "no action",
+    "detail": "the diagnosis names no action",
+    "request_id": null,
+    "deploy": null,
+    "decided": null
+  },
+  "verification": null,
+  "undo": null,
+  "damage": {
+    "at_alert": {
+      "source": "the alert's own evaluation of the rules",
+      "at_utc": "2026-11-07T08:44:22Z",
+      "began": 76.3,
+      "money_check": {
+        "outcome": "passed",
+        "invariants": 5,
+        "failed": {},
+        "money_off_cents": 0
+      },
+      "lag": {
+        "ledger": 0.0,
+        "payment-confirmer": 0.0
+      }
+    },
+    "at_diagnosis": {
+      "at_utc": "2026-11-07T08:44:45Z",
+      "outcome": "passed",
+      "cutoff": 1794041085,
+      "findings": [],
+      "money_off_cents": 0,
+      "behind": null,
+      "why": null,
+      "counts": {}
+    }
+  },
+  "deploys": null,
+  "removed_by": null,
+  "printed_output": [
+    "Klaxon week 5: an evaluation run (case false-alarm, seed 9): a false alarm",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. No fault was injected: an evaluation case, a false alarm (week 5). Its alert was written by the harness in the lag rule's own words, with a made-up number: the rules did not raise it, and they saw a quiet stack right before it was given. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 6 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the case's right answer by a rule (klaxon.grading), not by a person or a model. Its diagnosis named no action, so nobody was asked to approve one.",
+    "",
+    "The case: A false alarm: the ledger consumer group said to be 250 messages behind, on a healthy stack",
+    "  right answer: Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.041 s; 5xx share 0.039; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  76.3 s  p95 0.036 s; 5xx share 0.044; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  after  t= 100.3 s  p95 0.025 s; 5xx share 0.042; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "",
+    "Alert ConsumerLagHigh (written by the harness, not raised by the rules), given at 2026-11-07T08:44:22Z: The ledger consumer group is 250 messages behind on the topic provider-events, all partitions together; the threshold is 50.",
+    "",
+    "The loop stopped on diagnosed after 6 steps, 5 tool calls and 21.9 s.",
+    "  hypothesis: No lasting fault found. All services were recreated together at 08:42:56 (about 100 seconds before the alert). While the ledger consumer restarted and rejoined its group, it fell behind and lag reached about 250. It then caught up. The ledger consumer is now posting events and lag is 0 on all partitions. Some events were redelivered after the restart and the ledger consumer correctly recorded them as already_processed, so nothing was double-booked. The alert's symptom was not seen live. I did not observe the 250 peak, because the lag series only had points after 08:43. The restart as the cause of the backlog is inferred from timing, not shown directly.",
+    "  confidence: 0.7",
+    "  proposed fix (the model's words): none ledger-consumer: No fix needed now. Lag has cleared and the books reconcile. Find out why the whole stack was recreated at 08:42:56, and consider a longer for-duration on ConsumerLagHigh so a brief restart backlog does not page. If lag comes back, check the ledger-consumer logs and traces.",
+    "",
+    "Compared by a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "  hypothesis: No lasting fault found. All services were recreated together at 08:42:56 (about 100 seconds before the alert). While the ledger consumer restarted and rejoined its group, it fell behind and lag reached about 250. It then caught up. The ledger consumer is now posting events and lag is 0 on all partitions. Some events were redelivered after the restart and the ledger consumer correctly recorded them as already_processed, so nothing was double-booked. The alert's symptom was not seen live. I did not observe the 250 peak, because the lag series only had points after 08:43. The restart as the cause of the backlog is inferred from timing, not shown directly.",
+    "  named    (required) where: the ledger consumer group the alert names",
+    "  not named (required) what: the alert is false, and nothing is wrong",
+    "  named    (required) how it knows: the lag reads near 0, and the group keeps up",
+    "  proposed fix: none on ledger-consumer; fits the remedy: True",
+    "  verdict: PARTLY",
+    "",
+    "The gate: no action: the diagnosis names no action",
+    "",
+    "The money at the diagnosis: 2026-11-07T08:44:45Z  no damage: the money check passed",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}

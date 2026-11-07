@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "The ledger consumer books a second time every webhook the provider sends again: its dedupe is gone (fault 1's recorded cause, which a deploy brought). Docker did not answer the two tools that read it, so the deploy list and the containers' health could not be read: a right diagnosis says what it could not check, and claims no deploy it has no evidence for. Rolling the ledger consumer back still fits the remedy: code plans a rollback from the deploy log, not from the tools.",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "diagnosis_sha256": "e62f5db2a792a49b51d1034402865886ce081d8436e0afefa89f2fad4637de5a",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It names the ledger consumer's lost dedupe, seen in the 'naive' restart, as why provider retries are booked twice, and it says recent_deploys timed out so it claims no unverified deploy.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:50:44.112Z",
+      "sha256": "d35d3e2dafef126a79b849f7d43b19bd6e7dafedd1e28dc10ed67815ce844fd5"
+    },
+    "call": {
+      "reply_sha256": "d35d3e2dafef126a79b849f7d43b19bd6e7dafedd1e28dc10ed67815ce844fd5",
+      "problems": []
+    }
+  }
+}

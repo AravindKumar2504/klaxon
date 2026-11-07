@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "money-unit",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "remedy": "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the deploy what was charged above the amount, at the provider: our API refunds no more than our recorded amount (a write, so it needs approval)"
+  },
+  "diagnosis_sha256": "f36630529ed52ad5f78ee7d7d8adc407c9d7bfa5de3de7062a802831249d87c4",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It names the payments-api deploy that set CHARGE_AMOUNT_UNIT=dollars, which treats amounts already in cents as dollars and so charges 100x at the provider while our records stay right, and it proposes rolling back plus refunding the overcharges at the provider.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:49:55.712Z",
+      "sha256": "d5e072efb349bee47af37c9a0ceb56cb422756a1adef616c300ef4539e9ec9a4"
+    },
+    "call": {
+      "reply_sha256": "d5e072efb349bee47af37c9a0ceb56cb422756a1adef616c300ef4539e9ec9a4",
+      "problems": []
+    }
+  }
+}

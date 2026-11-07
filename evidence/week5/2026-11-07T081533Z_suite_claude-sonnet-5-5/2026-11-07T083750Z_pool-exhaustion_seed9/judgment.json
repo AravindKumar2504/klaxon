@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "pool-exhaustion",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500",
+    "remedy": "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool"
+  },
+  "diagnosis_sha256": "6350a65bc8b1c3a8c4ddc84c5db9d9e6d8459874d367e10e06483b3df6afcff5",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It picks REFUND_CONNECTION=kept as the most likely cause, with refunds keeping DB connections until the pool is exhausted and requests hit PoolTimeout and return 500, and it proposes rolling back payments-api.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-07T08:52:50.923Z",
+      "sha256": "23a99786ea9465cdb726c1e9761f195e21a0802c09927bd0ddce20d9da947e86"
+    },
+    "call": {
+      "reply_sha256": "23a99786ea9465cdb726c1e9761f195e21a0802c09927bd0ddce20d9da947e86",
+      "problems": []
+    }
+  }
+}
