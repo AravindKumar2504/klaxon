@@ -53,6 +53,10 @@ DRAWS_ON = {
     "repairs": ("repairs",),
 }
 SAVED, STOPPED, MEANWHILE = "saved", "stopped", "meanwhile"
+# His request (2026-11-07): his marks given in the chat, and entered by Claude, word for word. Recorded as such:
+# weaker proof that they are his than marks typed at his terminal, and never shown as typed.
+CHAT = "given by Aravind in the chat, entered by Claude"
+HOWS = {gate.TYPED: "make review-postmortem", CHAT: "his marks given in the chat, entered by Claude"}
 
 
 class NoReview(ValueError):
@@ -182,18 +186,42 @@ def review_one(
     if sure.strip().lower() != "y":
         terminal.write("Nothing saved for this draft.\n")
         return STOPPED
+    if record(folder, saved, marks, gate.TYPED, now) == MEANWHILE:
+        terminal.write("It was reviewed meanwhile: nothing was written.\n")
+        return MEANWHILE
+    terminal.write(f"Saved: {REVIEW} and {REVIEWED}\n")
+    return SAVED
+
+
+def check(marks: Sequence[Mapping]) -> None:
+    """ValueError unless marks are one per paragraph, in the draft's order, each right or wrong, a wrong one with
+    its sentence."""
+    if [item.get("paragraph") for item in marks] != list(HEADINGS):
+        raise ValueError(f"marks must be one per paragraph, in order: {', '.join(HEADINGS)}")
+    for item in marks:
+        if item.get("mark") not in MARKS.values():
+            raise ValueError(f"{item['paragraph']}: a mark is right or wrong")
+        if item["mark"] == "wrong" and not item.get("why"):
+            raise ValueError(f"{item['paragraph']}: a wrong mark needs one sentence on what is wrong")
+
+
+def record(folder: Path, saved: Mapping, marks: Sequence[Mapping], how: str, now: Callable[[], float]) -> str:
+    """His marks on a draft, saved once beside it with their page: SAVED, or MEANWHILE when a review was written
+    first (nothing is written). how says how they came: typed at his terminal, or given in the chat and entered by
+    Claude."""
+    check(marks)
+    if how not in HOWS:
+        raise ValueError(f"how marks came must be one of: {', '.join(HOWS)}")
     value = {
         "label": LABEL,
         "draft": {"run": folder.name, "sha256": digest(saved)},
-        "marks": marks,
+        "marks": [{"paragraph": m["paragraph"], "mark": m["mark"], "why": m.get("why")} for m in marks],
         "at": gate.utc(now()),
-        "how": gate.TYPED,
+        "how": how,
     }
     if gate._create_once(folder / REVIEW, value) is None:
-        terminal.write("It was reviewed meanwhile: nothing was written.\n")
         return MEANWHILE
     (folder / REVIEWED).write_text(page(folder, saved, value), encoding="utf-8")
-    terminal.write(f"Saved: {REVIEW} and {REVIEWED}\n")
     return SAVED
 
 
@@ -208,7 +236,7 @@ def page(folder: Path, saved: Mapping, review: Mapping) -> str:
         lines[at + 1 : at + 1] = ["", f"> **Aravind's mark:** {item['mark']}{said}"]
     wrong = sum(1 for item in review["marks"] if item["mark"] == "wrong")
     note = (
-        f"> Reviewed by Aravind, paragraph by paragraph, at {review['at']} (make review-postmortem):"
+        f"> Reviewed by Aravind, paragraph by paragraph, at {review['at']} ({HOWS[review['how']]}):"
         f" {len(review['marks']) - wrong} right, {wrong} wrong. His mark is under each paragraph; the draft is"
         " otherwise exactly as received."
     )
@@ -224,7 +252,7 @@ def read(folder: Path) -> dict | None:
     marks = saved.get("marks") if isinstance(saved, dict) else None
     if (
         not isinstance(marks, list)
-        or saved.get("how") != gate.TYPED
+        or saved.get("how") not in HOWS
         or [item.get("paragraph") for item in marks] != list(HEADINGS)
         or any(item.get("mark") not in MARKS.values() for item in marks)
         or any(item["mark"] == "wrong" and not item.get("why") for item in marks)

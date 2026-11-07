@@ -226,3 +226,46 @@ def test_the_command_in_a_terminal_saves_the_typed_marks(tmp_path):
     assert _exit_code(pid) == 0, shown
     assert [item["mark"] for item in review.read(folder)["marks"]] == ["right"] * 6
     assert review.read(folder)["how"] == gate.TYPED and (folder / review.REVIEWED).exists()
+
+
+# Marks given in the chat (his request, 2026-11-07): entered by Claude word for word, and recorded as such
+
+
+def given(*pairs):
+    """Marks as he gives them in the chat, made up for the test: (mark, why) per paragraph, in order."""
+    return [
+        {"paragraph": name, "mark": mark, "why": why} for name, (mark, why) in zip(review.HEADINGS, pairs, strict=True)
+    ]
+
+
+def test_marks_given_in_the_chat_are_recorded_as_such_once_with_their_page(tmp_path):
+    folder = copy_draft(FAULT_1, tmp_path)
+    before = {name: (folder / name).read_bytes() for name in (postmortem.SAVED, postmortem.MARKDOWN)}
+    marks = given(("right", None), ("wrong", WRONG), ("right", None), ("right", None), ("right", None), ("right", None))
+    saved = review.load(folder)
+    assert review.record(folder, saved, marks, review.CHAT, lambda: NOW) == review.SAVED
+    kept = review.read(folder)
+    assert kept["how"] == "given by Aravind in the chat, entered by Claude" and kept["marks"] == marks
+    page = (folder / review.REVIEWED).read_text()
+    assert "(his marks given in the chat, entered by Claude): 5 right, 1 wrong." in page
+    assert "make review-postmortem" not in page.split("\n")[2]  # never shown as typed at his terminal
+    assert {name: (folder / name).read_bytes() for name in before} == before
+    assert review.record(folder, saved, marks, review.CHAT, lambda: NOW) == review.MEANWHILE  # never overwritten
+    assert review.read(folder) == kept and review.counted(folder)[0] == kept
+
+
+@pytest.mark.parametrize(
+    ("marks", "how", "why"),
+    [
+        (given(*[("right", None)] * 5, ("wrong", None)), review.CHAT, "repairs: a wrong mark needs one sentence"),
+        (given(*[("right", None)] * 5, ("maybe", None)), review.CHAT, "repairs: a mark is right or wrong"),
+        (given(*[("right", None)] * 6)[::-1], review.CHAT, "marks must be one per paragraph, in order"),
+        (given(*[("right", None)] * 6)[:5], review.CHAT, "marks must be one per paragraph, in order"),
+        (given(*[("right", None)] * 6), "written by a script", "how marks came must be one of"),
+    ],
+)
+def test_marks_that_are_not_whole_or_say_nothing_of_how_they_came_are_refused(tmp_path, marks, how, why):
+    folder = copy_draft(FAULT_1, tmp_path)
+    with pytest.raises(ValueError, match=why):
+        review.record(folder, review.load(folder), marks, how, lambda: NOW)
+    assert not (folder / review.REVIEW).exists() and not (folder / review.REVIEWED).exists()
