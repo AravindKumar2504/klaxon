@@ -1,0 +1,41 @@
+{
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "draft": {
+    "run": "2026-10-21T090513Z_gated-run_duplicate-delivery",
+    "sha256": "a1caf64144df68cadb37b418d673d5fcc78f33472933446376e7d2736049fd87"
+  },
+  "marks": [
+    {
+      "paragraph": "summary",
+      "mark": "right",
+      "why": "The paragraph accurately summarizes the injected duplicate-delivery fault, the simulation context, the naive handler's effect, the alert timing, Klaxon's diagnosis, the rollback execution, and the lingering uncorrected ledger discrepancies."
+    },
+    {
+      "paragraph": "timeline",
+      "mark": "right",
+      "why": "The paragraph meticulously recounts the precise chronological sequence from the pre-fault baseline through fault injection, alert firing, loop execution, approval wait, action deploy, and subsequent verification checks."
+    },
+    {
+      "paragraph": "impact",
+      "mark": "right",
+      "why": "The paragraph correctly details the evolution of the invariant failures and financial discrepancy growth up to the action, alongside comprehensive synthetic client traffic and success counts."
+    },
+    {
+      "paragraph": "cause",
+      "mark": "right",
+      "why": "The paragraph accurately explains the recorded cause regarding the naive handler, how it produced the invariant failures, the grading rule's positive validation, and the model's diagnostic caveats."
+    },
+    {
+      "paragraph": "response",
+      "mark": "right",
+      "why": "The paragraph correctly outlines Klaxon's rollback request details, the terminal approval process, deploy 2 execution, and automated verification findings regarding cause removal and lingering monetary damage."
+    },
+    {
+      "paragraph": "repairs",
+      "mark": "right",
+      "why": "The paragraph accurately details the lingering ledger discrepancies with specific event examples, the limitation of automated rollbacks in fixing past data damage, and the necessity of manual human reversals."
+    }
+  ],
+  "at": "2026-11-07T06:37:38Z",
+  "how": "given by Aravind in the chat, entered by Claude"
+}

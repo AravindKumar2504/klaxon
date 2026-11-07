@@ -1,0 +1,41 @@
+{
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "draft": {
+    "run": "2026-11-01T031219Z_gated-run_provider-outage",
+    "sha256": "47b6d6057c28b006564f11c899c7c0e15f004d215ff51a97b53eed2b6ecbac3d"
+  },
+  "marks": [
+    {
+      "paragraph": "summary",
+      "mark": "right",
+      "why": "The paragraph accurately summarizes the simulated provider outage, the circuit breaker trip, the error alert, the diagnosis concluding no rollback action was necessary, and harness clearing recovery."
+    },
+    {
+      "paragraph": "timeline",
+      "mark": "right",
+      "why": "The paragraph precisely details the event timeline from baseline readiness through alert firing, investigation, diagnosis completion, and harness clearing matching saved durations."
+    },
+    {
+      "paragraph": "impact",
+      "mark": "right",
+      "why": "The paragraph correctly presents error rate and latency alert specifications alongside passing money check results and complete synthetic client execution counts."
+    },
+    {
+      "paragraph": "cause",
+      "mark": "right",
+      "why": "The paragraph accurately describes the provider hang mechanism, circuit breaker fail-fast behavior, and grading rule validation matching the recorded fault cause."
+    },
+    {
+      "paragraph": "response",
+      "mark": "right",
+      "why": "The paragraph faithfully notes that because the diagnosis called for no automated action, no deployment ran, leaving fault mitigation entirely to the harness's safety clearing once the provider recovered."
+    },
+    {
+      "paragraph": "repairs",
+      "mark": "right",
+      "why": "The paragraph accurately observes that the passing money check left no monetary discrepancy to correct, while emphasizing that pending client outcomes require external reconciliation and human oversight."
+    }
+  ],
+  "at": "2026-11-07T06:37:39Z",
+  "how": "given by Aravind in the chat, entered by Claude"
+}

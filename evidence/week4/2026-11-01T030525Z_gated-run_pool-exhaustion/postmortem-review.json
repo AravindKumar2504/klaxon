@@ -1,0 +1,41 @@
+{
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "draft": {
+    "run": "2026-11-01T030525Z_gated-run_pool-exhaustion",
+    "sha256": "4fd3e4b5b4d2547357e9e419de2583ab721b8730ed493e76a7f09cd79352a415"
+  },
+  "marks": [
+    {
+      "paragraph": "summary",
+      "mark": "right",
+      "why": "The paragraph accurately summarizes the database connection leak fault, the latency alert, Klaxon's diagnosis, the successful rollback deploy restoring connection returns, and passing verification checks."
+    },
+    {
+      "paragraph": "timeline",
+      "mark": "right",
+      "why": "The paragraph precisely outlines the chronological timeline of the pool exhaustion incident, matching all saved timestamps, timings, and durations from fault injection to clearing."
+    },
+    {
+      "paragraph": "impact",
+      "mark": "right",
+      "why": "The paragraph correctly details the p95 latency spike observed prior to the alert, passing money check statuses across the run, and synthetic client traffic metrics including retries and shed requests."
+    },
+    {
+      "paragraph": "cause",
+      "mark": "right",
+      "why": "The paragraph accurately explains how the connection leak depleted the pool and triggered timeouts, the rubric v3 grading verdict, and model diagnostic details."
+    },
+    {
+      "paragraph": "response",
+      "mark": "right",
+      "why": "The paragraph faithfully recounts Klaxon's rollback request details, terminal approval, deploy 28 execution, and verification outcomes confirming container health and cause removal."
+    },
+    {
+      "paragraph": "repairs",
+      "mark": "right",
+      "why": "The paragraph correctly confirms that books required no repairs given the passing money check, while noting that unknown client outcomes and future setting protections remain important."
+    }
+  ],
+  "at": "2026-11-07T06:37:39Z",
+  "how": "given by Aravind in the chat, entered by Claude"
+}

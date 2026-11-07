@@ -1,0 +1,41 @@
+{
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "draft": {
+    "run": "2026-11-01T024929Z_gated-run_secret-rotation",
+    "sha256": "5c29d2fe440380f7adccebe18d74715c93300a45f5b13ee96f295d69678d4d8d"
+  },
+  "marks": [
+    {
+      "paragraph": "summary",
+      "mark": "right",
+      "why": "The paragraph accurately summarizes the injected secret-rotation fault, webhook signature refusals, the lag alert, the successful rollback deploy, and clean verification results."
+    },
+    {
+      "paragraph": "timeline",
+      "mark": "right",
+      "why": "The paragraph faithfully details the chronological sequence of the secret-rotation incident from baseline readiness through alert, diagnosis, approval, action, and final clearing."
+    },
+    {
+      "paragraph": "impact",
+      "mark": "right",
+      "why": "The paragraph accurately notes the unsettled money check states during webhook blockage followed by subsequent passing checks, alongside complete synthetic client payment and refund counts."
+    },
+    {
+      "paragraph": "cause",
+      "mark": "right",
+      "why": "The paragraph precisely explains how the rotated secret version mismatched the provider's signature, causing 400 errors and backlogs that fired the alert, alongside grading validation."
+    },
+    {
+      "paragraph": "response",
+      "mark": "right",
+      "why": "The paragraph accurately outlines Klaxon's investigation tools, the rollback request to v1, the terminal approval process, and verification metrics confirming stack health and cause removal."
+    },
+    {
+      "paragraph": "repairs",
+      "mark": "right",
+      "why": "The paragraph correctly highlights that the passing money check leaves no ledger damage behind, while noting that pending client statuses and future secret rotation coordination require manual human decisions."
+    }
+  ],
+  "at": "2026-11-07T06:37:39Z",
+  "how": "given by Aravind in the chat, entered by Claude"
+}

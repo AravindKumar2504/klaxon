@@ -1,0 +1,41 @@
+{
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "draft": {
+    "run": "2026-10-24T082544Z_gated-run_money-unit",
+    "sha256": "276142e32d6a0592937938508b12c08d8429cf6bb616b82f6115f6b380fd25e9"
+  },
+  "marks": [
+    {
+      "paragraph": "summary",
+      "mark": "right",
+      "why": "The paragraph accurately summarizes the injected money-unit bug, the 100x overcharge impact, Klaxon's diagnosis, the successful rollback deploy, and the lingering uncorrected ledger discrepancies."
+    },
+    {
+      "paragraph": "timeline",
+      "mark": "right",
+      "why": "The paragraph precisely details the chronological timeline of the money-unit incident, including precise timestamps and durations for fault injection, alert, investigation, gate approval, and verification."
+    },
+    {
+      "paragraph": "impact",
+      "mark": "right",
+      "why": "The paragraph correctly tracks the evolution of invariant failures and growing disagreement counts before and after the action, alongside comprehensive synthetic client traffic statistics."
+    },
+    {
+      "paragraph": "cause",
+      "mark": "right",
+      "why": "The paragraph accurately details how the dollar unit configuration caused the 100x multiplier effect on charges, the grading tool's positive verdict, and the limitations of the model's diagnosis text."
+    },
+    {
+      "paragraph": "response",
+      "mark": "right",
+      "why": "The paragraph correctly summarizes the rollback request parameters, terminal approval process, deploy 22 execution, and verification findings showing cause removal despite lingering past monetary damage."
+    },
+    {
+      "paragraph": "repairs",
+      "mark": "right",
+      "why": "The paragraph accurately specifies that a rollback cannot fix past overcharges, establishing that manual human-led refunds are required to reconcile the 1080 mismatched payments."
+    }
+  ],
+  "at": "2026-11-07T06:37:38Z",
+  "how": "given by Aravind in the chat, entered by Claude"
+}

@@ -1,0 +1,41 @@
+{
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "draft": {
+    "run": "2026-10-21T094537Z_gated-run_poison-message",
+    "sha256": "e4fe8341e0128591ac86ff71486e91a372124c417d2ca74af5105d8fc7cccb36"
+  },
+  "marks": [
+    {
+      "paragraph": "summary",
+      "mark": "right",
+      "why": "The paragraph accurately summarizes the injected poison-message incident, the resulting lag alert, Klaxon's diagnosis, the successful rollback deploy to dead-letter, and clean verification results."
+    },
+    {
+      "paragraph": "timeline",
+      "mark": "right",
+      "why": "The paragraph faithfully details the chronological timeline of the poison-message run, matching all saved timestamps and durations from stack readiness through final evaluation."
+    },
+    {
+      "paragraph": "impact",
+      "mark": "right",
+      "why": "The paragraph accurately records the consumer lag at the alert, the inability of the money check to settle during the stall, subsequent passing checks, and flawless client success counts."
+    },
+    {
+      "paragraph": "cause",
+      "mark": "right",
+      "why": "The paragraph correctly outlines the recorded cause, how the unreadable payload triggered the lag alert, the grading verdict confirming the diagnosis named the cause, and model disclaimers."
+    },
+    {
+      "paragraph": "response",
+      "mark": "right",
+      "why": "The paragraph correctly details the approval gate process, deployment execution of deploy 6, automated verification success, and the minor transient lag condition noted during health checks."
+    },
+    {
+      "paragraph": "repairs",
+      "mark": "right",
+      "why": "The paragraph accurately notes that the money check passed with no outstanding ledger repairs required, while highlighting recommendations to handle dead-lettered events and confirm terminal approval."
+    }
+  ],
+  "at": "2026-11-07T06:37:38Z",
+  "how": "given by Aravind in the chat, entered by Claude"
+}
