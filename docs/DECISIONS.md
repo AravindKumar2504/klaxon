@@ -813,3 +813,30 @@ In item 2's session, which went on to items 3 and 4 at his request ("Do this tas
 - **His first pass, set aside** (Aravind). At the terminal he saved 5 drafts, then said he had entered marks in the wrong order. At his request Claude moved those 5 reviews out of the repo, unread, to `~/Downloads/Klaxon_superseded_reviews_2026-11-07/`, and gave him all 36 paragraphs in order with an answer sheet.
 - **His 36 marks** (2026-11-07 06:37 UTC, `086daf8`): 36 right, each with a sentence. Asked how the record should describe them, since they came back about 2 minutes after the file, he answered "Save: I checked them".
 - **Against week 4's reading** (Claude, after his marks were saved; his screen never showed it). Week 4's reading found three sentences that claim more than their facts: in money-unit's cause and response paragraphs, and in pool-exhaustion's cause paragraph. He marked all three paragraphs right. Both are reported as they are; neither is taken as the truth.
+
+## 2026-11-08 (week 5, item 3: his labels, the results, and four questions for his review)
+
+- **Four questions the results raise**, his to decide at the week's review:
+
+1. **The false-alarm case.** Let the stack run a few minutes before the false alert fires, so there is no restart to blame. Or count "no lasting fault, nothing to fix, no action" as naming it, as his labels did.
+2. **Missing deploys.** Tell the model that a rollback is planned from the deploy log, so it fits even when the tools cannot see deploys. Or keep the case as it is: models that refuse an action they cannot justify.
+3. **A proposed rollback with no action named** (Sonnet pool-exhaustion seed 8). A check in the loop could send such a diagnosis back. It is a change to the contract, so for week 6 at the earliest.
+4. **The strict reply format.** Claude's reading: keep it. Accepting text after the JSON would change the harness mid-evaluation, and the runs would no longer compare.
+
+## 2026-11-08 (week 5, item 5: a start on Kubernetes; item 3's replay test)
+
+- **Item 5 in this session** (Aravind: "Do this task here", then "can we start this").
+- **kind, installed with Homebrew** (Aravind, "Yes, install it"): v0.33.0. `kubectl` is Docker Desktop's own.
+- **The same ports as Compose** (Aravind, over other ports so both stacks run at once, or `kubectl port-forward`). Traffic, the money check and Grafana work unchanged. The two stacks take turns: `make kind-up` refuses while the Compose stack runs, and `make kind-check` refuses unless the cluster's node publishes each port.
+- **PyYAML 6.0.3 in the dev tools** (Aravind, over no new library). Only the tests use it, to compare every manifest with compose.yaml. The services' image does not change.
+- **Item 3's replay test takes a run with no diagnosis** (Aravind, "Yes, apply and commit"; `e98adea`).
+- **Claude's defaults for item 5**, to confirm in his review:
+  - Plain manifests in `deploy/kind/`, one file per service, numbered by start order. No Helm, no Kustomize (the plan of 2026-11-03).
+  - The dev passwords in one Secret, read by reference: the workload specs Klaxon will read in week 6 hold none.
+  - StatefulSets, each with a volume, where Compose has a named volume (PostgreSQL, Kafka, the fake provider, Grafana's stack). Deployments for Redis and our four services: week 6 will roll those back. Redis is replaced one at a time, as Compose does.
+  - Each health check as a startup probe (as often as Compose checks at start, for as long as Compose waits) and a readiness probe (its interval, timeout and retries). No liveness probe: Compose never restarts a container for failing a check. One difference stays: Kubernetes restarts any long-running container that exits, where Compose restarts only our services.
+  - `enableServiceLinks: false` everywhere, so each environment is compose.yaml's exactly (Kubernetes would add KAFKA_*-style variables, and the Kafka image reads every KAFKA_* variable as a setting). `shareProcessNamespace: true` for our services, as Compose's `init: true`.
+  - "kafka" as a headless Service whose name resolves before Kafka is ready: its controller calls itself at kafka:9093 while it starts.
+  - The start order is compose.yaml's depends_on: what the others need, then the topics job, then our services. `make kind-up` waits at each step.
+  - The cluster's own kubeconfig in `.kind/`, not committed. Every kubectl call names it, the context kind-klaxon and the namespace klaxon, after checking the API server is on 127.0.0.1. `~/.kube/config` is never read or written.
+  - The acceptance run is `make check-under-traffic`'s scenario (20 checks at 5 payments per second, then one on the quiet cluster), not the 2 minutes at 2 per second Claude first described: the same scenario as Compose's runs, so the two compare.

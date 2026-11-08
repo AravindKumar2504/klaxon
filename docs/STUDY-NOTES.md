@@ -882,3 +882,76 @@ Versions 1 to 3 stay as they were. A saved run is graded again with the newest r
 - *Can the judge favor its own model?* It never sees which model wrote a diagnosis. That removes the easy bias, not every bias: a model may still like text that reads like its own. Your verdicts are the check.
 - *Why are the graders' verdicts hidden from you?* So you give yours first. A verdict you saw first pulls yours toward it.
 - *Is 13 of 13 a good result?* It passes a small, easy check: neither grader contradicts you on clear runs. It is too small to give an accuracy. Item 3's 48 runs will grade both on more diagnoses.
+
+## Week 5, item 3 (run 2026-11-06 and 07, labeled 2026-11-08): the first results
+
+**What ran.** 48 live runs: the 8 cases (faults 1 to 6, a false alarm, a fault with missing evidence), 3 seeds each, on Opus 5.5 and on Sonnet 5.5. Each ran on a fresh stack. Actions were planned, never run, and nobody was asked. 47 ended in a diagnosis. Sonnet's duplicate-delivery seed 7 did not: three replies in a row broke the reply format (twice an extra closing brace, then a sentence after the JSON), so the loop stopped as designed. The rule (version 4) and the judge (Opus 5.5) graded all 47. You labeled 17, blind: every run where the two graders disagree (10), and 7 drawn at random from the other 37.
+
+**The results, by the graders** (`make eval-report RUNS=evidence/week5 SHOW_JUDGE=1`, saved as `evidence/week5/report.md`):
+
+| | Opus 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Diagnosed | 24 of 24 | 23 of 24 |
+| Named the cause, by the rule | 22 of 24 | 17 of 23 |
+| Named the cause, by the judge | 21 of 24 | 14 of 23 |
+| On faults 1 to 6 (rule / judge) | 18 / 18 of 18 | 15 / 13 of 17 |
+| The action that fits | 21 of 24 | 20 of 23 |
+| An action named where none fits | 0 | 0 |
+| Median time from alert to diagnosis | 42.2 s | 31.2 s |
+| Model calls | 191 | 166 |
+| Cost, Claude Code's estimate at API prices | $10.00 | $4.14 |
+
+The medians are over each model's diagnosed runs, read from `evidence/week5/report.json`. The seat is not billed per call. The judge's 47 calls are not in the costs.
+
+**Your verdicts against the graders (17 runs).**
+- On the cause, the rule agrees with you on 11 and the judge on 11, on different runs. On the 7 random runs, where the graders agree with each other, both agree with you on 6. On the 10 where they disagree, you sided with each 5 times.
+- The judge is stricter than you, never more lenient: all 6 of its differences are "partly" where you said "names". The rule errs both ways: 4 times stricter, 2 times more lenient (both missing-deploys runs, where it counts the words of a cause that the model left open).
+- On the fix, you said it fits on all 17. The rule agrees on 14 and the judge on 15. The differences are missing-deploys runs whose fix was a code change or a ledger repair, not the rollback the case names.
+- The 17 were chosen mostly for disagreement, so 11 of 17 understates agreement on ordinary runs (6 of 7 on the random ones). Neither grader alone stands in for you: they fail on different runs.
+
+**What 3 seeds per case can show: two cases that often fail.**
+1. *The false alarm* (6 runs). Every run read the lag near 0, proposed no fix and named no action: the safe outcome, 6 of 6. But each grader says "names the cause" on only 1 of 6, because most runs blame a short backlog after a restart instead of calling the alert false. That reading has evidence behind it: each run's stack is fresh, started 80 to 100 s before the alert. So the case cannot tell a false alert from a backlog that drained before the first sample. You called all 3 you labeled "names".
+2. *Missing deploys* (6 runs). Without the deploy list, the models found the double booking but often left its cause open. Only 1 of 6 named the rollback the case says fits (Opus 0 of 3, Sonnet 1 of 3). Opus's three proposed a code change, with a rollback only once the deploy list shows a change. Sonnet's other two proposed a ledger repair (one said "Do not roll back yet"). The case's answer says a rollback still fits, because code plans it from the deploy log, not from the tools. The models were not told that.
+
+**Why each "partly", and each disagreement** (Claude's reading of all 15).
+- *False alarm, 6 runs:* above. The two the graders call "names" (Opus seed 7 by the rule, Opus seed 9 by the judge) differ from the others in wording more than in substance.
+- *Missing deploys, 3 runs:* Opus and Sonnet seed 8 (you and the judge: partly; the rule: names) both leave 2 or 3 causes open, and Opus's says the dedupe still works for other events; the rule counts the right words and misses that. Sonnet seed 9 (both graders: partly) blames a race between two copies and rejects the rollback.
+- *Provider outage, 3 Sonnet runs:* seeds 7 and 9 blame the provider's HTTP 500s. Those are the traffic's normal noise (the fake provider answers a few charges with 500 on purpose). The outage itself is a 5 s hang, which the payments API sees as timeouts; seed 7 even says the provider's latency stayed under 20 ms. On the facts, the judge's "partly" is right. You and the rule said "names": the place and the circuit breaker are right. Seed 8 does describe the hang; the rule missed its wording of the breaker, and the judge and you said "names".
+- *Poison message, Sonnet seed 7:* the rule wants "cannot read", and the model says the ledger "refuses" the event: a wording miss by the rule. The judge and you: names.
+- *Pool exhaustion, Sonnet seed 8:* the judge wants the leak's mechanism, which the model only suspects. The run also proposed a rollback in its text but named no action, so its gate would have asked nothing.
+- *Money unit, Sonnet seed 9:* the judge gives two reasons. One is right: the model states the unit mix-up backwards (its numbers are right). One is wrong: the model says the ledger probably holds the provider's inflated amounts, and it does, since the ledger books the provider's events. You said "names".
+
+**What it does not show.** A close ranking of the two models: 3 seeds per case are too few. How the graders do on ordinary runs beyond the 7 random ones. Anything about real systems: synthetic data and a simulated provider throughout.
+
+## Week 5, item 5 (built and run live on 2026-11-08): the patient on Kubernetes
+
+**What it is.** The same patient as compose.yaml, on a Kubernetes cluster on this Mac. kind runs Kubernetes inside one Docker container, the "node". Our manifests in `deploy/kind/` describe each service. `make kind-up` creates the cluster and starts everything, `make kind-check` runs the money check while traffic flows, and `make kind-down` deletes it all.
+
+**Why now.** In week 6, Klaxon will undo a bad rollout on Kubernetes. That needs the patient on a cluster first, with nothing else changed, so any later difference is Klaxon's.
+
+**How compose.yaml maps over.**
+- A Compose service becomes a workload. A Deployment for what week 6 will roll out and back (our four services), and for Redis. A StatefulSet for what keeps data on a volume (PostgreSQL, Kafka, the fake provider, Grafana's stack). A Job for what runs once (kafka-init).
+- A Compose service name becomes a Service of the same name, so kafka:9092 and postgres:5432 work inside the cluster as on Compose's network.
+- A port on this Mac takes two hops. kind maps 127.0.0.1:8080 to the node's port 30080, and a NodePort Service takes 30080 to the pod's 8000.
+- A health check becomes a startup probe and a readiness probe. Readiness decides whether a pod gets traffic and whether a rollout is done. There is no liveness probe, because Compose never restarts a container for a failed check.
+- A repo file Compose mounts becomes a ConfigMap of the same file. The init script keeps its executable bit: the PostgreSQL image runs an executable script and only sources the others.
+- depends_on becomes the order `make kind-up` applies and waits in.
+
+**Two surprises worth knowing.**
+- Kubernetes gives every pod variables like KAFKA_PORT, one set per Service. The Kafka image reads every KAFKA_ variable as a setting. `enableServiceLinks: false` stops this and keeps each environment exactly compose.yaml's.
+- Kafka's controller calls itself by name while it starts. A normal Service lists a pod only once it is ready, so that name would not resolve yet. "kafka" is a headless Service that lists the pod before it is ready.
+
+**Safety.** The Compose stack's rules, carried over. Every command names this repo's cluster, its own kubeconfig file, its context and its namespace. Nothing reads or changes `~/.kube/config`. kubectl runs only after checking that the API server is on 127.0.0.1. The dev passwords sit in one Secret, so the specs Klaxon will read in week 6 show none. The check refuses unless the node publishes each port, so a run can never be labeled kind while Compose answered.
+
+**What ran** (2026-11-08 UTC, your OK, at `d3e36f3`). `make kind-up` took 1 min 22 s from no cluster to every workload ready, with no restarts (kind v0.33.0, Kubernetes v1.37.0). `make kind-check`: 20 checks at 5 payments per second, all passed, then the check on the quiet cluster passed; 115 payments and 5 refunds, all succeeded. Compose's last runs of the same scenario (2026-10-15) passed every check too. The services' traces, metrics and logs reached the cluster's Grafana stack. Then the cluster was deleted and Docker stopped.
+
+**The tests.** 77 offline tests. Most compare compose.yaml and the manifests setting by setting: image, command, environment (Secrets read through), health checks, volumes, ports and start order. The rest drive the module against a made-up kind, kubectl and docker. 34 deliberate breaks, each caught.
+
+**What to read.** `deploy/kind/cluster.yaml`, then one manifest end to end (`30-payments-api.yaml`), then `10-kafka.yaml` for the headless Service. In `src/klaxon/patient/cluster.py`: `STAGES`, `up`, `ensure_cluster_local`, `ensure_ports_are_the_clusters` and `check`. In `tests/test_cluster.py`: the tests that compare each setting.
+
+**Likely questions.**
+- *Why kind, not Docker Desktop's built-in Kubernetes?* One command creates or deletes it, Docker Desktop's settings stay as they are, and its config lives in the repo.
+- *Why the same ports as Compose?* Every tool works unchanged. The cost: the two stacks take turns.
+- *Why Deployments for our services?* A Deployment keeps its rollout history, and `kubectl rollout undo` goes back one revision. That is week 6.
+- *Is this production Kubernetes?* No. One node, no resource limits, dev passwords in a Secret, and data that is deleted with the cluster. It shows the patient runs on Kubernetes with compose.yaml's settings.
+- *What if a manifest and compose.yaml drift apart?* A test fails. Every setting is compared.
