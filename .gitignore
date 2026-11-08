@@ -25,3 +25,6 @@ dist/
 *.wav
 *.mp3
 media/
+
+# The kind cluster's own kubeconfig (make kind-up writes it; ~/.kube/config is never touched)
+.kind/

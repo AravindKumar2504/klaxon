@@ -1,0 +1,75 @@
+# The webhook receiver, as in compose.yaml: our image, the provider's webhooks into Kafka. It starts after the
+# topics exist (make kind-up waits for kafka-init). A Deployment: week 6 rolls our services out, and back.
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-receiver
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: webhook-receiver, app.kubernetes.io/part-of: klaxon }
+spec:
+  selector: { app.kubernetes.io/name: webhook-receiver }
+  ports:
+    - { name: http, port: 8000, targetPort: 8000 }
+---
+# This Mac's 127.0.0.1:8082, as in compose.yaml (deploy/kind/cluster.yaml maps it to node port 30082).
+apiVersion: v1
+kind: Service
+metadata:
+  name: webhook-receiver-host
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: webhook-receiver, app.kubernetes.io/part-of: klaxon }
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: webhook-receiver }
+  ports:
+    - { name: http, port: 8000, targetPort: 8000, nodePort: 30082 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webhook-receiver
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: webhook-receiver, app.kubernetes.io/part-of: klaxon }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: webhook-receiver }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: webhook-receiver, app.kubernetes.io/part-of: klaxon }
+    spec:
+      enableServiceLinks: false
+      shareProcessNamespace: true # Compose's init: true (see 10-fake-provider.yaml)
+      containers:
+        - name: webhook-receiver
+          image: klaxon-patient:dev
+          imagePullPolicy: Never
+          args: ["python", "-m", "klaxon.patient.services.receiver_app"]
+          env:
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-lgtm:4318" }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf }
+            - { name: OTEL_METRIC_EXPORT_INTERVAL, value: "10000" }
+            - { name: OTEL_SEMCONV_STABILITY_OPT_IN, value: "http,database" }
+            - { name: KAFKA_BOOTSTRAP, value: "kafka:9092" }
+            # Its secrets, by version. The provider signs with v1. v1 is the good setting; v2 alone is week 4's
+            # known-bad rotation, done on our side only.
+            - name: WEBHOOK_SECRET_V1
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: WEBHOOK_SECRET_V1 } }
+            - name: WEBHOOK_SECRET_V2
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: WEBHOOK_SECRET_V2 } }
+            - { name: WEBHOOK_SECRET_VERSION, value: v1 }
+          ports:
+            - { name: http, containerPort: 8000 }
+          # compose.yaml's health check (see 10-postgres.yaml for how its timings carry over).
+          startupProbe:
+            exec:
+              command: ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+            periodSeconds: 1
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

@@ -1,0 +1,104 @@
+# Observability, as in compose.yaml: grafana/otel-lgtm (an OpenTelemetry collector, Prometheus, Tempo, Loki and
+# Grafana in one container), its data on a volume, and our three Grafana files (docker/grafana), which
+# klaxon.patient.cluster gives the cluster as the ConfigMap grafana-files.
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-lgtm
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: otel-lgtm, app.kubernetes.io/part-of: klaxon }
+spec:
+  selector: { app.kubernetes.io/name: otel-lgtm }
+  ports:
+    - { name: otlp-grpc, port: 4317, targetPort: 4317 }
+    - { name: otlp-http, port: 4318, targetPort: 4318 } # where our services send traces, metrics and logs
+    - { name: grafana, port: 3000, targetPort: 3000 }
+    - { name: prometheus, port: 9090, targetPort: 9090 }
+    - { name: tempo, port: 3200, targetPort: 3200 }
+    - { name: loki, port: 3100, targetPort: 3100 }
+---
+# This Mac's 127.0.0.1:3000, 9090, 3200 and 3100, as in compose.yaml (deploy/kind/cluster.yaml maps them).
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-lgtm-host
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: otel-lgtm, app.kubernetes.io/part-of: klaxon }
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: otel-lgtm }
+  ports:
+    - { name: grafana, port: 3000, targetPort: 3000, nodePort: 30300 }
+    - { name: prometheus, port: 9090, targetPort: 9090, nodePort: 30090 }
+    - { name: tempo, port: 3200, targetPort: 3200, nodePort: 30320 }
+    - { name: loki, port: 3100, targetPort: 3100, nodePort: 30310 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: otel-lgtm
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: otel-lgtm, app.kubernetes.io/part-of: klaxon }
+spec:
+  serviceName: otel-lgtm
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: otel-lgtm }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: otel-lgtm, app.kubernetes.io/part-of: klaxon }
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: otel-lgtm
+          image: grafana/otel-lgtm:0.34.0
+          env:
+            # Sign in to Grafana (admin / admin). The image would let anyone on this Mac in as Admin.
+            - { name: GF_AUTH_ANONYMOUS_ENABLED, value: "false" }
+            - { name: PROMETHEUS_EXTRA_ARGS, value: "--enable-feature=created-timestamp-zero-ingestion" }
+          ports:
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: grafana, containerPort: 3000 }
+            - { name: prometheus, containerPort: 9090 }
+            - { name: tempo, containerPort: 3200 }
+            - { name: loki, containerPort: 3100 }
+          volumeMounts:
+            - { name: lgtmdata, mountPath: /data }
+            - name: grafana-files
+              mountPath: /otel-lgtm/grafana/conf/provisioning/datasources/grafana-datasources.yaml
+              subPath: datasources.yaml
+              readOnly: true
+            - name: grafana-files
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/klaxon.yaml
+              subPath: dashboards.yaml
+              readOnly: true
+            - name: grafana-files
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/klaxon/klaxon-patient.json
+              subPath: klaxon-patient.json
+              readOnly: true
+          # compose.yaml's health check (see 10-postgres.yaml for how its timings carry over).
+          startupProbe:
+            exec:
+              command: ["/otel-lgtm/docker/healthcheck.sh"]
+            periodSeconds: 2
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["/otel-lgtm/docker/healthcheck.sh"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: grafana-files
+          configMap:
+            name: grafana-files
+  volumeClaimTemplates:
+    - metadata:
+        name: lgtmdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

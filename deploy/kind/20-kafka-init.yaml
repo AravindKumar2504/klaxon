@@ -1,0 +1,29 @@
+# The topics, as in compose.yaml's kafka-init: created once, after Kafka is ready (make kind-up waits for it), so a
+# typo in a topic name fails instead of creating a topic. Runs once and is never retried, as there.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: kafka-init, app.kubernetes.io/part-of: klaxon }
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: kafka-init, app.kubernetes.io/part-of: klaxon }
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: kafka-init
+          image: apache/kafka:4.3.1
+          env:
+            - { name: KAFKA_HEAP_OPTS, value: "-Xmx64m" }
+          command: ["/bin/bash", "-euo", "pipefail", "-c"]
+          args:
+            - |
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+                --topic provider-events --partitions 3 --replication-factor 1
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+                --topic provider-events-dlq --partitions 1 --replication-factor 1
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe

@@ -1,0 +1,27 @@
+# The kind cluster for Klaxon's patient (week 5, item 5): Kubernetes in Docker, one node, on this Mac.
+#
+#   make kind-up      create it, build and load our image, start everything in compose.yaml's order, wait
+#   make kind-check   the money check again and again while synthetic traffic flows
+#   make kind-down    delete the cluster and its data (synthetic)
+#
+# The same ports as the Compose stack on this Mac, on 127.0.0.1 only (Aravind's choice, 2026-11-08): traffic,
+# the money check and Grafana work unchanged. So Compose and kind take turns: never both up.
+# Each host port goes to a node port, and a NodePort Service (<name>-host) takes it to the pod.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: klaxon
+networking:
+  apiServerAddress: "127.0.0.1" # kind's default, written down: the API server answers on this Mac only
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - { containerPort: 30080, hostPort: 8080, listenAddress: "127.0.0.1", protocol: TCP } # payments API
+      - { containerPort: 30081, hostPort: 8081, listenAddress: "127.0.0.1", protocol: TCP } # fake provider
+      - { containerPort: 30082, hostPort: 8082, listenAddress: "127.0.0.1", protocol: TCP } # webhook receiver
+      - { containerPort: 30432, hostPort: 5432, listenAddress: "127.0.0.1", protocol: TCP } # PostgreSQL
+      - { containerPort: 30379, hostPort: 6379, listenAddress: "127.0.0.1", protocol: TCP } # Redis
+      - { containerPort: 30094, hostPort: 9094, listenAddress: "127.0.0.1", protocol: TCP } # Kafka, its EXTERNAL listener
+      - { containerPort: 30300, hostPort: 3000, listenAddress: "127.0.0.1", protocol: TCP } # Grafana
+      - { containerPort: 30090, hostPort: 9090, listenAddress: "127.0.0.1", protocol: TCP } # Prometheus API
+      - { containerPort: 30320, hostPort: 3200, listenAddress: "127.0.0.1", protocol: TCP } # Tempo API
+      - { containerPort: 30310, hostPort: 3100, listenAddress: "127.0.0.1", protocol: TCP } # Loki API

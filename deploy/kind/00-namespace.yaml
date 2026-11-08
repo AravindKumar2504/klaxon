@@ -1,0 +1,31 @@
+# Klaxon's patient on kind (week 5, item 5): its namespace, and the development secrets its services share.
+# The values are compose.yaml's, for local development only: not secrets. They sit in a Secret, not in each
+# workload's spec, so the specs (which Klaxon will read in week 6, to see what a rollout changed) hold none.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: klaxon
+  labels:
+    app.kubernetes.io/part-of: klaxon
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: patient-dev-secrets
+  namespace: klaxon
+  labels:
+    app.kubernetes.io/part-of: klaxon
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: postgres-dev-only
+  LEDGER_WRITER_PASSWORD: ledger-writer-dev-only
+  PAYMENTS_API_PASSWORD: payments-api-dev-only
+  PAYMENT_CONFIRMER_PASSWORD: payment-confirmer-dev-only
+  KLAXON_READONLY_PASSWORD: klaxon-readonly-dev-only
+  PAYMENTS_API_DATABASE_URL: postgresql://payments_api:payments-api-dev-only@postgres:5432/klaxon
+  LEDGER_CONSUMER_DATABASE_URL: postgresql://ledger_writer:ledger-writer-dev-only@postgres:5432/klaxon
+  PAYMENT_CONFIRMER_DATABASE_URL: postgresql://payment_confirmer:payment-confirmer-dev-only@postgres:5432/klaxon
+  # The provider's own copy of the webhook secret, and ours by version (the provider signs with v1).
+  PROVIDER_WEBHOOK_SECRET: klaxon-dev-webhook-secret-not-real
+  WEBHOOK_SECRET_V1: klaxon-dev-webhook-secret-not-real
+  WEBHOOK_SECRET_V2: klaxon-dev-webhook-secret-v2-not-real

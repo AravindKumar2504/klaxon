@@ -141,12 +141,17 @@ def left_in_total(checks: list[CheckRun]) -> str:
     )
 
 
-def render(run: UnderTrafficRun) -> str:
+def render(
+    run: UnderTrafficRun,
+    where: str = "this Mac's Docker Compose stack",
+    title: str = "Klaxon week 2: the money check, run while synthetic traffic flows",
+) -> str:
+    """The run as printed. where names the stack it ran on (week 5: the kind cluster too)."""
     s = run.settings
     counted = run.counted()
     out = [
-        "Klaxon week 2: the money check, run while synthetic traffic flows",
-        f"REAL RUN on this Mac's Docker Compose stack. Traffic run {s.run_id}, seed {s.seed}: {s.rate:g} payments"
+        title,
+        f"REAL RUN on {where}. Traffic run {s.run_id}, seed {s.seed}: {s.rate:g} payments"
         f" per second, provider noise lose_ack_rate {s.lose_ack_rate:g}, lost_answer_rate {s.lost_answer_rate:g}.",
         "Synthetic data, simulated provider, no real money. It measures the money check; it is not the agent.",
         "",

@@ -12,7 +12,8 @@ dependencies = []
 [project.optional-dependencies]
 # mcp: the official MCP SDK, only for tests that talk to Klaxon's own server as a real client would.
 # 2.2.0 (2026-09-07), not 2.3.0: that one was under two weeks old (week 3).
-dev = ["pytest>=8", "ruff>=0.16", "mcp==2.2.0"]
+# pyyaml: only for the test that checks the kind manifests against compose.yaml (week 5, Aravind's choice).
+dev = ["pytest>=8", "ruff>=0.16", "mcp==2.2.0", "pyyaml==6.0.3"]
 # The live patient services (week 1). Exact versions for the image: requirements/services.lock.txt
 services = [
     "fastapi>=0.142",

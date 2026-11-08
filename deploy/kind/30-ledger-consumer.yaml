@@ -1,0 +1,49 @@
+# The ledger consumer, as in compose.yaml: our image, the idempotent handler (naive is the known-bad baseline).
+# It starts after PostgreSQL is ready and the topics exist (make kind-up waits for them). It listens on no port.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-consumer
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: ledger-consumer, app.kubernetes.io/part-of: klaxon }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: ledger-consumer }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: ledger-consumer, app.kubernetes.io/part-of: klaxon }
+    spec:
+      enableServiceLinks: false
+      shareProcessNamespace: true # Compose's init: true (see 10-fake-provider.yaml)
+      containers:
+        - name: ledger-consumer
+          image: klaxon-patient:dev
+          imagePullPolicy: Never
+          args: ["python", "-m", "klaxon.patient.services.ledger_consumer"]
+          env:
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-lgtm:4318" }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf }
+            - { name: OTEL_METRIC_EXPORT_INTERVAL, value: "10000" }
+            - { name: OTEL_SEMCONV_STABILITY_OPT_IN, value: "http,database" }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: LEDGER_CONSUMER_DATABASE_URL } }
+            - { name: KAFKA_BOOTSTRAP, value: "kafka:9092" }
+            - { name: LEDGER_HANDLER, value: idempotent }
+            - { name: BAD_EVENTS, value: dead_letter } # retry is the known-bad baseline: an unreadable message forever
+            - { name: HEARTBEAT_PATH, value: /tmp/ledger-consumer.heartbeat }
+          # compose.yaml's health check: healthy while the poll loop keeps touching its heartbeat file. That means
+          # "the loop is alive", not "it is consuming": lag is the consuming signal. (See 10-postgres.yaml for how
+          # its timings carry over.)
+          startupProbe:
+            exec:
+              command: ["python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/ledger-consumer.heartbeat') > 15)"]
+            periodSeconds: 1
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/ledger-consumer.heartbeat') > 15)"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

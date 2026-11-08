@@ -1,0 +1,49 @@
+# The payment confirmer, as in compose.yaml: a second consumer group on the same topic, which marks our payments
+# succeeded from the provider's webhooks (by_provider_id is the known-bad baseline). It starts after PostgreSQL is
+# ready and the topics exist (make kind-up waits for them). It listens on no port.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-confirmer
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: payment-confirmer, app.kubernetes.io/part-of: klaxon }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: payment-confirmer }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: payment-confirmer, app.kubernetes.io/part-of: klaxon }
+    spec:
+      enableServiceLinks: false
+      shareProcessNamespace: true # Compose's init: true (see 10-fake-provider.yaml)
+      containers:
+        - name: payment-confirmer
+          image: klaxon-patient:dev
+          imagePullPolicy: Never
+          args: ["python", "-m", "klaxon.patient.services.payment_confirmer"]
+          env:
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-lgtm:4318" }
+            - { name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf }
+            - { name: OTEL_METRIC_EXPORT_INTERVAL, value: "10000" }
+            - { name: OTEL_SEMCONV_STABILITY_OPT_IN, value: "http,database" }
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: PAYMENT_CONFIRMER_DATABASE_URL } }
+            - { name: KAFKA_BOOTSTRAP, value: "kafka:9092" }
+            - { name: CONFIRMER_HANDLER, value: by_our_id }
+            - { name: BAD_EVENTS, value: dead_letter }
+            - { name: HEARTBEAT_PATH, value: /tmp/payment-confirmer.heartbeat }
+          # compose.yaml's health check, like the ledger consumer's: the loop is alive; its lag says whether it
+          # keeps up. (See 10-postgres.yaml for how its timings carry over.)
+          startupProbe:
+            exec:
+              command: ["python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/payment-confirmer.heartbeat') > 15)"]
+            periodSeconds: 1
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import os, sys, time; sys.exit(time.time() - os.path.getmtime('/tmp/payment-confirmer.heartbeat') > 15)"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3

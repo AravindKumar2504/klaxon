@@ -1,0 +1,98 @@
+# Kafka, as in compose.yaml: one node in KRaft mode (broker and controller, no ZooKeeper), its log on a volume.
+#
+# "kafka" is a headless Service: the name resolves to the pod's own address, as it does in Compose. Kafka's
+# controller dials its own address (KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093) before it is ready, so the
+# name resolves before readiness too (publishNotReadyAddresses).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: klaxon }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/name: kafka }
+  ports:
+    - { name: internal, port: 9092, targetPort: 9092 }
+    - { name: controller, port: 9093, targetPort: 9093 }
+---
+# This Mac's 127.0.0.1:9094, as in compose.yaml: Kafka's EXTERNAL listener, which it advertises as 127.0.0.1:9094
+# (deploy/kind/cluster.yaml maps it to node port 30094).
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-host
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: klaxon }
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: kafka }
+  ports:
+    - { name: external, port: 9094, targetPort: 9094, nodePort: 30094 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: klaxon }
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: kafka }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: klaxon }
+    spec:
+      # The image turns every KAFKA_* variable into a setting: Kubernetes' KAFKA_HOST_PORT-style service variables
+      # would become settings too. None here, so the environment is compose.yaml's, exactly.
+      enableServiceLinks: false
+      containers:
+        - name: kafka
+          image: apache/kafka:4.3.1
+          env:
+            - { name: CLUSTER_ID, value: xAezRtFwTCi18RbNJqimUQ }
+            - { name: KAFKA_NODE_ID, value: "1" }
+            - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+            - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@kafka:9093" }
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER }
+            - { name: KAFKA_LISTENERS, value: "INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094" }
+            - { name: KAFKA_ADVERTISED_LISTENERS, value: "INTERNAL://kafka:9092,EXTERNAL://127.0.0.1:9094" }
+            - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT" }
+            - { name: KAFKA_INTER_BROKER_LISTENER_NAME, value: INTERNAL }
+            - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
+            - { name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0" }
+            - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "false" }
+            - { name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data }
+            - { name: KAFKA_HEAP_OPTS, value: "-Xms256m -Xmx512m" }
+          ports:
+            - { name: internal, containerPort: 9092 }
+            - { name: controller, containerPort: 9093 }
+            - { name: external, containerPort: 9094 }
+          volumeMounts:
+            - { name: kafkadata, mountPath: /var/lib/kafka/data }
+          # compose.yaml's health check (see 10-postgres.yaml for how its timings carry over).
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "KAFKA_HEAP_OPTS=-Xmx64m /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+            periodSeconds: 3
+            timeoutSeconds: 20
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "KAFKA_HEAP_OPTS=-Xmx64m /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+            periodSeconds: 30
+            timeoutSeconds: 20
+            failureThreshold: 3
+  volumeClaimTemplates:
+    - metadata:
+        name: kafkadata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

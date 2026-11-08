@@ -1,0 +1,95 @@
+# PostgreSQL, as in compose.yaml: the official image, its data on a volume, and the same two init scripts
+# (docker/postgres/initdb), which klaxon.patient.cluster gives the cluster as the ConfigMap postgres-initdb.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: klaxon }
+spec:
+  selector: { app.kubernetes.io/name: postgres }
+  ports:
+    - { name: postgres, port: 5432, targetPort: 5432 }
+---
+# This Mac's 127.0.0.1:5432, as in compose.yaml (deploy/kind/cluster.yaml maps it to node port 30432).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-host
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: klaxon }
+spec:
+  type: NodePort
+  selector: { app.kubernetes.io/name: postgres }
+  ports:
+    - { name: postgres, port: 5432, targetPort: 5432, nodePort: 30432 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: klaxon }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: klaxon }
+    spec:
+      enableServiceLinks: false # no SERVICE_HOST-style variables: the environment is compose.yaml's, exactly
+      containers:
+        - name: postgres
+          image: postgres:18.6-alpine
+          env:
+            - { name: POSTGRES_DB, value: klaxon }
+            - { name: POSTGRES_USER, value: postgres }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: POSTGRES_PASSWORD } }
+            # Read by docker/postgres/initdb/10-roles.sh on first start.
+            - name: LEDGER_WRITER_PASSWORD
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: LEDGER_WRITER_PASSWORD } }
+            - name: PAYMENTS_API_PASSWORD
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: PAYMENTS_API_PASSWORD } }
+            - name: PAYMENT_CONFIRMER_PASSWORD
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: PAYMENT_CONFIRMER_PASSWORD } }
+            - name: KLAXON_READONLY_PASSWORD
+              valueFrom: { secretKeyRef: { name: patient-dev-secrets, key: KLAXON_READONLY_PASSWORD } }
+          ports:
+            - { name: postgres, containerPort: 5432 }
+          volumeMounts:
+            - { name: pgdata, mountPath: /var/lib/postgresql } # PostgreSQL 18 keeps its data under 18/docker
+            - { name: initdb, mountPath: /docker-entrypoint-initdb.d, readOnly: true }
+          # compose.yaml's health check, the same command. Compose checks every start_interval during the start
+          # period, then every interval; it never restarts an unhealthy container. Here a startup probe checks as
+          # often, for as long as Compose waits before it calls a service unhealthy, then a readiness probe takes over.
+          # No liveness probe, so nothing restarts a container for failing a check, as in Compose.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready --host 127.0.0.1 --username postgres --dbname klaxon"]
+            periodSeconds: 1
+            timeoutSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready --host 127.0.0.1 --username postgres --dbname klaxon"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+            items: # each file's mode as in the repo: the image runs an executable script and sources the others
+              - { key: 10-roles.sh, path: 10-roles.sh, mode: 0755 }
+              - { key: 20-schema.sql, path: 20-schema.sql, mode: 0644 }
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

@@ -28,7 +28,8 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
-	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration
+	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration \
+	kind-up kind-down kind-ps kind-check
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -51,7 +52,8 @@ lint: ## ruff: style and common mistakes
 		tests/test_alerts.py tests/test_fault_runs.py tests/test_grading.py tests/conftest.py \
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
-		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py
+		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
+		src/klaxon/patient/cluster.py tests/test_cluster.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -71,6 +73,20 @@ ps: ## what is running, and is it healthy
 
 logs: ## follow every service's logs
 	$(COMPOSE) logs --follow --tail=50
+
+# The same patient on a local kind cluster (Kubernetes in Docker), from our own manifests in deploy/kind (week 5).
+# It uses the Compose stack's ports on this Mac, so the two take turns: make down before make kind-up.
+kind-up: local-docker-only ## the patient on a local kind cluster, from deploy/kind: build, load, start in order, wait (make down first)
+	$(PY) -m klaxon.patient.cluster up
+
+kind-down: ## delete the kind cluster and its data (synthetic): the next make kind-up starts from empty books
+	$(PY) -m klaxon.patient.cluster down
+
+kind-ps: ## the kind cluster's pods: ready, restarts, images
+	$(PY) -m klaxon.patient.cluster ps
+
+kind-check: ## on the kind cluster, the money check again and again while traffic flows (CHECKS=20, RATE=5), saved to evidence/week5/kind/
+	$(PY) -m klaxon.patient.cluster check --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)
 
 test-integration: ## tests against the running stack's PostgreSQL and Kafka (make up first)
 	$(PY) -m pytest -q -m integration
