@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "secret-rotation",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "d7ff1e8d3e74adaea562fe14069079d785336b9f80abb32f9c609382317abec0",
+  "diagnosis_sha256": "b51d8163611d7f88868740bd774c65058730696b71ea0ab7a45e6b7891bf66b5",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It accurately diagnosed the secret version mismatch and proposed rolling back to v1.",
+  "at": "2026-11-08T22:57:45Z",
+  "how": "typed at a terminal"
+}

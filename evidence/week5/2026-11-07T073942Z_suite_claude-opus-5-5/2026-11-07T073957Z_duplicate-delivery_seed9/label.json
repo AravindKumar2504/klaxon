@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "duplicate-delivery",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "987733571627b3be203e519902168a46080dd52e36c639aef09bdecfbd2d5725",
+  "diagnosis_sha256": "7e75a233c4299ca47af48c648f9e4e2c09c7aa971d23d7c8fce6de6dbc008d1b",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It correctly identified the naive handler duplicate-booking cause and proposed a rollback.",
+  "at": "2026-11-08T23:00:00Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "false-alarm",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "1088b715519aed9673c745ad66764e3903aee9c6516573c0aeed0ff27b049b63",
+  "diagnosis_sha256": "1e6b3449591bbff436834582150bb0cc4966e265a22179a23f12b0018252a8ce",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It correctly recognized the false alarm / startup lag condition with zero service changes needed.",
+  "at": "2026-11-08T22:58:35Z",
+  "how": "typed at a terminal"
+}

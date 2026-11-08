@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "9575fb9ed7279a21272839b426f73bf13c1a5cbf39af00cdeaa292601535651f",
+  "verdict": "partly",
+  "fix_fits": true,
+  "why": "It partially diagnosed the duplicate delivery but missed specific deploy details because the Docker inspection tool timed out.",
+  "at": "2026-11-08T22:58:15Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "fe74cf3dd8bec6208caca841b1468e09499a9253ed39cc8a444e89aceb88477f",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It identified the duplicate delivery / naive handler issue despite container metric visibility limits and proposed a fix.",
+  "at": "2026-11-08T22:57:04Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "942046e053a5e2ac4b54efcacd409275f09cb1c3b983b58f07b177441c1e1824",
+  "verdict": "partly",
+  "fix_fits": true,
+  "why": "It identified the duplicate ledger booking but could not verify deploy settings due to a Docker tool error.",
+  "at": "2026-11-08T23:00:14Z",
+  "how": "typed at a terminal"
+}

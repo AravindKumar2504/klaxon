@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "money-unit",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "cc0d4fe38b4183008c9e3a138671b1302e88c7a6f84cfa53d1b7cd985c5964d5",
+  "diagnosis_sha256": "48c25e0fa6e7334cc22a8e10250ae24d3abe7cc179d2d653ce671c6eb7ec6115",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It correctly identified the CHARGE_AMOUNT_UNIT=dollars money-unit bug and proposed rolling back to cents.",
+  "at": "2026-11-08T22:56:21Z",
+  "how": "typed at a terminal"
+}

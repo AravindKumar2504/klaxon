@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "provider-outage",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "62189df02256ea75c5e0e51c9a1ba6d785cf0efd46388e1d1e34e74b981fb98f",
+  "diagnosis_sha256": "d7fbb68f7da5c93c2fa65e9deaa27b0ba01928466041efc74e732cf9b4f21bc3",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It correctly diagnosed the provider outage and circuit breaker fail-fast behavior, advising no code rollback.",
+  "at": "2026-11-08T23:00:23Z",
+  "how": "typed at a terminal"
+}

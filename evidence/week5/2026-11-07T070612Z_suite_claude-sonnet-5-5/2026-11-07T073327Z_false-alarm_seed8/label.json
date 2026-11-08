@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "false-alarm",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "1088b715519aed9673c745ad66764e3903aee9c6516573c0aeed0ff27b049b63",
+  "diagnosis_sha256": "f7f538b6df68fbeba05270abc7cb18df2006529147e320323d6d93e8df01e0d3",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It correctly identified that the lag alert was a transient restart backlog that cleared itself.",
+  "at": "2026-11-08T22:58:58Z",
+  "how": "typed at a terminal"
+}
