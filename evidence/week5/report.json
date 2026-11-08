@@ -1,0 +1,3201 @@
+{
+  "label": "Worked out offline from saved runs by klaxon.evaluation: no model was called and nothing was run. The rule's verdicts are klaxon.grading's, worked out again with the newest rubric for each run's system; the judge's are Claude's (klaxon.judge), recorded responses saved beside the runs it judged; Aravind's were typed at a terminal (make label). The costs are Claude Code's estimates at API prices; the seat is not billed per call; they leave out the judge's calls.",
+  "made_at_utc": "2026-11-08T23:04:59Z",
+  "from": [
+    "evidence/week5"
+  ],
+  "judge_held_back": 0,
+  "left_out": [
+    "2026-11-04T074308Z_rehearsal_false-alarm: a rehearsal, with no model",
+    "2026-11-04T074551Z_rehearsal_missing-deploys: a rehearsal, with no model",
+    "2026-11-05T025021Z_calibration: it holds no run.json",
+    "kind: it holds no run.json"
+  ],
+  "suites": [
+    {
+      "folder": "2026-11-06T185017Z_suite_claude-opus-5-5",
+      "model": "claude-opus-5-5",
+      "planned": 8,
+      "with_an_outcome": 8,
+      "not_run": [],
+      "stopped": null
+    },
+    {
+      "folder": "2026-11-07T055744Z_suite_claude-sonnet-5-5",
+      "model": "claude-sonnet-5-5",
+      "planned": 8,
+      "with_an_outcome": 8,
+      "not_run": [],
+      "stopped": null
+    },
+    {
+      "folder": "2026-11-07T063051Z_suite_claude-opus-5-5",
+      "model": "claude-opus-5-5",
+      "planned": 8,
+      "with_an_outcome": 8,
+      "not_run": [],
+      "stopped": null
+    },
+    {
+      "folder": "2026-11-07T070612Z_suite_claude-sonnet-5-5",
+      "model": "claude-sonnet-5-5",
+      "planned": 8,
+      "with_an_outcome": 8,
+      "not_run": [],
+      "stopped": null
+    },
+    {
+      "folder": "2026-11-07T073942Z_suite_claude-opus-5-5",
+      "model": "claude-opus-5-5",
+      "planned": 8,
+      "with_an_outcome": 8,
+      "not_run": [],
+      "stopped": null
+    },
+    {
+      "folder": "2026-11-07T081533Z_suite_claude-sonnet-5-5",
+      "model": "claude-sonnet-5-5",
+      "planned": 8,
+      "with_an_outcome": 8,
+      "not_run": [],
+      "stopped": null
+    }
+  ],
+  "runs": [
+    {
+      "folder": "2026-11-06T185036Z_duplicate-delivery_seed7",
+      "case": "duplicate-delivery",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.88,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with LEDGER_HANDLER=naive, which has no dedupe, as booking every redelivered webhook again, and it proposes the rollback plus reversals of the extra postings.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.6,
+      "diagnosis_seconds": 42.2,
+      "steps": 7,
+      "tool_calls": 4,
+      "calls": 7,
+      "failed_calls": 0,
+      "accepted_calls": 7,
+      "cost_usd": 0.5953,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 11,
+          "matches_provider": 12
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-06T185441Z_poison-message_seed7",
+      "case": "poison-message",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with BAD_EVENTS=retry and the provider event at offset 112 whose amount is not integer cents, stuck in endless retries that hold back the partition and build lag, and it rolls ledger-consumer back to dead-lettering.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 48.0,
+      "diagnosis_seconds": 31.7,
+      "steps": 6,
+      "tool_calls": 5,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.2375,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-06T185936Z_provider-outage_seed7",
+      "case": "provider-outage",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.7,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the provider hanging so payments-api's calls time out until the circuit breaker opens and fails fast with 503, leaving payments pending, and its fix is to change nothing, escalate to the provider, let trial calls close the breaker, then reconcile the pending items.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 47.0,
+      "diagnosis_seconds": 39.7,
+      "steps": 9,
+      "tool_calls": 8,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.5213,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-06T190407Z_money-unit_seed7",
+      "case": "money-unit",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy that set CHARGE_AMOUNT_UNIT=dollars, which treats amounts already in cents as dollars and so charges 100x at the provider while our records stay right, and it proposes rolling back plus refunding the overcharges at the provider.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 31.9,
+      "steps": 6,
+      "tool_calls": 5,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.3069,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 56
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 149
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-06T190804Z_secret-rotation_seed7",
+      "case": "secret-rotation",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.88,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the webhook-receiver deploy with WEBHOOK_SECRET_VERSION=v2 while the provider still signs with the old secret, so every webhook is refused with a 400 bad signature, never reaches Kafka, and is retried by the provider; it proposes rolling the receiver back.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 48.0,
+      "diagnosis_seconds": 61.6,
+      "steps": 7,
+      "tool_calls": 6,
+      "calls": 7,
+      "failed_calls": 0,
+      "accepted_calls": 7,
+      "cost_usd": 0.2348,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-06T191344Z_pool-exhaustion_seed7",
+      "case": "pool-exhaustion",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the 19:15:01 payments-api deploy with REFUND_CONNECTION=kept, refunds holding pool connections until the pool is empty, and requests waiting out the 5 s pool timeout before failing with a 500, and it proposes rolling payments-api back.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 49.0,
+      "diagnosis_seconds": 48.9,
+      "steps": 9,
+      "tool_calls": 7,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.6158,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-06T191831Z_false-alarm_seed7",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.5,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It read ledger lag as 0 across the firing, but it calls the alert false only as an alternative, favours an unproven startup backlog, and does not settle that the alert was false.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 46.5,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.4023,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-06T192051Z_missing-deploys_seed7",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": false,
+      "judge": "names the cause",
+      "judge_fix_fits": false,
+      "judge_why": "It correctly says the ledger-consumer books each resent webhook again because its event_id dedupe is gone, and it says the deploy log was unreadable without claiming any deploy, but its main fix is a new unique-constraint code change, with the rollback only conditional.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": false,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 17.6,
+      "diagnosis_seconds": 79.6,
+      "steps": 9,
+      "tool_calls": 6,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.4541,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 19,
+          "matches_provider": 20
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T055759Z_duplicate-delivery_seed7",
+      "case": "duplicate-delivery",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "invalid_replies",
+      "diagnosed": false,
+      "confidence": null,
+      "verdict": null,
+      "rubric": null,
+      "fix_fits": null,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": null,
+      "action_where_none_fits": false,
+      "gate": null,
+      "alert_after_fault_seconds": 17.2,
+      "diagnosis_seconds": 36.4,
+      "steps": 6,
+      "tool_calls": 3,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.1668,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "damage_at_diagnosis": null,
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T060158Z_poison-message_seed7",
+      "case": "poison-message",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.72,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the 06:03:15 ledger-consumer deploy with BAD_EVENTS=retry stuck retrying one unbookable provider event (bad amount) and booking nothing behind it, and its rollback restores dead-lettering so the backlog drains.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 21.7,
+      "steps": 5,
+      "tool_calls": 4,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.0841,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T060644Z_provider-outage_seed7",
+      "case": "provider-outage",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.4,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly blames the open circuit breaker that fails fast on provider calls, but says provider 500s tripped it and rules out provider slowness, whereas the provider hung and calls timed out.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 47.0,
+      "diagnosis_seconds": 33.1,
+      "steps": 9,
+      "tool_calls": 8,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.2842,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T061109Z_money-unit_seed7",
+      "case": "money-unit",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly ties the payments-api deploy setting CHARGE_AMOUNT_UNIT=dollars to the provider charging 100x the amount we keep correctly in our records, and it proposes rolling back payments-api and refunding the overcharges at the provider.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.4,
+      "diagnosis_seconds": 16.8,
+      "steps": 3,
+      "tool_calls": 2,
+      "calls": 3,
+      "failed_calls": 0,
+      "accepted_calls": 3,
+      "cost_usd": 0.0467,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 56
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 105
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T061449Z_secret-rotation_seed7",
+      "case": "secret-rotation",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the webhook-receiver deploy with WEBHOOK_SECRET_VERSION=v2 no longer matching the provider's signing key, so every webhook is refused as bad_signature and none is queued to Kafka while the provider resends, and it rolls the receiver back.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.7,
+      "diagnosis_seconds": 19.3,
+      "steps": 6,
+      "tool_calls": 5,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.0929,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T061951Z_pool-exhaustion_seed7",
+      "case": "pool-exhaustion",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy with REFUND_CONNECTION=kept, where refund handling holds Postgres connections until the pool is empty, so requests wait out the ~5 s pool timeout and fail with 500, and it is open that the pool size was not checked.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 49.0,
+      "diagnosis_seconds": 40.9,
+      "steps": 9,
+      "tool_calls": 7,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.2475,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T062430Z_false-alarm_seed7",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.5,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It read the ledger group's lag as 0 and proposed no fix, but it did not call the alert false: it inferred an unobserved lag spike during the restart that then cleared.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 17.8,
+      "steps": 5,
+      "tool_calls": 4,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.0777,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T062622Z_missing-deploys_seed7",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation",
+      "seed": 7,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.7,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger consumer's lost dedupe, seen in the 'naive' restart, as why provider retries are booked twice, and it says recent_deploys timed out so it claims no unverified deploy.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 79.8,
+      "steps": 10,
+      "tool_calls": 7,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.2817,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 19,
+          "matches_provider": 20
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T063106Z_duplicate-delivery_seed8",
+      "case": "duplicate-delivery",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with LEDGER_HANDLER=naive, which lacks dedupe, so the provider's resent evt_000281 was booked twice; its fix rolls back that consumer and has a human reverse the double posting.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 42.2,
+      "steps": 7,
+      "tool_calls": 4,
+      "calls": 7,
+      "failed_calls": 0,
+      "accepted_calls": 7,
+      "cost_usd": 0.3105,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T063513Z_poison-message_seed8",
+      "case": "poison-message",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer redeploy with BAD_EVENTS=retry and one unreadable event (offset 86, amount rejected as not integer cents) retried forever, which blocks the events behind it, though it leaves the payload's decimal-string form uninspected.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 48.0,
+      "diagnosis_seconds": 58.3,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.5275,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T064035Z_provider-outage_seed8",
+      "case": "provider-outage",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It traces the 503s to the provider hanging, so payments-api calls time out after 3 attempts and trip the circuit breaker, which then fails fast with 503 and leaves payments pending; only the 10 s trial-call detail is missing.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 47.0,
+      "diagnosis_seconds": 39.6,
+      "steps": 9,
+      "tool_calls": 7,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.5803,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T064505Z_money-unit_seed8",
+      "case": "money-unit",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy with CHARGE_AMOUNT_UNIT=dollars, which converts cent amounts again so the provider charges 100x while our records keep the right amounts, and its fix rolls payments-api back and refunds the excess.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 24.8,
+      "steps": 5,
+      "tool_calls": 3,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.1662,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 59
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 148
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T064906Z_secret-rotation_seed8",
+      "case": "secret-rotation",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the webhook-receiver deploy with WEBHOOK_SECRET_VERSION=v2 as the cause: it checks signatures against a secret the provider does not sign with, refuses every webhook as a signature mismatch, and the provider keeps retrying, which matches the right answer and its rollback remedy.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.8,
+      "diagnosis_seconds": 23.5,
+      "steps": 5,
+      "tool_calls": 4,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.1879,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T065408Z_pool-exhaustion_seed8",
+      "case": "pool-exhaustion",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It ties the 500s to the payments-api deploy with REFUND_CONNECTION=kept, where the refund path keeps its connections, the pool empties, and every request hits the 5 s PoolTimeout; it also proposes rolling payments-api back.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 65.0,
+      "diagnosis_seconds": 52.2,
+      "steps": 9,
+      "tool_calls": 7,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.746,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T065914Z_false-alarm_seed8",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.7,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It read zero lag for both groups and proposes no fix, but it never calls the alert false and instead credits it to a likely 250-message restart backlog it admits it never saw.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 41.2,
+      "steps": 9,
+      "tool_calls": 6,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.3298,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T070128Z_missing-deploys_seed8",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.55,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": false,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly finds ledger-consumer double-posting a redelivered webhook and honestly says the deploy history could not be read, but it holds the dedup works partly and leaves a removed idempotent handler as one of three open options without choosing it.",
+      "aravind": "partly",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": false,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 95.6,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.523,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 17,
+          "matches_provider": 18
+        }
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T070627Z_duplicate-delivery_seed8",
+      "case": "duplicate-delivery",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the 07:07:44 ledger-consumer deploy with LEDGER_HANDLER=naive, which skips event_id dedupe, so the provider's resent evt_000281 was booked twice. Its fix rolls the consumer back and reverses the duplicate transaction 282.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.6,
+      "diagnosis_seconds": 18.9,
+      "steps": 4,
+      "tool_calls": 3,
+      "calls": 4,
+      "failed_calls": 0,
+      "accepted_calls": 4,
+      "cost_usd": 0.0572,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 2,
+          "matches_provider": 3
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T071010Z_poison-message_seed8",
+      "case": "poison-message",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with BAD_EVENTS=retry stuck re-trying one unbookable provider event at partition 2 offset 86 and blocking everything behind it, and honestly leaves the amount's exact form unestablished.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 40.1,
+      "steps": 8,
+      "tool_calls": 6,
+      "calls": 8,
+      "failed_calls": 0,
+      "accepted_calls": 8,
+      "cost_usd": 0.1961,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T071515Z_provider-outage_seed8",
+      "case": "provider-outage",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It places the fault in the provider: calls to it hang until the 3 s timeout, each request retries three times, then the circuit breaker opens and payments-api answers 503 at once, leaving payments pending; it escalates to the provider and plans to reconcile pending payments, as the remedy asks.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 47.0,
+      "diagnosis_seconds": 31.8,
+      "steps": 8,
+      "tool_calls": 7,
+      "calls": 8,
+      "failed_calls": 0,
+      "accepted_calls": 8,
+      "cost_usd": 0.2406,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T071938Z_money-unit_seed8",
+      "case": "money-unit",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy with CHARGE_AMOUNT_UNIT=dollars, which reads amounts already in cents as dollars, so the provider charges 100x while our records stay correct, and it proposes rolling back and refunding the overcharge at the provider.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.2,
+      "diagnosis_seconds": 22.8,
+      "steps": 5,
+      "tool_calls": 4,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.096,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 61
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 141
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T072326Z_secret-rotation_seed8",
+      "case": "secret-rotation",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the webhook-receiver redeploy with WEBHOOK_SECRET_VERSION=v2 while the provider still signs with the old secret, so every webhook fails the signature check, nothing reaches Kafka and the provider retries, and it proposes rolling the receiver back.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 32.9,
+      "steps": 8,
+      "tool_calls": 6,
+      "calls": 8,
+      "failed_calls": 0,
+      "accepted_calls": 8,
+      "cost_usd": 0.1777,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T072837Z_pool-exhaustion_seed8",
+      "case": "pool-exhaustion",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.5,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly finds exhaustion of the payments-api DB pool, with 5 s waits ending in a 500, and suspects REFUND_CONNECTION=kept, but it never identifies the leak as refund reads taking connections and not returning them, and leaves that unconfirmed.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": false,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 65.0,
+      "diagnosis_seconds": 35.0,
+      "steps": 9,
+      "tool_calls": 8,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.3745,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T073327Z_false-alarm_seed8",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.55,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It read the ledger lag as 0 and found no persistent fault, but it did not call the alert false; it blamed a 250-message backlog from the restart that it admits it never observed.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 23.3,
+      "steps": 7,
+      "tool_calls": 6,
+      "calls": 7,
+      "failed_calls": 0,
+      "accepted_calls": 7,
+      "cost_usd": 0.1096,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T073523Z_missing-deploys_seed8",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation",
+      "seed": 8,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.45,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": false,
+      "judge": "partly",
+      "judge_fix_fits": false,
+      "judge_why": "It rightly finds that the ledger consumer booked the redelivered webhook twice and that the deploy list could not be checked, but it says dedupe still works for other events instead of saying it is gone, and it offers two possible causes without choosing.",
+      "aravind": "partly",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": false,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 17.4,
+      "diagnosis_seconds": 70.1,
+      "steps": 9,
+      "tool_calls": 8,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.2216,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 11,
+          "matches_provider": 12
+        }
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T073957Z_duplicate-delivery_seed9",
+      "case": "duplicate-delivery",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.82,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with LEDGER_HANDLER=naive booking the provider's redelivered webhook evt_000272 twice, and proposes rolling back plus reversing duplicate transaction 275.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.4,
+      "diagnosis_seconds": 35.6,
+      "steps": 6,
+      "tool_calls": 4,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.2402,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 4,
+          "matches_provider": 5
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T074356Z_poison-message_seed9",
+      "case": "poison-message",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with BAD_EVENTS=retry and the one unreadable provider event (bad amount, evt_000282 at provider-events/1@128) that it retries forever while lag builds behind it, and proposes rolling ledger-consumer back to dead-lettering.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 41.1,
+      "steps": 7,
+      "tool_calls": 5,
+      "calls": 7,
+      "failed_calls": 0,
+      "accepted_calls": 7,
+      "cost_usd": 0.296,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T074901Z_provider-outage_seed9",
+      "case": "provider-outage",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.7,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly blames the provider for leaving payments-api's calls unanswered until the circuit breaker opened and the API failed fast with 503, though it adds provider 500s and counts one retry instead of three attempts.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 47.0,
+      "diagnosis_seconds": 51.9,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.7062,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T075345Z_money-unit_seed9",
+      "case": "money-unit",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy with CHARGE_AMOUNT_UNIT=dollars, which reads amounts already in cents in the wrong unit so the provider charges 100x while our records keep the right amount, and it proposes rolling back plus refunding the overcharges at the provider.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 39.1,
+      "steps": 7,
+      "tool_calls": 4,
+      "calls": 7,
+      "failed_calls": 0,
+      "accepted_calls": 7,
+      "cost_usd": 0.3269,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 48
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 150
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T075747Z_secret-rotation_seed9",
+      "case": "secret-rotation",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the webhook-receiver deploy with WEBHOOK_SECRET_VERSION=v2 while the provider still signs with the old secret, so every webhook fails its signature check, is rejected, never reaches provider-events, and is retried, and it proposes rolling back.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 26.4,
+      "steps": 6,
+      "tool_calls": 5,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.19,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T080253Z_pool-exhaustion_seed9",
+      "case": "pool-exhaustion",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy with REFUND_CONNECTION=kept leaking a pool connection on each refund until the pool runs dry, so requests wait out the pool timeout and fail with 500, and it says the leak is inferred rather than observed.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 97.0,
+      "diagnosis_seconds": 45.8,
+      "steps": 8,
+      "tool_calls": 7,
+      "calls": 8,
+      "failed_calls": 0,
+      "accepted_calls": 8,
+      "cost_usd": 0.5923,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T080826Z_false-alarm_seed9",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It reads ledger lag near 0 from query_metrics, says there is no current fault so the alert did not reflect real lag, and proposes kind none; its alert-rule review suggestions and its hedged guess about a 'group' label are only follow-ups.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 49.7,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.418,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T081050Z_missing-deploys_seed9",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.55,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": false,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly places the fault in ledger-consumer: it double-posts the redelivered evt_000272 because there is no event_id dedupe check, and it says it could not check deploys without claiming one; the fix includes rolling ledger-consumer back and reversing the duplicate with approval.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": false,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 17.9,
+      "diagnosis_seconds": 92.5,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.4903,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T081548Z_duplicate-delivery_seed9",
+      "case": "duplicate-delivery",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with LEDGER_HANDLER=naive and no event_id dedupe, which booked a redelivered webhook twice, and it proposes rolling back to the idempotent handler plus a separately approved reversal of the duplicate.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.7,
+      "diagnosis_seconds": 24.0,
+      "steps": 5,
+      "tool_calls": 4,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.0832,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 2,
+          "matches_provider": 3
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T081937Z_poison-message_seed9",
+      "case": "poison-message",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the ledger-consumer deploy with BAD_EVENTS=retry stuck retrying one unreadable provider event at partition 1 offset 129 and blocking the bookings behind it, though it did not confirm that the amount was a decimal string and left that open.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 40.2,
+      "steps": 8,
+      "tool_calls": 6,
+      "calls": 8,
+      "failed_calls": 0,
+      "accepted_calls": 8,
+      "cost_usd": 0.2065,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T082442Z_provider-outage_seed9",
+      "case": "provider-outage",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.55,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It correctly blames the provider and describes the breaker opening and failing fast with 503, but it says the provider answers quickly with HTTP 500 when the provider actually hangs and calls time out.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 47.0,
+      "diagnosis_seconds": 31.2,
+      "steps": 8,
+      "tool_calls": 7,
+      "calls": 8,
+      "failed_calls": 0,
+      "accepted_calls": 8,
+      "cost_usd": 0.2409,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T082905Z_money-unit_seed9",
+      "case": "money-unit",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It names the payments-api deploy with CHARGE_AMOUNT_UNIT=dollars causing 100x provider charges, but it misstates how (cents read as dollars and converted again) and wrongly suggests the ledger holds the inflated amounts, when our records keep the right ones.",
+      "aravind": "names the cause",
+      "aravind_fix_fits": true,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 25.5,
+      "steps": 4,
+      "tool_calls": 2,
+      "calls": 4,
+      "failed_calls": 0,
+      "accepted_calls": 4,
+      "cost_usd": 0.0801,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 49
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "payments_match_provider": 109
+        }
+      },
+      "graders_disagree": true
+    },
+    {
+      "folder": "2026-11-07T083253Z_secret-rotation_seed9",
+      "case": "secret-rotation",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.85,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It names the webhook-receiver deploy with WEBHOOK_SECRET_VERSION=v2 while the provider signs with v1, every webhook refused with a 400 so nothing reaches Kafka and the provider retries, and it says what it could not check.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "webhook-receiver"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 47.9,
+      "diagnosis_seconds": 18.5,
+      "steps": 5,
+      "tool_calls": 4,
+      "calls": 5,
+      "failed_calls": 0,
+      "accepted_calls": 5,
+      "cost_usd": 0.089,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "could not settle",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T083750Z_pool-exhaustion_seed9",
+      "case": "pool-exhaustion",
+      "kind": "fault",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.55,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "names the cause",
+      "judge_fix_fits": true,
+      "judge_why": "It picks REFUND_CONNECTION=kept as the most likely cause, with refunds keeping DB connections until the pool is exhausted and requests hit PoolTimeout and return 500, and it proposes rolling back payments-api.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "payments-api"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 81.0,
+      "diagnosis_seconds": 44.8,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.4246,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T084305Z_false-alarm_seed9",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.7,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": "partly",
+      "judge_fix_fits": true,
+      "judge_why": "It read lag as 0 and found no lasting fault, but it does not call the alert false: it explains it as a real restart backlog of about 250, a peak it admits it never observed.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 21.9,
+      "steps": 6,
+      "tool_calls": 5,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.0972,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-07T084501Z_missing-deploys_seed9",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation",
+      "seed": 9,
+      "model": "claude-sonnet-5-5",
+      "answered_by": [
+        "claude-sonnet-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.4,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": false,
+      "judge": "partly",
+      "judge_fix_fits": false,
+      "judge_why": "It rightly traces the provider's resent webhook to a double booking in the ledger consumer and says it could not check deploys, but it calls the dedupe working and blames a race instead of the lost dedupe, and it rejects the rollback.",
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": false,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": 17.9,
+      "diagnosis_seconds": 66.1,
+      "steps": 9,
+      "tool_calls": 8,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.166,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 6,
+          "matches_provider": 7
+        }
+      },
+      "graders_disagree": false
+    }
+  ],
+  "summary": [
+    {
+      "model": "claude-opus-5-5",
+      "case": "duplicate-delivery",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.4,
+      "median_diagnosis_seconds": 42.2,
+      "median_steps": 7,
+      "median_calls": 7,
+      "calls": 20,
+      "cost_usd": 1.146
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "poison-message",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 48.0,
+      "median_diagnosis_seconds": 41.1,
+      "median_steps": 7,
+      "median_calls": 7,
+      "calls": 23,
+      "cost_usd": 1.061
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "provider-outage",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 47.0,
+      "median_diagnosis_seconds": 39.7,
+      "median_steps": 9,
+      "median_calls": 9,
+      "calls": 28,
+      "cost_usd": 1.8078
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "money-unit",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 0,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.3,
+      "median_diagnosis_seconds": 31.9,
+      "median_steps": 6,
+      "median_calls": 6,
+      "calls": 18,
+      "cost_usd": 0.8
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "secret-rotation",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 0,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 47.9,
+      "median_diagnosis_seconds": 26.4,
+      "median_steps": 6,
+      "median_calls": 6,
+      "calls": 18,
+      "cost_usd": 0.6127
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "pool-exhaustion",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 0,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 65.0,
+      "median_diagnosis_seconds": 48.9,
+      "median_steps": 9,
+      "median_calls": 9,
+      "calls": 26,
+      "cost_usd": 1.9541
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "false-alarm",
+      "mode": "evaluation",
+      "kind": "false alarm",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 1,
+      "partly": 2,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 1,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 2,
+      "labeled": 2,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": null,
+      "median_diagnosis_seconds": 46.5,
+      "median_steps": 10,
+      "median_calls": 10,
+      "calls": 29,
+      "cost_usd": 1.1501
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "missing-deploys",
+      "mode": "evaluation",
+      "kind": "missing evidence",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 0,
+      "judged": 3,
+      "judge_names_the_cause": 2,
+      "judge_fix_fits": 2,
+      "judge_no_verdict": 0,
+      "graders_disagree": 1,
+      "labeled": 2,
+      "action_judged": 3,
+      "action_right": 0,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.6,
+      "median_diagnosis_seconds": 92.5,
+      "median_steps": 10,
+      "median_calls": 10,
+      "calls": 29,
+      "cost_usd": 1.4674
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "duplicate-delivery",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 2,
+      "graded": 2,
+      "names_the_cause": 2,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 2,
+      "judged": 2,
+      "judge_names_the_cause": 2,
+      "judge_fix_fits": 2,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 0,
+      "action_judged": 2,
+      "action_right": 2,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.6,
+      "median_diagnosis_seconds": 24.0,
+      "median_steps": 5,
+      "median_calls": 5,
+      "calls": 15,
+      "cost_usd": 0.3072
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "poison-message",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 2,
+      "partly": 1,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 1,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 47.9,
+      "median_diagnosis_seconds": 40.1,
+      "median_steps": 8,
+      "median_calls": 8,
+      "calls": 21,
+      "cost_usd": 0.4867
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "provider-outage",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 2,
+      "partly": 1,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 1,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 3,
+      "labeled": 3,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 47.0,
+      "median_diagnosis_seconds": 31.8,
+      "median_steps": 8,
+      "median_calls": 8,
+      "calls": 25,
+      "cost_usd": 0.7657
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "money-unit",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 2,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 1,
+      "labeled": 2,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.3,
+      "median_diagnosis_seconds": 22.8,
+      "median_steps": 4,
+      "median_calls": 4,
+      "calls": 12,
+      "cost_usd": 0.2228
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "secret-rotation",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 3,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 47.9,
+      "median_diagnosis_seconds": 19.3,
+      "median_steps": 6,
+      "median_calls": 6,
+      "calls": 19,
+      "cost_usd": 0.3596
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "pool-exhaustion",
+      "mode": "evaluation",
+      "kind": "fault",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 3,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 2,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 1,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 2,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 65.0,
+      "median_diagnosis_seconds": 40.9,
+      "median_steps": 9,
+      "median_calls": 9,
+      "calls": 28,
+      "cost_usd": 1.0466
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "false-alarm",
+      "mode": "evaluation",
+      "kind": "false alarm",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 0,
+      "partly": 3,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 3,
+      "judge_names_the_cause": 0,
+      "judge_fix_fits": 3,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": null,
+      "median_diagnosis_seconds": 21.9,
+      "median_steps": 6,
+      "median_calls": 6,
+      "calls": 18,
+      "cost_usd": 0.2845
+    },
+    {
+      "model": "claude-sonnet-5-5",
+      "case": "missing-deploys",
+      "mode": "evaluation",
+      "kind": "missing evidence",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 2,
+      "partly": 1,
+      "misses_the_cause": 0,
+      "fix_fits": 1,
+      "judged": 3,
+      "judge_names_the_cause": 1,
+      "judge_fix_fits": 1,
+      "judge_no_verdict": 0,
+      "graders_disagree": 1,
+      "labeled": 1,
+      "action_judged": 3,
+      "action_right": 1,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.4,
+      "median_diagnosis_seconds": 70.1,
+      "median_steps": 9,
+      "median_calls": 9,
+      "calls": 28,
+      "cost_usd": 0.6693
+    }
+  ]
+}
