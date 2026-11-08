@@ -1292,13 +1292,17 @@ def test_each_week_5_live_run_replays_exactly_and_is_graded_as_it_was(folder, tm
         pytest.skip("the system prompt changed since this run: record new runs to replay")
     result, whole, differences = loop.replay(folder, tmp_path / "replay.jsonl")
     assert (whole, differences, result.reason) == (True, [], saved["loop"]["reason"])
-    # Nobody was asked and nothing ran: no request, no decision; the gate's log holds what it planned, or that the
-    # diagnosis named no action.
+    # Nobody was asked and nothing ran: no request, no decision. The rule graded it by rubric version 4.
     assert not (folder / gate.REQUEST).exists() and not (folder / gate.DECISION).exists()
+    assert saved["comparison"]["rubric"]["version"] == 4
+    if result.reason != "diagnosed":  # it ended in no diagnosis: the gate never ran, and the rule had none to grade
+        assert saved["gate"] is None and not (folder / gate.LOG).exists()
+        assert saved["comparison"] == grading.compare(saved["case"]["name"], None, 4)
+        return
+    # The gate's log holds what it planned, or that the diagnosis named no action.
     events = [json.loads(line)["event"] for line in (folder / gate.LOG).read_text().splitlines()]
     assert events == [saved["gate"]["result"]] and events[0] in ("not asked", "no action")
-    # The rule grades the kept diagnosis as the run did: rubric version 4.
-    assert saved["comparison"]["rubric"]["version"] == 4
+    # The rule grades the kept diagnosis as the run did.
     again = grading.compare(saved["case"]["name"], recorded[-1]["diagnosis"], 4)
     kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy")
     assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
