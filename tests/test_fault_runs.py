@@ -1537,12 +1537,15 @@ def test_the_gated_command_with_no_action_named_asks_nobody(monkeypatch, tmp_pat
     world = DockerStack()
     no_action = json.loads(NAMES_ROLLBACK)
     del no_action["diagnosis"]["fix_action"]
-    patch_gated(monkeypatch, world, [tool("money_check", wait=True), json.dumps(no_action)])
+    # A rollback with no action named: the loop's check (week 6) sends it back once, and takes the same again.
+    script = [tool("money_check", wait=True), json.dumps(no_action), json.dumps(no_action)]
+    patch_gated(monkeypatch, world, script)
     assert fault_runs.main(["run", "duplicate-delivery", "--evidence-dir", str(tmp_path)]) == 0
     [folder] = tmp_path.iterdir()
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     assert saved["gate"]["result"] == "no action" and not (folder / gate.REQUEST).exists()
     assert saved["removed_by"] == "the harness's clearing (klaxon.faults)"
+    assert saved["loop"]["sent_back"] == [loop.ROLLBACK_NAMED] and saved["loop"]["steps"] == 3
 
 
 def test_the_week_3_command_offers_no_action_and_leaves_the_week_3_label(monkeypatch, tmp_path):

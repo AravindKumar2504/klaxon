@@ -1,4 +1,4 @@
-"""Klaxon evaluated (week 5): the same incidents many times, each run graded, measured and kept.
+"""Klaxon evaluated (weeks 5 and 6): the same incidents many times, each run graded, measured and kept.
 
 A test harness, like klaxon.fault_runs, which runs each fault case: Klaxon (klaxon.agent) does the investigating. Eight
 cases, each with its right answer committed before any run on it (CASES, below; `make eval-cases` prints them):
@@ -26,8 +26,13 @@ A suite is one model and a list of cases and seeds, run one after another, seed 
 first seed of every case. It stops at the first run whose loop stopped in a way that says nothing of Klaxon's judgment
 and would likely happen again (the model could not answer, a seat's limit for one; the tools could not start; a
 crash), and at an interrupt. The runs left are said as not run, and nothing is run again on its own. Each run's evidence
-goes into the suite's folder in evidence/week5/, as a fault run's does; the suite's own file says what was planned and
-what came of each run, and the report is written there at the end.
+goes into the suite's folder in evidence/week6/ (week 5's runs: evidence/week5/), as a fault run's does; the suite's
+own file says what was planned and what came of each run, and the report is written there at the end.
+
+Version 2 of how the runs are made (week 6, after Aravind's review of week 5): the false alarm's stack runs 5 minutes
+under traffic before its quiet readings (week 5: 60 s), the system prompt's rollback_deploy says that code plans it
+from the deploy log, and the loop sends back once a rollback with no action named (klaxon.agent.loop). Each run
+records its version (week 5's say nothing: version 1), and the report never counts two versions in one row.
 
 The report is worked out from saved runs, offline, so a grader can change and every result be graded again without a
 new run: per run, the verdict, the fix and the action, the gate, the times, the model calls, the cost, the damage; per
@@ -77,7 +82,16 @@ from klaxon.patient.stack import REPO, StackError
 
 FAULT, FALSE_ALARM, MISSING = "fault", "false alarm", "missing evidence"
 ROLLBACK = catalog.ROLLBACK_DEPLOY.name
-EVIDENCE = REPO / "evidence" / "week5"
+# How the runs are made, by version. 1: week 5's 48 runs (their files say nothing of it). 2: week 6, after Aravind's
+# review of week 5 (2026-11-09): the false alarm's warm-up, the line in rollback_deploy's description, and the loop's
+# check. The report never counts two versions in one row, and each version's runs have a folder of their own.
+VERSION = 2
+MODES = {1: "evaluation", 2: "evaluation, week 6"}
+EVIDENCE = REPO / "evidence" / "week6"
+# Before the false alarm's quiet readings: 5 minutes of traffic (Aravind's choice, 2026-11-09; week 5: 60 s, so the
+# alert came 80 to 100 s after a fresh stack started, and most runs blamed a backlog from the restart). The faults keep
+# fault_runs.WARMUP_SECONDS, so their runs still compare with week 5's.
+FALSE_ALARM_WARMUP_SECONDS = 300.0
 SEEDS = (7, 8, 9)  # Aravind's choice (2026-11-03): 7 is the seed of every earlier run
 STEPS, TOOL_CALLS = 10, 8  # weeks 3 and 4's budgets (make investigate-fault STEPS=10 TOOL_CALLS=8)
 SUITE_FILE, REPORT_JSON, REPORT_MD, PROBE_FILE = "suite.json", "report.json", "report.md", "tools-probe.json"
@@ -250,7 +264,7 @@ def false_alarm(
     settings: traffic.Settings,
     investigate: Callable[[Alert], RunResult] | None,
     gated: fault_runs.Gated | None,
-    warmup_seconds: float = fault_runs.WARMUP_SECONDS,
+    warmup_seconds: float = FALSE_ALARM_WARMUP_SECONDS,
     every_seconds: float = alerts.EVERY_SECONDS,
 ) -> fault_runs.Record:
     """A false alarm, filling in record as it goes: traffic and no fault; the rules must see a quiet stack at two
@@ -325,7 +339,7 @@ def false_alarm_label(record: fault_runs.Record) -> str:
     said = [
         "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a"
         " simulated provider, no real money.",
-        "No fault was injected: an evaluation case, a false alarm (week 5).",
+        "No fault was injected: an evaluation case, a false alarm (week 6).",
     ]
     if record.alert is None:
         return " ".join([*said, f"No alert was given. The run stopped: {record.stopped}."])
@@ -370,7 +384,7 @@ def render(record: fault_runs.Record) -> str:
         return fault_runs.render(record)
     case = record.case
     lines = [
-        f"Klaxon week 5: an evaluation run (case {case['name']}, seed {case['seed']}): a false alarm",
+        f"Klaxon week 6: an evaluation run (case {case['name']}, seed {case['seed']}): a false alarm",
         label(record),
         "",
         f"The case: {record.fault['title']}",
@@ -436,7 +450,7 @@ def save(folder: Path, record: fault_runs.Record, header: Mapping) -> None:
 def what(case: Case, seed: int) -> str:
     """What a run is, at the top of its loop's files (the model recording and the tool results)."""
     said = (
-        f"One evaluation run of Klaxon (week 5): case {case.name}, seed {seed}. {case.title}. Claude on Aravind's seat,"
+        f"One evaluation run of Klaxon (week 6): case {case.name}, seed {seed}. {case.title}. Claude on Aravind's seat,"
         " read-only tools on this Mac's stack, and one write action offered, which code plans and nobody is asked"
         " about: nothing runs."
     )
@@ -461,9 +475,8 @@ def run_case(
     argv += ["--steps", str(budgets.steps), "--tool-calls", str(budgets.tool_calls), "--rate", f"{rate:g}"]
     command = shlex.join(["python", "-m", "klaxon.evaluation", *argv])
     parts = fault_runs.Stack(faults.LocalStack(), alerts.Alerting())
-    header = {"case": case.name, "seed": seed, "model": model, "fault_name": case.fault} | fault_runs._provenance(
-        command
-    )
+    header = {"case": case.name, "seed": seed, "model": model, "fault_name": case.fault, "evaluation_version": VERSION}
+    header |= fault_runs._provenance(command)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     folder = loop._new_folder(parent, f"{stamp}_{case.name}_seed{seed}")
     described = case.describe() | {"seed": seed, "model": model}
@@ -585,7 +598,8 @@ def fresh_stack() -> None:
 
 def _mode(saved: Mapping) -> str:
     if saved.get("case") is not None:
-        return "evaluation"
+        version = saved.get("evaluation_version", 1)  # week 5's runs say nothing of it
+        return MODES.get(version, f"evaluation, version {version}")
     if saved.get("rehearsal"):
         return "rehearsal"
     return "gated, week 4" if saved.get("gated") else "diagnosis only, week 3"
@@ -831,7 +845,7 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
                 "cost_usd": round(sum(row["cost_usd"] for row in group), 4),
             }
         )
-    order, modes = list(CASES), ["diagnosis only, week 3", "gated, week 4", "evaluation"]
+    order, modes = list(CASES), ["diagnosis only, week 3", "gated, week 4", *MODES.values()]
     out.sort(
         key=lambda e: (
             e["model"],
@@ -1146,10 +1160,11 @@ def _run(args: argparse.Namespace) -> int:
     folder = loop._new_folder(args.evidence_dir, f"{stamp}_suite_{args.model}")
     suite = {
         "label": (
-            "A suite of Klaxon's evaluation runs (week 5): one model, its cases and seeds, each run on a fresh stack"
-            " (make reset, then make up), live through Claude Code on Aravind's seat. In each run code plans any action"
-            " the diagnosis names, nobody is asked, and nothing runs."
+            f"A suite of Klaxon's evaluation runs ({MODES[VERSION]}): one model, its cases and seeds, each run on a"
+            " fresh stack (make reset, then make up), live through Claude Code on Aravind's seat. In each run code plans"
+            " any action the diagnosis names, nobody is asked, and nothing runs."
         ),
+        "evaluation_version": VERSION,
         "model": args.model,
         "budgets": asdict(budgets),
         "rate": args.rate,
