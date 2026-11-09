@@ -65,7 +65,9 @@ spec:
           # compose.yaml's health check, the same command. Compose checks every start_interval during the start
           # period, then every interval; it never restarts an unhealthy container. Here a startup probe checks as
           # often, for as long as Compose waits before it calls a service unhealthy, then a readiness probe takes over.
-          # No liveness probe, so nothing restarts a container for failing a check, as in Compose.
+          # No liveness probe: once started, nothing restarts a container for failing a check, as in Compose. One
+          # difference: a container that never passes its startup probe is restarted, where Compose would only
+          # call it unhealthy.
           startupProbe:
             exec:
               command: ["sh", "-c", "pg_isready --host 127.0.0.1 --username postgres --dbname klaxon"]

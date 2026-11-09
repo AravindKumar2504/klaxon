@@ -49,6 +49,9 @@ EVIDENCE = REPO / "evidence" / "week5" / "kind"
 # Any of these could aim docker, kind or kubectl at another host, cluster or file.
 FOREIGN_TARGETS = (*stack.FOREIGN_TARGETS, "KUBECONFIG", "KIND_CLUSTER_NAME", "KIND_EXPERIMENTAL_PROVIDER")
 WAIT_SECONDS = 300  # each workload's wait in up(): Kafka and Grafana's stack are the slowest to start
+# The money check's addresses can come from these (klaxon.checks.live). On the cluster they must be its defaults,
+# the ports deploy/kind/cluster.yaml maps, or the check could read another stack while its run says kind.
+ADDRESS_VARIABLES = ("KLAXON_READONLY_DSN", "KLAXON_PROVIDER_URL", "KLAXON_KAFKA_BOOTSTRAP")
 
 # What up() applies after the namespace, in compose.yaml's depends_on order, and what it waits for after each step:
 # first what the others need, then the topics, then our four services.
@@ -133,7 +136,9 @@ def _run(binary: str, args: list[str], *, stdin: str | None = None, timeout: flo
 
 
 def _kubectl(*args: str, stdin: str | None = None, timeout: float = 600) -> str:
+    # Its discovery cache in .kind/ too: nothing of this cluster goes to ~/.kube.
     target = ["--kubeconfig", str(KUBECONFIG), "--context", CONTEXT, "--namespace", NAMESPACE]
+    target += ["--cache-dir", str(KUBECONFIG.parent / "cache")]
     return _run(kubectl_binary(), [*target, *args], stdin=stdin, timeout=timeout)
 
 
@@ -299,8 +304,12 @@ def ensure_ports_are_the_clusters() -> None:
 
 
 def ready() -> None:
-    """Refuse unless the Compose stack is down, the ports are the cluster's, and every pod is ready (or done)."""
+    """Refuse unless the money check's addresses are its defaults, the Compose stack is down, the ports are the
+    cluster's, and every pod is ready (or done)."""
     stack.ensure_local()
+    moved = [name for name in ADDRESS_VARIABLES if os.environ.get(name)]
+    if moved:
+        raise ClusterError(f"{moved[0]} is set: the money check would read another address than the cluster's")
     running = compose_running()
     if running:
         raise ClusterError(f"the Compose stack is up ({', '.join(running)}), on the cluster's ports: make down")

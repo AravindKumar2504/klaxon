@@ -851,12 +851,22 @@ def shown(path: Path) -> str:
         return clean_text(str(path))
 
 
+def typed(path: Path) -> str:
+    """A folder as a command he types names it: from the repo's root, or whole. Never with ~, which the command's
+    quotes would keep from being expanded (week 5's review)."""
+    try:
+        return str(path.resolve().relative_to(REPO))
+    except ValueError:
+        return str(path.resolve())
+
+
 HELD_BACK = "held back until Aravind labels it"
 
 
 def held_back(row: Mapping) -> dict:
     """A run's row with the judge's verdict held back, as it is until Aravind labels the run: so a report never shows
-    him a grader's verdict before he gives his own (the re-check's finding M2). Its disagreement with the rule too."""
+    him the judge's verdict before he gives his own (the re-check's finding M2). Its disagreement with the rule too.
+    The rule's verdict is not held back: each suite's own report, made as its runs end, shows it (week 5's review)."""
     hidden = dict.fromkeys(("judge", "judge_fix_fits", "judge_why"))
     return dict(row) | hidden | {"graders_disagree": False, "judge_held_back": True}
 
@@ -908,7 +918,7 @@ class NotJudged(ValueError):
     """A pick needs each run judged first: a run not judged could be a disagreement it misses."""
 
 
-def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED) -> list[Path]:
+def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED, passed_over: list[str] | None = None) -> list[Path]:
     """The runs Aravind labels next: every run where the rule and the judge give different verdicts on the cause, then
     runs drawn at random (a fixed seed) from his other runs, up to total, and never fewer than MIN_DRAWN. Only runs
     that ended in a diagnosis and that he has not labeled. Sorted by folder, so the list says nothing of which runs
@@ -917,7 +927,9 @@ def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED) -> list[Path]
     for folder in grading.run_folders(paths):
         try:
             row = run_row(folder)
-        except (OSError, ValueError, KeyError, TypeError):  # a run the report leaves out, and says so
+        except (OSError, ValueError, KeyError, TypeError) as exc:  # a run that cannot be read: said, never silent
+            if passed_over is not None:
+                passed_over.append(f"{clean_text(folder.name, 200)}: {type(exc).__name__}")
             continue
         if row["verdict"] is None or row["aravind"] is not None:
             continue
@@ -1168,11 +1180,14 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def _pick(args: argparse.Namespace) -> int:
+    passed_over: list[str] = []
     try:
-        chosen = pick(args.folders, args.total)
+        chosen = pick(args.folders, args.total, passed_over=passed_over)
     except NotJudged as exc:
         print(f"Nothing picked: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
+    for line in passed_over:
+        print(f"Passed over, as it cannot be read: {line}", file=sys.stderr)
     if not chosen:
         print("Nothing picked: no run you have not labeled ended in a diagnosis.", file=sys.stderr)
         return 2
@@ -1181,7 +1196,7 @@ def _pick(args: argparse.Namespace) -> int:
         f" on the cause, and runs drawn at random (seed {PICK_SEED}). Which is which is not said. In your own"
         " terminal:\n"
     )
-    print("make label RUN=" + shlex.quote(" ".join(shown(path) for path in chosen)))
+    print("make label RUN=" + shlex.quote(" ".join(typed(path) for path in chosen)))
     return 0
 
 

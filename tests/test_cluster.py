@@ -108,7 +108,7 @@ def test_no_service_variables_and_init_as_compose_yaml_has_it(name):
 
 
 @pytest.mark.parametrize("name", sorted(n for n in SERVICES if "healthcheck" in SERVICES[n]))
-def test_each_health_check_carries_over_and_restarts_nothing(name):
+def test_each_health_check_carries_over_and_never_restarts_a_started_container(name):
     check, ours = SERVICES[name]["healthcheck"], container(name)
     interval, timeout = seconds(check["interval"]), seconds(check["timeout"])
     start_period, start_interval = seconds(check["start_period"]), seconds(check["start_interval"])
@@ -119,7 +119,7 @@ def test_each_health_check_carries_over_and_restarts_nothing(name):
     # As often as Compose checks while a service starts, for as long as Compose waits before it calls it unhealthy.
     assert (startup["periodSeconds"], startup["timeoutSeconds"]) == (start_interval, timeout)
     assert startup["failureThreshold"] == math.ceil((start_period + interval * check["retries"]) / start_interval)
-    assert "livenessProbe" not in ours  # Compose never restarts a container for failing its check
+    assert "livenessProbe" not in ours  # once started, nothing restarts it for failing a check, as in Compose
 
 
 def test_a_service_without_a_health_check_has_no_probe():
@@ -326,7 +326,7 @@ class Fake:
                 return "kind v0.0.0-made-up\n"
             return ""
         assert tool == "kubectl"
-        rest = args[6:]
+        rest = args[8:]
         if rest[:2] == ["config", "view"]:
             return self.server
         if rest[:2] == ["get", "pods"]:
@@ -345,7 +345,7 @@ class Fake:
         out = []
         for tool, args, stdin in self.calls:
             if tool == "kubectl":
-                rest = args[6:]
+                rest = args[8:]
                 if rest[:2] != ["config", "view"]:
                     out.append(" ".join(["kubectl", *rest]) + (" <stdin" if stdin else ""))
             else:
@@ -382,8 +382,9 @@ def test_kubectl_always_names_this_clusters_file_context_and_namespace(fake):
     calls = fake.kubectl_calls()
     assert len(calls) == 2  # the API server's check, then the command
     target = ["--kubeconfig", str(fake.kubeconfig), "--context", "kind-klaxon", "--namespace", "klaxon"]
-    assert all(args[:6] == target for args in calls)
-    assert calls[0][6:8] == ["config", "view"] and calls[1][6:] == ["get", "pods"]
+    target += ["--cache-dir", str(fake.kubeconfig.parent / "cache")]  # nothing of the cluster goes to ~/.kube
+    assert all(args[:8] == target for args in calls)
+    assert calls[0][8:10] == ["config", "view"] and calls[1][8:] == ["get", "pods"]
 
 
 @pytest.mark.parametrize(
@@ -394,7 +395,7 @@ def test_kubectl_refuses_a_cluster_whose_api_server_is_not_on_this_mac(fake, ser
     fake.server = server
     with pytest.raises(cluster.ClusterError, match="not on this Mac"):
         cluster.kubectl("delete", "namespace", "klaxon")
-    assert [args[6:8] for args in fake.kubectl_calls()] == [["config", "view"]]  # nothing else ran
+    assert [args[8:10] for args in fake.kubectl_calls()] == [["config", "view"]]  # nothing else ran
 
 
 def test_kubectl_refuses_without_this_clusters_own_kubeconfig(fake):
@@ -455,8 +456,8 @@ def test_up_creates_the_cluster_builds_and_loads_our_image_then_applies_in_order
     # Each kubectl command came after its own check that the API server is on this Mac.
     calls = fake.kubectl_calls()
     for i, args in enumerate(calls):
-        if args[6:8] != ["config", "view"]:
-            assert i > 0 and calls[i - 1][6:8] == ["config", "view"], args
+        if args[8:10] != ["config", "view"]:
+            assert i > 0 and calls[i - 1][8:10] == ["config", "view"], args
     (configmaps,) = [stdin for tool, _, stdin in fake.calls if stdin]
     assert json.loads(configmaps) == cluster.configmaps()
 
@@ -601,3 +602,26 @@ def test_the_make_targets_drive_this_module():
         assert f"\t$(PY) -m klaxon.patient.cluster {command}\n" in makefile
     assert "\t$(PY) -m klaxon.patient.cluster check --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)\n" in makefile
     assert ".kind/" in (cluster.REPO / ".gitignore").read_text().splitlines()
+
+
+# What the drift tests compare: each key compose.yaml's services and health checks use. A key added there that no test
+# compares (user, ulimits, stop_grace_period, a health check's disable) fails here until a test compares it. The image's
+# build is Compose's own: make kind-up builds it with Compose.
+COMPARED = {"image", "build", "command", "entrypoint", "environment", "ports", "volumes", "healthcheck", "depends_on"}
+COMPARED |= {"restart", "init"}
+CHECKED = {"test", "interval", "timeout", "retries", "start_period", "start_interval"}
+
+
+def test_the_drift_tests_compare_every_key_compose_yaml_uses():
+    for name, service in SERVICES.items():
+        assert set(service) <= COMPARED, (name, set(service) - COMPARED)
+        assert set(service.get("healthcheck", {})) <= CHECKED, (name, set(service["healthcheck"]) - CHECKED)
+
+
+@pytest.mark.parametrize("name", ["KLAXON_READONLY_DSN", "KLAXON_PROVIDER_URL", "KLAXON_KAFKA_BOOTSTRAP"])
+def test_the_check_refuses_when_the_money_checks_address_is_set_elsewhere(fake, no_traffic, monkeypatch, name):
+    fake.kubeconfig.write_text("made up")
+    monkeypatch.setenv(name, "127.0.0.1:5433")  # another stack on this Mac, made up
+    with pytest.raises(cluster.ClusterError, match=f"{name} is set"):
+        cluster.check(5.0, 2, 7, "made up")
+    assert fake.calls == [("docker", ["context", "inspect"], None)]  # nothing else ran

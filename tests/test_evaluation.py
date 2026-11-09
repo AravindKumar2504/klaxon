@@ -1306,3 +1306,20 @@ def test_each_week_5_live_run_replays_exactly_and_is_graded_as_it_was(folder, tm
     again = grading.compare(saved["case"]["name"], recorded[-1]["diagnosis"], 4)
     kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy")
     assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
+
+
+def test_label_pick_says_which_runs_it_passes_over_and_its_command_has_no_tilde(tmp_path, capsys, monkeypatch):
+    # Two runs the judge graded, both made up from a copy; a third whose run.json cannot be read.
+    source = sorted(path.parent for path in evaluation.EVIDENCE.glob("*_suite_*/*/judgment.json"))[:2]
+    for folder in source:
+        shutil.copytree(folder, tmp_path / folder.name, ignore=shutil.ignore_patterns("label.json"))
+    broken = tmp_path / "2026-11-07T000000Z_money-unit_seed1"
+    broken.mkdir()
+    (broken / fault_runs.RUN_FILE).write_text("{not json")
+    # As if the runs were under this Mac's home folder, which evidence writes as ~: the command must not.
+    monkeypatch.setattr("klaxon.agent.tools.HOME", str(tmp_path.resolve().parent))
+    assert evaluation.main(["pick", str(tmp_path)]) == 0
+    out, err = capsys.readouterr()
+    assert f"Passed over, as it cannot be read: {broken.name}: " in err
+    command = out.strip().splitlines()[-1]
+    assert command.startswith("make label RUN=") and "~" not in command and str(tmp_path.resolve()) in command
