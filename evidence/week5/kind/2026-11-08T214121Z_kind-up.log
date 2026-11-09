@@ -1,0 +1,22 @@
+started 2026-11-08T21:41:21Z
+.venv/bin/python -m klaxon.patient.cluster up
+Creating the kind cluster klaxon (one node; about a minute the first time)
+Building our image, klaxon-patient:dev, as compose.yaml builds it
+Loading klaxon-patient:dev into the cluster (it is never pulled)
+Applying 00-namespace.yaml and the ConfigMaps of compose.yaml's mounted files
+Applying 10-postgres.yaml, 10-redis.yaml, 10-kafka.yaml, 10-otel-lgtm.yaml, 10-fake-provider.yaml
+  waiting for statefulset/postgres
+  waiting for deployment/redis
+  waiting for statefulset/kafka
+  waiting for statefulset/otel-lgtm
+  waiting for statefulset/fake-provider
+Applying 20-kafka-init.yaml
+  waiting for job/kafka-init
+Applying 30-webhook-receiver.yaml, 30-payments-api.yaml, 30-ledger-consumer.yaml, 30-payment-confirmer.yaml
+  waiting for deployment/webhook-receiver
+  waiting for deployment/payments-api
+  waiting for deployment/ledger-consumer
+  waiting for deployment/payment-confirmer
+The patient is up on kind: every workload is ready (make kind-ps; make kind-check).
+make kind-up  6.25s user 4.17s system 12% cpu 1:21.93 total
+exit 0 at 2026-11-08T21:42:43Z

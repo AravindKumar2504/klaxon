@@ -885,7 +885,7 @@ Versions 1 to 3 stay as they were. A saved run is graded again with the newest r
 
 ## Week 5, item 3 (run 2026-11-06 and 07, labeled 2026-11-08): the first results
 
-**What ran.** 48 live runs: the 8 cases (faults 1 to 6, a false alarm, a fault with missing evidence), 3 seeds each, on Opus 5.5 and on Sonnet 5.5. Each ran on a fresh stack. Actions were planned, never run, and nobody was asked. 47 ended in a diagnosis. Sonnet's duplicate-delivery seed 7 did not: three replies in a row broke the reply format (twice an extra closing brace, then a sentence after the JSON), so the loop stopped as designed. The rule (version 4) and the judge (Opus 5.5) graded all 47. You labeled 17, blind: every run where the two graders disagree (10), and 7 drawn at random from the other 37.
+**What ran.** 48 live runs: the 8 cases (faults 1 to 6, a false alarm, a fault with missing evidence), 3 seeds each, on Opus 5.5 and on Sonnet 5.5. Each ran on a fresh stack. Actions were planned, never run, and nobody was asked. 47 ended in a diagnosis. Sonnet's duplicate-delivery seed 7 did not: three replies in a row broke the reply format (twice an extra closing brace, then a sentence after the JSON), so the loop stopped as designed. The rule (version 4) and the judge (Opus 5.5) graded all 47. You labeled 17: every run where the two graders disagree (10), and 7 drawn at random from the other 37. You read them in one file, in the command's order, with no grader's verdict or model shown, wrote your answers on a sheet, then entered them.
 
 **The results, by the graders** (`make eval-report RUNS=evidence/week5 SHOW_JUDGE=1`, saved as `evidence/week5/report.md`):
 
@@ -904,7 +904,7 @@ Versions 1 to 3 stay as they were. A saved run is graded again with the newest r
 The medians are over each model's diagnosed runs, read from `evidence/week5/report.json`. The seat is not billed per call. The judge's 47 calls are not in the costs.
 
 **Your verdicts against the graders (17 runs).**
-- On the cause, the rule agrees with you on 11 and the judge on 11, on different runs. On the 7 random runs, where the graders agree with each other, both agree with you on 6. On the 10 where they disagree, you sided with each 5 times.
+- On the cause, the rule agrees with you on 11 and the judge on 11. They miss on different runs: only one miss is shared. On the 7 random runs, where the graders agree with each other, both agree with you on 6. On the 10 where they disagree, you sided with each 5 times.
 - The judge is stricter than you, never more lenient: all 6 of its differences are "partly" where you said "names". The rule errs both ways: 4 times stricter, 2 times more lenient (both missing-deploys runs, where it counts the words of a cause that the model left open).
 - On the fix, you said it fits on all 17. The rule agrees on 14 and the judge on 15. The differences are missing-deploys runs whose fix was a code change or a ledger repair, not the rollback the case names.
 - The 17 were chosen mostly for disagreement, so 11 of 17 understates agreement on ordinary runs (6 of 7 on the random ones). Neither grader alone stands in for you: they fail on different runs.
@@ -933,7 +933,7 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - A Compose service becomes a workload. A Deployment for what week 6 will roll out and back (our four services), and for Redis. A StatefulSet for what keeps data on a volume (PostgreSQL, Kafka, the fake provider, Grafana's stack). A Job for what runs once (kafka-init).
 - A Compose service name becomes a Service of the same name, so kafka:9092 and postgres:5432 work inside the cluster as on Compose's network.
 - A port on this Mac takes two hops. kind maps 127.0.0.1:8080 to the node's port 30080, and a NodePort Service takes 30080 to the pod's 8000.
-- A health check becomes a startup probe and a readiness probe. Readiness decides whether a pod gets traffic and whether a rollout is done. There is no liveness probe, because Compose never restarts a container for a failed check.
+- A health check becomes a startup probe and a readiness probe. Readiness decides whether a pod gets traffic and whether a rollout is done. There is no liveness probe: once started, a container is never restarted for a failed check, as in Compose. One that never passes its startup probe is restarted, where Compose would only call it unhealthy.
 - A repo file Compose mounts becomes a ConfigMap of the same file. The init script keeps its executable bit: the PostgreSQL image runs an executable script and only sources the others.
 - depends_on becomes the order `make kind-up` applies and waits in.
 
@@ -941,9 +941,9 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - Kubernetes gives every pod variables like KAFKA_PORT, one set per Service. The Kafka image reads every KAFKA_ variable as a setting. `enableServiceLinks: false` stops this and keeps each environment exactly compose.yaml's.
 - Kafka's controller calls itself by name while it starts. A normal Service lists a pod only once it is ready, so that name would not resolve yet. "kafka" is a headless Service that lists the pod before it is ready.
 
-**Safety.** The Compose stack's rules, carried over. Every command names this repo's cluster, its own kubeconfig file, its context and its namespace. Nothing reads or changes `~/.kube/config`. kubectl runs only after checking that the API server is on 127.0.0.1. The dev passwords sit in one Secret, so the specs Klaxon will read in week 6 show none. The check refuses unless the node publishes each port, so a run can never be labeled kind while Compose answered.
+**Safety.** The Compose stack's rules, carried over. Every command names this repo's cluster, its own kubeconfig file, its context and its namespace. Nothing reads or changes `~/.kube/config`. kubectl runs only after checking that the API server is on 127.0.0.1. The dev passwords sit in one Secret, so the specs Klaxon will read in week 6 show none. The check refuses unless the node publishes each port and the money check's address variables are unset, so a run cannot be labeled kind while something else answered.
 
-**What ran** (2026-11-08 UTC, your OK, at `d3e36f3`). `make kind-up` took 1 min 22 s from no cluster to every workload ready, with no restarts (kind v0.33.0, Kubernetes v1.37.0). `make kind-check`: 20 checks at 5 payments per second, all passed, then the check on the quiet cluster passed; 115 payments and 5 refunds, all succeeded. Compose's last runs of the same scenario (2026-10-15) passed every check too. The services' traces, metrics and logs reached the cluster's Grafana stack. Then the cluster was deleted and Docker stopped.
+**What ran** (2026-11-08 UTC, your OK, at `d3e36f3`). `make kind-up` took 1 min 22 s from no cluster to every workload ready, with no restarts (kind v0.33.0, Kubernetes v1.37.0). `make kind-check`: 20 checks at 5 payments per second, all passed, then the check on the quiet cluster passed; 115 payments and 5 refunds, all succeeded. Compose's last runs of the same scenario (2026-10-15) passed every check too. The services' traces, metrics and logs reached the cluster's Grafana stack (checked by hand with curl; not saved). Then the cluster was deleted and Docker stopped.
 
 **The tests.** 77 offline tests. Most compare compose.yaml and the manifests setting by setting: image, command, environment (Secrets read through), health checks, volumes, ports and start order. The rest drive the module against a made-up kind, kubectl and docker. 34 deliberate breaks, each caught.
 
@@ -954,4 +954,33 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - *Why the same ports as Compose?* Every tool works unchanged. The cost: the two stacks take turns.
 - *Why Deployments for our services?* A Deployment keeps its rollout history, and `kubectl rollout undo` goes back one revision. That is week 6.
 - *Is this production Kubernetes?* No. One node, no resource limits, dev passwords in a Secret, and data that is deleted with the cluster. It shows the patient runs on Kubernetes with compose.yaml's settings.
-- *What if a manifest and compose.yaml drift apart?* A test fails. Every setting is compared.
+- *What if a manifest and compose.yaml drift apart?* A test fails. The tests compare each service's image, command, environment, health check, volumes, ports, start order, restart rule and init, and one fails if compose.yaml gains a key they do not compare.
+
+## Week 5 in one page
+
+**The week in order.** Item 1 built the evaluation: 8 cases, each with its right answer written before any run, and a gate that only plans an action, so nothing runs and nobody is asked. Item 2 built the graders, a stricter keyword rule and Claude as a judge, and checked both against your verdicts on 13 saved runs. Item 3 ran the 48 live runs, judged each, and checked both graders against your verdicts on 17 more. Item 4 recorded your marks on the six postmortem drafts. Item 5 put the payments system on Kubernetes. Each needed the one before: a grader must grade every case, so the cases came first; a grader is committed before any run it grades; and Kubernetes came last, because the runs needed Docker first.
+
+**One run in one breath** (Sonnet 5.5, the money-unit fault, seed 9). A fresh stack under synthetic traffic. The fault redeploys the payments API with `CHARGE_AMOUNT_UNIT=dollars`, so each charge reaches the provider 100 times too big. 17.3 s later the money check fails (49 payments differ from the provider's) and the alert fires. The loop reads the money check and the deploy list: 4 steps, 2 tool calls, 25.5 s. It names the setting and the 100x charges, at confidence 0.8, and names a rollback of the payments API. The gate plans it, asks nobody and runs nothing; the harness clears the fault. The rule says it names the cause; the judge says partly, for one right reason (the unit mix-up is stated backwards) and one wrong one (it says our records keep the right amounts, but the ledger books the provider's inflated ones); you said named. It cost $0.08 by Claude Code's estimate, and it replays exactly.
+
+**The results, short.** Opus named the cause in 22 of 24 runs by the rule and 21 by the judge; Sonnet in 17 and 14 of 23 diagnoses (one Sonnet run broke the reply format three times and gave none). On faults 1 to 6, Opus named all 18 by both graders. No run named an action where none fits. Two cases often fail: the false alarm (safe every time, but each grader called it "named" once in 6) and missing deploys (the rollback named once in 6). Sonnet cost $4.14 to Opus's $10.00, and diagnosed in a median 31.2 s to Opus's 42.2 s.
+
+**The ideas to explain.**
+- *Known-cause cases.* Each case's right answer is written before any run, so a grade compares with a fact, not a guess.
+- *Seeds.* Each seed changes the traffic. Three per case show a case that often fails, not a ranking.
+- *Two graders, and a person.* A rule reads words and is free; a judge reads meaning and costs a call; they fail on different runs. Your verdicts are the check on both.
+- *Blind labels.* You see the right answer and the diagnosis, never a grader's verdict or the model, in a shuffled order. The judge's verdict is held back until you label.
+- *The sample.* Every disagreement, plus a random draw. Agreement on that sample understates agreement on ordinary runs, which is why the random part is reported apart.
+- *A confounded case.* The false alarm fired on a fresh stack, so "a backlog from the restart" was a fair reading. A test can fail for the test's reasons.
+- *How a record came.* Typed at your terminal, or given in the chat and entered by Claude: both are recorded, and say which.
+- *Compose to Kubernetes.* A service becomes a workload; a name becomes a Service; a port takes two hops; a health check becomes probes; depends_on becomes the start order.
+
+**What it does not show.** A close ranking of the two models. The graders' accuracy beyond the 30 runs you labeled. Anything about real systems: synthetic data and a simulated provider throughout. Kubernetes in production: one node, and nothing failed on it yet.
+
+**Week 6** (planned Wed Nov 11): a LangGraph version of the loop, and Klaxon on Kubernetes, undoing a bad rollout.
+
+**Likely questions.**
+- *Is Opus better than Sonnet?* On these 48 runs it named more causes by both graders, at about 2.4 times the cost. Three seeds per case cannot rank them closely.
+- *Why did the false alarm fail?* Mostly the case, not the model: each run's stack had just restarted, so a backlog was a fair reading. Every run was safe.
+- *How do you know the graders are right?* I checked them against my own blind verdicts on 30 runs. Each misses on different runs, so I report both.
+- *Why only 17 labels?* Every run where the graders disagree, plus a random draw. It puts my time where a person decides something.
+- *Why Kubernetes now?* Week 6 undoes a bad rollout there. The patient had to run there first, unchanged.
