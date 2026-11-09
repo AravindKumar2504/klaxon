@@ -849,3 +849,15 @@ In item 2's session, which went on to items 3 and 4 at his request ("Do this tas
 - **The other fixes** (Aravind: "Yes, all of them"; `a9aa126`): `make kind-check` refuses the money check's address variables; kubectl's cache goes to `.kind/`; `make label-pick` says which runs it passes over, and its command never uses `~`; a test that the drift tests cover every compose.yaml key; the startup probe's restart said plainly; the hold-back docstring made true. Each with a test; six new mutants, each caught.
 - **For week 6** (known gap 13): re-running `make kind-up` after a code change leaves the pods on the old image; readiness takes a failing pod out of its Service, so a fault's symptoms on kind can differ from Compose's; a rollout briefly runs the old and new consumer together; `kubectl apply` keeps a change made with `kubectl set env`; a failed topics Job is noticed only after the 300 s wait, and its template cannot change.
 - **Not changed:** the rule's verdicts stay in each suite's own report; "blind" now says what it covers.
+
+## 2026-11-09 (week 5: Aravind's review of items 3 to 6)
+
+In this session, at his request ("lets start the review now"), after the review list's four commands, each matching Claude's run, and a walk through the code in four parts. His answers, in two multiple-choice batches:
+
+- **The false-alarm case: "Warm-up before the alert"** (over counting "no lasting fault" as named, or both). From week 6, the stack runs a few minutes before the false alert fires, so no restart is there to blame. The 48 runs stay as recorded.
+- **Missing deploys: "Tell the model"** (over keeping the case, or counting no action as right there). From week 6, the loop's prompt says that a rollback is planned by code from the deploy log, so naming one is safe even when its tools cannot see deploys. His approval still guards every action.
+- **A proposed rollback with no action named: "Add the check in week 6"** (over leaving it). The loop will send such a diagnosis back once, to name the action or change its fix.
+- **The reply format: "Keep it strict"** (over reading the first JSON object). A reply is one JSON object and nothing else.
+- **Claude's defaults for items 3 to 5: "Keep them all".**
+- **Week 5, items 3 to 6: "Accept".**
+- **Merging and pushing: "After the full mutants pass"** (over now, merging only, or not yet). When the full offline list passes with none surviving, `main` is fast-forwarded to this branch and pushed, `main` only. If one survives, Claude stops and tells him first.
