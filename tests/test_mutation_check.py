@@ -62,3 +62,12 @@ def test_the_runners_copy_holds_what_its_tests_need():
     # The week 5 review's H1: this file's tests call the runner's own script, so the copy must hold scripts/.
     text = SCRIPT.read_text()
     assert '"scripts", "compose.yaml"' in text
+
+
+def test_each_mutants_text_is_in_its_file_exactly_once():
+    # A change that moves a line a mutant breaks would stop a full run partway, as week 5's overnight run stopped
+    # (2026-11-09, at mutant 1,013 of 1,118): make test catches such a mutant at once instead.
+    runner = load_runner()
+    repo = SCRIPT.parents[1]
+    stale = [name for name, file, old, _new, _stack in runner.MUTANTS if (repo / file).read_text().count(old) != 1]
+    assert stale == []

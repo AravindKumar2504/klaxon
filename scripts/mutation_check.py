@@ -2824,8 +2824,8 @@ MUTANTS = [
     ("a pick may draw fewer than the minimum", "src/klaxon/evaluation.py",
      "rest[: max(total - len(must), MIN_DRAWN)]", "rest[: total - len(must)]", False),
     ("a pick prints a verdict", "src/klaxon/evaluation.py",
-     '    print("make label RUN=" + shlex.quote(" ".join(shown(path) for path in chosen)))',
-     '    print("make label RUN=" + shlex.quote(" ".join(shown(path) for path in chosen)))\n'
+     '    print("make label RUN=" + shlex.quote(" ".join(typed(path) for path in chosen)))',
+     '    print("make label RUN=" + shlex.quote(" ".join(typed(path) for path in chosen)))\n'
      '    print(*(run_row(path)["judge"] for path in chosen))', False),
     # Week 5, item 4: his marks on a postmortem draft.
     ('make review-postmortem works without a terminal', 'src/klaxon/agent/postmortem_review.py',
