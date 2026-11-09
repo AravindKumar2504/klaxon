@@ -1,5 +1,5 @@
 {
-  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged.",
+  "label": "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong, and why when wrong; given by him in the chat and entered by Claude word for word, at his request. The draft beside it is unchanged.",
   "draft": {
     "run": "2026-11-01T030525Z_gated-run_pool-exhaustion",
     "sha256": "4fd3e4b5b4d2547357e9e419de2583ab721b8730ed493e76a7f09cd79352a415"
