@@ -27,10 +27,6 @@ from klaxon.agent.tools import clean_text
 from klaxon.labels import _ask, _line
 
 REVIEW, REVIEWED = "postmortem-review.json", "postmortem-reviewed.md"
-LABEL = (
-    "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong,"
-    " and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged."
-)
 MARKS = {"r": "right", "w": "wrong"}
 TRIES = 3
 MAX_WHY = 500
@@ -57,6 +53,19 @@ SAVED, STOPPED, MEANWHILE = "saved", "stopped", "meanwhile"
 # weaker proof that they are his than marks typed at his terminal, and never shown as typed.
 CHAT = "given by Aravind in the chat, entered by Claude"
 HOWS = {gate.TYPED: "make review-postmortem", CHAT: "his marks given in the chat, entered by Claude"}
+# The label each review carries, by how its marks came: never one that says typed when they were not. (Week 5's
+# review found the six reviews given in the chat labeled as typed; corrected once at Aravind's OK, 2026-11-08.)
+LABELS = {
+    gate.TYPED: (
+        "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong,"
+        " and why when wrong; typed by him at a terminal (make review-postmortem). The draft beside it is unchanged."
+    ),
+    CHAT: (
+        "Aravind's marks on one postmortem draft: for each paragraph of its narrative, written by Claude, right or wrong,"
+        " and why when wrong; given by him in the chat and entered by Claude word for word, at his request. The draft"
+        " beside it is unchanged."
+    ),
+}
 
 
 class NoReview(ValueError):
@@ -213,7 +222,7 @@ def record(folder: Path, saved: Mapping, marks: Sequence[Mapping], how: str, now
     if how not in HOWS:
         raise ValueError(f"how marks came must be one of: {', '.join(HOWS)}")
     value = {
-        "label": LABEL,
+        "label": LABELS[how],
         "draft": {"run": folder.name, "sha256": digest(saved)},
         "marks": [{"paragraph": m["paragraph"], "mark": m["mark"], "why": m.get("why")} for m in marks],
         "at": gate.utc(now()),
@@ -253,6 +262,7 @@ def read(folder: Path) -> dict | None:
     if (
         not isinstance(marks, list)
         or saved.get("how") not in HOWS
+        or saved.get("label") != LABELS[saved["how"]]
         or [item.get("paragraph") for item in marks] != list(HEADINGS)
         or any(item.get("mark") not in MARKS.values() for item in marks)
         or any(item["mark"] == "wrong" and not item.get("why") for item in marks)

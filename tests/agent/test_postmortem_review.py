@@ -60,7 +60,7 @@ def test_marks_typed_at_a_terminal_are_saved_once_with_a_page_and_the_draft_is_u
     saved = review.read(folder)
     draft = json.loads(before[postmortem.SAVED])
     assert saved == {
-        "label": review.LABEL,
+        "label": review.LABELS[gate.TYPED],
         "draft": {"run": folder.name, "sha256": review.digest(draft)},
         "marks": [
             {"paragraph": "summary", "mark": "right", "why": None},
@@ -178,6 +178,8 @@ def test_a_saved_file_that_is_not_a_review_this_command_writes_is_refused(tmp_pa
     good = [{"paragraph": name, "mark": "right", "why": None} for name in review.HEADINGS]
     for bad in (
         {"marks": good, "how": "written by a script"},
+        {"marks": good, "how": review.CHAT, "label": review.LABELS[gate.TYPED]},  # says typed, though given in the chat
+        {"marks": good, "how": gate.TYPED},  # no label
         {"marks": good[:5], "how": gate.TYPED},
         {"marks": [dict(good[0], mark="maybe"), *good[1:]], "how": gate.TYPED},
         {"marks": [dict(good[0], mark="wrong"), *good[1:]], "how": gate.TYPED},  # wrong, with no sentence
@@ -269,3 +271,23 @@ def test_marks_that_are_not_whole_or_say_nothing_of_how_they_came_are_refused(tm
     with pytest.raises(ValueError, match=why):
         review.record(folder, review.load(folder), marks, how, lambda: NOW)
     assert not (folder / review.REVIEW).exists() and not (folder / review.REVIEWED).exists()
+
+
+def test_a_review_is_labeled_by_how_its_marks_came_never_as_typed_when_they_were_not(tmp_path):
+    for how in (review.CHAT, gate.TYPED):
+        folder = copy_draft(FAULT_1, tmp_path / how.split()[0])
+        marks = given(*[("right", None)] * 6)
+        assert review.record(folder, review.load(folder), marks, how, lambda: NOW) == review.SAVED
+        assert review.read(folder)["label"] == review.LABELS[how]
+    assert "typed" not in review.LABELS[review.CHAT] and "in the chat" in review.LABELS[review.CHAT]
+    assert "typed by him at a terminal" in review.LABELS[gate.TYPED]
+
+
+def test_the_six_week_4_reviews_are_counted_and_say_how_his_marks_came():
+    # His marks on the six drafts, given in the chat and entered by Claude (2026-11-07); their label corrected once.
+    reviewed = sorted(path.parent for path in WEEK4.glob(f"*/{review.REVIEW}"))
+    assert len(reviewed) == 6
+    for folder in reviewed:
+        saved, why = review.counted(folder)
+        assert why is None and saved["how"] == review.CHAT and saved["label"] == review.LABELS[review.CHAT]
+        assert [item["mark"] for item in saved["marks"]] == ["right"] * 6
