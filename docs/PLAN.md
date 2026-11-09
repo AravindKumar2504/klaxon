@@ -35,7 +35,7 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
 | 3 | Oct 27-Nov 2 | MCP server with read-only ops tools; Klaxon's first loop diagnosing faults 1-3; trace recorder | CSYE 10/28: planning and OpenHands; INFO MCP week |
 | 4 | Nov 3-9 | Approval gate, rollback, verification (health plus money checks); faults 4-6; postmortem draft; the circuit breaker and two stuck-refund fixes | CSYE 11/4: retrieval and memory |
 | 5 | Nov 10-16 | Evaluation harness (faults 1-6, a false alarm, missing evidence; seeds) and first results on Opus and Sonnet; Claude as a judge beside the rule, checked by Aravind; his corrections to a postmortem recorded; start Kubernetes | |
-| 6 | Nov 17-23 | LangGraph version; Klaxon runs on Kubernetes and can undo a bad rollout | CSYE 11/18: LangGraph |
+| 6 | Nov 17-23 | LangGraph version of the loop, the same loop as a graph so the two compare; the week 5 review's three changes (a warm-up before the false alert, a line on how a rollback is planned, a check that a proposed rollback names its action); Klaxon, on this Mac, works on the patient on Kubernetes (kind) and can undo a bad rollout, after his typed approval | CSYE 11/18: LangGraph |
 | 7 | Nov 24-30 | Web control panel; CI pipeline (light week, Thanksgiving 11/26) | |
 | 8 | Dec 1-7 | Multi-agent version; the Go service; comparison runs | CSYE 12/2: multi-agent |
 | 9 | Dec 8-14 | Safety pass (prompt injection planted in logs, budgets); Terraform; INFO ten-artifact packet | CSYE 12/9 eval, 12/16 safety |
@@ -48,7 +48,7 @@ It replaces the dates in the table above. Nothing is cut. Each week is planned o
 | Dates (2026) | PLAN week | What gets built | Aravind's part |
 |---|---|---|---|
 | Fri Nov 6 to Tue Nov 10 | 5, the rest | Item 3: first results (the 40 runs left, the judge, his labels). Item 4: his postmortem corrections. Item 5: a start on Kubernetes. Item 6: docs | OK the runs; label about 17 runs; type his corrections; review on Tue |
-| Wed Nov 11 to Sun Nov 15 | 6 | LangGraph version; Klaxon runs on Kubernetes and can undo a bad rollout | Plan on Wed, review on Sun |
+| Mon Nov 9 to Sun Nov 15 (started early, his choice) | 6 | LangGraph version of the loop; the week 5 review's three changes; Klaxon undoes a bad rollout on Kubernetes (kind) | Plan (done Mon Nov 9); OK the live runs; approve the two rollbacks on kind; label the disagreements; review on Sun |
 | Mon Nov 16 to Thu Nov 19 | 7 | Web control panel; CI pipeline | Plan on Mon, review on Thu |
 | Fri Nov 20 to Fri Nov 27 | 8 | Multi-agent version; the Go service; comparison runs (plain Python, LangGraph, multi-agent; OpenHands on one comparable task) | Plan on Fri; OK the overnight runs; review on Fri (Thanksgiving, Thu Nov 26, off) |
 | Sat Nov 28 to Tue Dec 1 | 9 | Safety pass (prompt injection planted in logs, budgets); Terraform; INFO ten-artifact packet | Plan on Sat, review on Tue |

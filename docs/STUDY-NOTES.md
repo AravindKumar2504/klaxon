@@ -976,7 +976,7 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 
 **What it does not show.** A close ranking of the two models. The graders' accuracy beyond the 30 runs you labeled. Anything about real systems: synthetic data and a simulated provider throughout. Kubernetes in production: one node, and nothing failed on it yet.
 
-**Week 6** (planned Wed Nov 11): a LangGraph version of the loop, and Klaxon on Kubernetes, undoing a bad rollout.
+**Week 6** (planned Mon Nov 9; your review on Sun Nov 15): a LangGraph version of the loop, and Klaxon on Kubernetes, undoing a bad rollout.
 
 **Likely questions.**
 - *Is Opus better than Sonnet?* On these 48 runs it named more causes by both graders, at about 2.4 times the cost. Three seeds per case cannot rank them closely.
@@ -984,3 +984,16 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - *How do you know the graders are right?* I checked them against my own blind verdicts on 30 runs. Each misses on different runs, so I report both.
 - *Why only 17 labels?* Every run where the graders disagree, plus a random draw. It puts my time where a person decides something.
 - *Why Kubernetes now?* Week 6 undoes a bad rollout there. The patient had to run there first, unchanged.
+
+## Week 6, the plan (decided 2026-11-09)
+
+**What week 6 will add.** The three changes from your week 5 review: a warm-up before the false alert, one line on how a rollback is planned, and a check that a proposed rollback names its action. A second version of Klaxon's loop, written with LangGraph. And Klaxon on Kubernetes: its tools will read the kind cluster, and it will undo a bad rollout there, after your typed approval. Nothing is built yet; STATUS has the five items.
+
+**The ideas behind your four choices.**
+- *Why the same loop, as a graph.* A comparison is fair only when one thing changes. With the same prompt, tools, budgets and model, the only difference is how the loop is written: plain Python, or a framework. The proof: the LangGraph loop must replay the saved runs exactly.
+- *Why Klaxon stays on the Mac.* Its model calls go through Claude Code on your seat, with your login. Klaxon in the cluster would put that login there too. The cluster still enforces the read-only rule: Klaxon's reads use an account that cannot change anything, and its rollback one that can change only our four Deployments.
+- *Why a re-check, not all 48 again.* Two cases failed in week 5, each for a reason you chose to fix. Running those two again shows whether the fixes worked. Week 8 runs every case on every loop.
+- *Why two rollbacks on kind.* Kubernetes rolls a service out in one of two ways here. The ledger consumer will be replaced: stopped, then started. The payments API will be rolled: its old and new pods serve together for a few seconds. Faults 1 and 4 undo one of each.
+- *Why start early.* Week 5 was accepted a day early. Two more days make room for what the runs show.
+
+**One idea to own before item 3: a Deployment keeps its history.** Each rollout makes a new revision, and Kubernetes keeps the ones before. Undoing a bad rollout means putting back the revision before it. Klaxon's rule stays the one from week 4: code plans it from the deploy log, checks that nothing changed since, and runs it only after your typed yes.
