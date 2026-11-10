@@ -3072,9 +3072,15 @@ MUTANTS = [
     ('kind-up loads and applies klaxon-patient:dev', 'src/klaxon/patient/cluster.py',
      '    image = content_tag()\n',
      '    image = IMAGE\n', False),
-    ('an image id that is not one is taken', 'src/klaxon/patient/cluster.py',
-     '    if match is None:\n        raise ClusterError(f"docker gave {IMAGE}',
-     '    if False:\n        raise ClusterError(f"docker gave {IMAGE}', False),
+    ('the tag ignores our code, so a code change rolls nothing', 'src/klaxon/patient/cluster.py',
+     '    return [REPO / name for name in BUILD_FILES] + code',
+     '    return [REPO / name for name in BUILD_FILES]', False),
+    ('the tag ignores which file holds what', 'src/klaxon/patient/cluster.py',
+     '    for path in build_inputs() if inputs is None else inputs:\n        digest.update(path.relative_to(REPO).as_posix().encode() + b"\\0" + path.read_bytes() + b"\\0")',
+     '    for path in build_inputs() if inputs is None else inputs:\n        digest.update(path.read_bytes())', False),
+    ('the tag leaves out the lock file', 'src/klaxon/patient/cluster.py',
+     'BUILD_FILES = ("docker/patient.Dockerfile", "pyproject.toml", "requirements/services.lock.txt")',
+     'BUILD_FILES = ("docker/patient.Dockerfile", "pyproject.toml")', False),
     ('the topics Job is not made again', 'src/klaxon/patient/cluster.py',
      '            kubectl("delete", job, "--ignore-not-found", "--wait=true")',
      '            pass', False),
@@ -3314,8 +3320,9 @@ def main() -> int:
     # evidence: a test replays the first live run of the loop from its recording (week 3, item 3). scripts: a test
     # calls this runner's own command line (week 5). deploy: a test checks the kind manifests against compose.yaml,
     # and some mutants break them (week 5, item 5). .gitignore: a test reads it.
-    for item in ("src", "tests", "docker", "deploy", "evidence", "scripts", "compose.yaml", "pyproject.toml", "Makefile",
-                 ".gitignore"):
+    # requirements/ since week 6, item 3: kind-up's image tag reads the lock file, as its tests do.
+    for item in ("src", "tests", "docker", "deploy", "evidence", "requirements", "scripts", "compose.yaml",
+                 "pyproject.toml", "Makefile", ".gitignore"):
         src = repo / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
 

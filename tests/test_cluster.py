@@ -286,9 +286,9 @@ class Fake:
         self.published = "".join(f"{node}/tcp -> 127.0.0.1:{host}\n" for node, host, _ in cluster.port_mappings())
         self.pods = [made_up_pod("payments-api-5d9c7-x2v4q", ready=True)]
         self.docker_local = True
-        self.image_id = "sha256:" + "ab12cd34ef56" + "0" * 52  # made up
         self.job_statuses = [{"conditions": [{"type": "Complete", "status": "True"}]}]  # one per look, the last kept
         self.token = "made-up-token-not-real"
+        self.raw_server = None  # what the raw view of the kubeconfig says, when not the same as the check's
         self.kubeconfig = tmp_path / "kubeconfig"
         monkeypatch.setattr(cluster, "KUBECONFIG", self.kubeconfig)
         monkeypatch.setattr(cluster, "EVIDENCE", tmp_path / "evidence")
@@ -315,8 +315,8 @@ class Fake:
             return self.published
         if args[0] == "inspect":
             return "kindest/node:v0.0.0-made-up\n"
-        if args[:2] == ["image", "inspect"]:
-            return self.image_id + "\n"
+        if args[:1] == ["tag"]:
+            TAGGED.append(args[2])
         return ""
 
     def run(self, binary: str, args: list[str], *, stdin: str | None = None, timeout: float = 600) -> str:
@@ -334,7 +334,7 @@ class Fake:
         assert tool == "kubectl"
         rest = args[8:]
         if rest[:3] == ["config", "view", "--minify"] and "--raw" in rest:
-            server = {"server": self.server, "certificate-authority-data": "bWFkZSB1cA=="}
+            server = {"server": self.raw_server or self.server, "certificate-authority-data": "bWFkZSB1cA=="}
             return json.dumps({"clusters": [{"name": cluster.CONTEXT, "cluster": server}]})
         if rest[:2] == ["config", "view"]:
             return self.server
@@ -448,14 +448,13 @@ def test_up_refuses_a_docker_that_is_not_on_this_mac(fake):
     assert fake.actions() == ["docker context inspect"]
 
 
-TAG = "klaxon-patient:ab12cd34ef56"  # the made-up image id's first 12 hex digits
 APPLY = "kubectl apply --server-side --force-conflicts --field-manager=klaxon-kind-up --filename - <stdin"
 
 
-def expected_up(create: list[str]) -> list[str]:
+def expected_up(create: list[str], tag: str | None = None) -> list[str]:
+    tag = tag or TAGGED[-1]
     out = ["docker context inspect", "kind get clusters", *create, "compose build fake-provider"]
-    out += ["docker image inspect --format {{.Id}} klaxon-patient:dev", f"docker tag klaxon-patient:dev {TAG}"]
-    out += [f"kind load docker-image {TAG} --name klaxon", APPLY, APPLY]
+    out += [f"docker tag klaxon-patient:dev {tag}", f"kind load docker-image {tag} --name klaxon", APPLY, APPLY]
     for _names, waits in cluster.STAGES:
         out += [f"kubectl delete {job} --ignore-not-found --wait=true" for job in waits if job in cluster.JOBS]
         out.append(APPLY)
@@ -465,6 +464,9 @@ def expected_up(create: list[str]) -> list[str]:
             else:
                 out.append(f"kubectl rollout status {workload} --timeout=300s")
     return out
+
+
+TAGGED: list[str] = []  # each tag up() asked docker for, in order
 
 
 def streams(fake) -> list[str]:
@@ -483,7 +485,7 @@ def test_up_creates_the_cluster_builds_and_loads_our_image_then_applies_in_order
     first, configmaps, *staged = streams(fake)
     assert first == cluster.manifests((cluster.NAMESPACE_FILE, cluster.ACCESS_FILE))
     assert json.loads(configmaps) == cluster.configmaps()
-    assert staged == [cluster.manifests(files, TAG) for files, _ in cluster.STAGES]
+    assert staged == [cluster.manifests(files, TAGGED[-1]) for files, _ in cluster.STAGES]
 
 
 def test_up_on_a_cluster_that_is_there_creates_nothing(fake):
@@ -656,42 +658,55 @@ def test_the_check_refuses_when_the_money_checks_address_is_set_elsewhere(fake, 
 # Week 6, item 3: kind ready for faults (known gap 13), and what Klaxon's tools may read there.
 
 
-def test_up_tags_our_image_by_its_content_so_only_our_workloads_name_the_new_tag(fake):
+def test_up_tags_our_image_by_its_build_files_so_only_our_workloads_name_the_new_tag(fake):
     cluster.up()
+    tag = TAGGED[-1]
+    assert re.fullmatch(r"klaxon-patient:[0-9a-f]{12}", tag)
     staged = streams(fake)[2:]
     for text in staged:
         for doc in yaml.safe_load_all(text):
             if doc and doc["kind"] in ("Deployment", "StatefulSet", "Job"):
                 images = [c["image"] for c in doc["spec"]["template"]["spec"]["containers"]]
                 ours = WORKLOADS[doc["metadata"]["name"]]["spec"]["template"]["spec"]["containers"][0]["image"] == OURS
-                assert images == ([TAG] if ours else [c["image"] for c in container_list(doc["metadata"]["name"])])
+                assert images == ([tag] if ours else [c["image"] for c in container_list(doc["metadata"]["name"])])
     assert all(OURS not in text for text in staged)
     # The same files otherwise: only the image line changed.
-    assert [t.replace(TAG, OURS) for t in staged] == [cluster.manifests(f) for f, _ in cluster.STAGES]
+    assert [t.replace(tag, OURS) for t in staged] == [cluster.manifests(f) for f, _ in cluster.STAGES]
 
 
 def container_list(name: str) -> list[dict]:
     return WORKLOADS[name]["spec"]["template"]["spec"]["containers"]
 
 
-def test_a_code_change_gives_a_new_tag_and_the_same_code_the_same(fake):
-    cluster.up()
-    first = streams(fake)[-1]
-    fake.calls.clear()
-    cluster.up()  # the same image id: the same manifests, so nothing rolls
-    assert streams(fake)[-1] == first
-    fake.calls.clear()
-    fake.image_id = "sha256:" + "ffffeeee0000" + "1" * 52  # a code change builds another image
-    cluster.up()
-    assert "image: klaxon-patient:ffffeeee0000" in streams(fake)[-1] and first != streams(fake)[-1]
+def test_the_same_build_files_give_the_same_tag_and_a_change_a_new_one(fake, tmp_path, monkeypatch):
+    # On this Mac, Docker's own image id changed at each build of the same files (2026-11-10): the tag is the files'.
+    monkeypatch.setattr(cluster, "REPO", tmp_path)
+    files = [tmp_path / "docker" / "patient.Dockerfile", tmp_path / "src" / "klaxon" / "x.py"]
+    for path in files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("made up\n")
+    first = cluster.content_tag(files)
+    assert cluster.content_tag(files) == first  # the same files, the same tag: nothing rolls
+    files[1].write_text("made up, one byte more\n")
+    changed = cluster.content_tag(files)
+    assert changed != first  # a code change: a new tag, so the workloads roll
+    moved = tmp_path / "src" / "klaxon" / "y.py"
+    files[1].rename(moved)
+    assert cluster.content_tag([files[0], moved]) not in (first, changed)  # the same text in another file
 
 
-@pytest.mark.parametrize("image_id", ["", "not-an-id", "sha256:XYZ", "sha256:" + "a" * 63])
-def test_an_image_id_that_is_not_one_stops_up_before_anything_is_loaded(fake, image_id):
-    fake.image_id = image_id
-    with pytest.raises(cluster.ClusterError, match="image id that is not one"):
-        cluster.up()
-    assert not [a for a in fake.actions() if a.startswith(("kind load", "kubectl apply", "docker tag"))]
+def test_the_tag_covers_every_file_the_dockerfile_copies_and_nothing_pip_writes():
+    dockerfile = (cluster.REPO / "docker" / "patient.Dockerfile").read_text()
+    copied = {line.split()[1] for line in dockerfile.splitlines() if line.startswith("COPY ")}
+    assert copied == {"requirements/services.lock.txt", "pyproject.toml", "src"}
+    inputs = [path.relative_to(cluster.REPO).as_posix() for path in cluster.build_inputs()]
+    assert set(cluster.BUILD_FILES) == (copied - {"src"}) | {"docker/patient.Dockerfile"}
+    assert {p for p in inputs if p.startswith("src/")} == {
+        p.relative_to(cluster.REPO).as_posix()
+        for p in (cluster.REPO / "src").rglob("*.py")
+        if "__pycache__" not in p.parts
+    }
+    assert not [p for p in inputs if "egg-info" in p or "__pycache__" in p]
 
 
 def test_every_apply_is_server_side_and_takes_back_what_another_manager_set(fake):
@@ -985,3 +1000,15 @@ def test_kinds_deployer_takes_only_a_replica_set_its_own_deployment_owns(tmp_pat
     made_up.sets.append(foreign)
     running = deployer(tmp_path, made_up).running("payments-api")
     assert running.container == cluster.hashlib.sha256(b"rs-uid-1").hexdigest()
+
+
+def test_the_readers_kubeconfig_is_never_written_for_a_server_off_this_mac_even_if_the_two_reads_differ(
+    fake, monkeypatch, tmp_path
+):
+    # The file is written from a second read of the cluster's kubeconfig: it is checked again, on its own.
+    monkeypatch.setattr(cluster, "READER_KUBECONFIG", tmp_path / "reader.kubeconfig")
+    fake.kubeconfig.write_text("made up")
+    fake.raw_server = "https://10.0.0.9:6443"
+    with pytest.raises(cluster.ClusterError, match="not on this Mac"):
+        cluster.make_reader_kubeconfig()
+    assert not (tmp_path / "reader.kubeconfig").exists()

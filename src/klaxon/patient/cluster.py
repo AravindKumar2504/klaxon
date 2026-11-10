@@ -267,14 +267,28 @@ def wait(workload: str, clock=time.monotonic, sleep=time.sleep) -> None:
         sleep(JOB_POLL_SECONDS)
 
 
-def content_tag() -> str:
-    """Our image, tagged by its own id: klaxon-patient:<12 hex>. The same code builds the same id, and a code change
-    a new one, which is what makes up() roll our workloads after a change and leave them be otherwise."""
-    found = stack._run(["image", "inspect", "--format", "{{.Id}}", IMAGE]).strip()
-    match = re.fullmatch(r"sha256:([0-9a-f]{64})", found)
-    if match is None:
-        raise ClusterError(f"docker gave {IMAGE} an image id that is not one")
-    tagged = f"{IMAGE.split(':')[0]}:{match.group(1)[:12]}"
+# What our image is built from (docker/patient.Dockerfile copies these and nothing else): its tag on kind is their hash.
+BUILD_FILES = ("docker/patient.Dockerfile", "pyproject.toml", "requirements/services.lock.txt")
+
+
+def build_inputs() -> list[Path]:
+    """The files our image is built from, in a fixed order: the Dockerfile, pyproject.toml, the lock file, and our
+    Python code. Not pip's metadata in src/klaxon.egg-info (written by an editable install, never read by the image's
+    own install), nor bytecode."""
+    code = sorted(path for path in (REPO / "src").rglob("*.py") if "__pycache__" not in path.parts)
+    return [REPO / name for name in BUILD_FILES] + code
+
+
+def content_tag(inputs: list[Path] | None = None) -> str:
+    """Our image, tagged by what it is built from: klaxon-patient:<the first 12 hex digits of their SHA-256>. The same
+    files give the same tag, so up() rolls our workloads after a change to them and leaves them be otherwise. Not by
+    Docker's image id: on this Mac each build of the same files gave a new one (2026-11-10, six builds, six ids), so
+    every kind-up rolled everything. A newer base image under the same tag (python:3.12.15-slim) keeps the tag: the
+    pods keep the image they run until a change to our files."""
+    digest = hashlib.sha256()
+    for path in build_inputs() if inputs is None else inputs:
+        digest.update(path.relative_to(REPO).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
+    tagged = f"{IMAGE.split(':')[0]}:{digest.hexdigest()[:12]}"
     stack._run(["tag", IMAGE, tagged])
     return tagged
 

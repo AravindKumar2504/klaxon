@@ -71,3 +71,15 @@ def test_each_mutants_text_is_in_its_file_exactly_once():
     repo = SCRIPT.parents[1]
     stale = [name for name, file, old, _new, _stack in runner.MUTANTS if (repo / file).read_text().count(old) != 1]
     assert stale == []
+
+
+def test_the_runners_copy_holds_every_folder_kind_ups_image_tag_reads():
+    # Week 6, item 3: the tag reads requirements/, which the copy once left out, so its baseline would have failed.
+    import re
+
+    from klaxon.patient import cluster
+
+    listed = re.search(r"for item in \((.*?)\):", SCRIPT.read_text(), re.DOTALL).group(1)
+    copied = set(re.findall(r'"([^"]+)"', listed))
+    needed = {path.relative_to(cluster.REPO).parts[0] for path in cluster.build_inputs()}
+    assert needed <= copied and "requirements" in copied
