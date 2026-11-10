@@ -46,6 +46,7 @@ run on it; `grade` compares a saved run's diagnosis with its fault's cause again
 
 Run: python -m klaxon.fault_runs run FAULT [--steps N --tool-calls N --seconds S]   live, with Aravind's OK each time
          [--no-actions]                                                               diagnosis only, as in week 3
+         [--loop langgraph]                                     week 6: the LangGraph loop (default: the plain one)
      python -m klaxon.fault_runs quiet [--minutes M]                                  traffic only: injects nothing
      python -m klaxon.fault_runs rehearse FAULT                                       the fault and the rules: no model
      python -m klaxon.fault_runs grade FOLDER                                         offline
@@ -837,9 +838,11 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
         budgets = Budgets(steps=args.steps, tool_calls=args.tool_calls, seconds=args.seconds)
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
+        ran_by = loop.loop_header(args.loop)  # week 6: the loop that will run it, refused here if it cannot
         binary = preflight(args.model)
         parts = Stack(faults.LocalStack(), alerts.Alerting())
-        header = {"fault_name": fault.name} | _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
+        header = {"fault_name": fault.name, **ran_by}
+        header |= _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
     except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
@@ -854,7 +857,9 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     def investigate(alert: Alert) -> RunResult:
         what = GATED_WHAT if gated_run else WHAT
         run_header = header | {"what": what, "alert": asdict(alert), "budgets": asdict(budgets)}
-        return loop.investigate_live(alert, budgets, folder, run_header, args.model, binary, actions=offered)
+        return loop.investigate_live(
+            alert, budgets, folder, run_header, args.model, binary, actions=offered, loop_kind=args.loop
+        )
 
     code = 0
     try:
@@ -960,6 +965,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     live.add_argument(
         "--no-actions", action="store_true", help="offer no write action: the loop only diagnoses, as in week 3"
     )
+    live.add_argument("--loop", choices=loop.LOOPS, default=loop.PLAIN, help="the loop that runs it (week 6)")
     calm = actions.add_parser("quiet", help="traffic and no fault: do the alert rules stay quiet?")
     calm.add_argument("--minutes", type=float, default=5.0)
     rehearsal = actions.add_parser(

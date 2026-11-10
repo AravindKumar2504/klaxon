@@ -34,6 +34,11 @@ under traffic before its quiet readings (week 5: 60 s), the system prompt's roll
 from the deploy log, and the loop sends back once a rollback with no action named (klaxon.agent.loop). Each run
 records its version (week 5's say nothing: version 1), and the report never counts two versions in one row.
 
+Two loops (week 6, item 2): `--loop langgraph` runs a suite on the LangGraph loop (klaxon.agent.graph), the same loop
+as a graph; the plain loop is the default. Each run and suite records its loop and LangGraph's version (runs saved
+before name none: the plain loop), a LangGraph suite's folder ends in _langgraph, and the report never counts two
+loops in one row.
+
 The report is worked out from saved runs, offline, so a grader can change and every result be graded again without a
 new run: per run, the verdict, the fix and the action, the gate, the times, the model calls, the cost, the damage; per
 case and model, counts ("2 of 3") and medians, never a percentage of three runs. It reads week 3's and week 4's runs
@@ -48,6 +53,7 @@ rehearsal, then a probe of the tools through the case's own client: the two dock
 
 Run: python -m klaxon.evaluation cases                                      calls nothing
      python -m klaxon.evaluation run --model ID [--cases A,B] [--seeds 7,8,9]  live, with Aravind's OK for each batch
+         [--loop langgraph]                                                    week 6: on the LangGraph loop
      python -m klaxon.evaluation report FOLDER [FOLDER ...]                   offline
      python -m klaxon.evaluation rehearse CASE [--seed N]                      the stack, no model; his OK first
 """
@@ -467,16 +473,19 @@ def run_case(
     rate: float,
     parent: Path,
     binary: Path,
+    loop_kind: str = loop.PLAIN,
 ) -> dict:
     """One case with one seed and one model, live, on the stack as it is (the suite has made it fresh). Its evidence
-    goes into a folder of its own in parent. Returns what came of it, for the suite's own file."""
+    goes into a folder of its own in parent. Returns what came of it, for the suite's own file. loop_kind: the loop
+    that runs it (week 6), recorded with it."""
     settings = traffic.Settings(rate=rate, seed=seed)
     argv = ["run", "--model", model, "--cases", case.name, "--seeds", str(seed)]
     argv += ["--steps", str(budgets.steps), "--tool-calls", str(budgets.tool_calls), "--rate", f"{rate:g}"]
+    argv += [] if loop_kind == loop.PLAIN else ["--loop", loop_kind]
     command = shlex.join(["python", "-m", "klaxon.evaluation", *argv])
     parts = fault_runs.Stack(faults.LocalStack(), alerts.Alerting())
     header = {"case": case.name, "seed": seed, "model": model, "fault_name": case.fault, "evaluation_version": VERSION}
-    header |= fault_runs._provenance(command)
+    header |= loop.loop_header(loop_kind) | fault_runs._provenance(command)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
     folder = loop._new_folder(parent, f"{stamp}_{case.name}_seed{seed}")
     described = case.describe() | {"seed": seed, "model": model}
@@ -491,7 +500,15 @@ def run_case(
         run_header = header | {"what": what(case, seed), "alert": asdict(alert), "budgets": asdict(budgets)}
         client = Withheld(McpClient(), case.withheld) if case.withheld else None
         return loop.investigate_live(
-            alert, budgets, folder, run_header, model, binary, actions=fault_runs.OFFERED, tool_client=client
+            alert,
+            budgets,
+            folder,
+            run_header,
+            model,
+            binary,
+            actions=fault_runs.OFFERED,
+            tool_client=client,
+            loop_kind=loop_kind,
         )
 
     interrupted = False
@@ -710,6 +727,7 @@ def run_row(folder: Path) -> dict:
         "case": name,
         "kind": case.get("kind") or (known.kind if known else FAULT),
         "mode": _mode(saved),
+        "loop_kind": str(saved.get("loop_kind", loop.PLAIN)),  # week 6; runs saved before name none: the plain loop
         "seed": (saved.get("traffic_settings") or {}).get("seed"),
         "model": asked_for or (used["models"][0] if len(used["models"]) == 1 else None),
         "answered_by": used["models"],
@@ -801,13 +819,14 @@ def _median(values: Iterable[object]) -> float | None:
 
 
 def summarize(rows: Sequence[Mapping]) -> list[dict]:
-    """Per model, case and mode (week 3's runs, week 4's and the evaluation's are never mixed): what ran, and counts
-    of what came of it. A run that says nothing of Klaxon's judgment (not_run) is counted apart, never as wrong."""
+    """Per model, case, mode and loop (week 3's runs, week 4's and the evaluation's are never mixed, nor are the plain
+    loop's and the LangGraph loop's): what ran, and counts of what came of it. A run that says nothing of Klaxon's
+    judgment (not_run) is counted apart, never as wrong."""
     groups: dict[tuple, list[Mapping]] = {}
     for row in rows:
-        groups.setdefault((row["model"] or "unknown", row["case"], row["mode"]), []).append(row)
+        groups.setdefault((row["model"] or "unknown", row["case"], row["mode"], row["loop_kind"]), []).append(row)
     out = []
-    for (model, name, mode), group in groups.items():
+    for (model, name, mode, loop_kind), group in groups.items():
         ran = [row for row in group if row["not_run"] is None]
         graded = [row for row in ran if row["verdict"] is not None]
         judged = [row for row in ran if row["judge"] in judge.VERDICTS]
@@ -817,6 +836,7 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
                 "model": model,
                 "case": name,
                 "mode": mode,
+                "loop_kind": loop_kind,
                 "kind": group[0]["kind"],
                 "runs": len(group),
                 "not_run": len(group) - len(ran),
@@ -852,9 +872,20 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
             order.index(e["case"]) if e["case"] in order else len(order),
             e["case"],
             modes.index(e["mode"]) if e["mode"] in modes else len(modes),
+            loop.LOOPS.index(e["loop_kind"]) if e["loop_kind"] in loop.LOOPS else len(loop.LOOPS),
+            e["loop_kind"],
         )
     )
     return out
+
+
+LOOP_NAMES = {loop.LANGGRAPH: "LangGraph loop"}
+
+
+def mode_cell(entry: Mapping) -> str:
+    """A row's mode as the report shows it, with its loop when that is not the plain one (week 6)."""
+    kind = entry["loop_kind"]
+    return entry["mode"] if kind == loop.PLAIN else f"{entry['mode']}, {LOOP_NAMES.get(kind, _cell(kind) + ' loop')}"
 
 
 def shown(path: Path) -> str:
@@ -995,7 +1026,7 @@ def markdown(found: Mapping) -> str:
         for entry in entries:
             graded = entry["graded"]
             lines.append(
-                f"| {_cell(entry['case'])} | {entry['mode']} | {entry['ran']} ran, {entry['not_run']} not run |"
+                f"| {_cell(entry['case'])} | {mode_cell(entry)} | {entry['ran']} ran, {entry['not_run']} not run |"
                 f" {_of(entry['diagnosed'], entry['ran'])} | {_of(entry['names_the_cause'], graded)} |"
                 f" {_of(entry['judge_names_the_cause'], entry['judged'])} | {entry['graders_disagree']} |"
                 f" {_of(entry['fix_fits'], graded)} |"
@@ -1028,7 +1059,7 @@ def markdown(found: Mapping) -> str:
         verdict = row["verdict"] or ("not run" if row["not_run"] else "no diagnosis")
         action = "-" if row["named_action"] is None else " ".join(str(part) for part in row["named_action"])
         lines.append(
-            f"| {_cell(row['folder'])} | {_cell(row['case'])} | {row['seed']} | {row['mode']} | {verdict} |"
+            f"| {_cell(row['folder'])} | {_cell(row['case'])} | {row['seed']} | {mode_cell(row)} | {verdict} |"
             f" {'held back' if row.get('judge_held_back') else row['judge'] or '-'} | {row['aravind'] or '-'} |"
             f" {_cell(action)} | {row['gate'] or '-'} |"
             f" {_number(row['diagnosis_seconds'])} | {row['calls']} | ${row['cost_usd']:.2f} |"
@@ -1151,13 +1182,15 @@ def _run(args: argparse.Namespace) -> int:
         cases, seeds = _names(args.cases), _seeds(args.seeds)
         budgets = Budgets(steps=args.steps, tool_calls=args.tool_calls)
         traffic.Settings(rate=args.rate, seed=seeds[0])
+        ran_by = loop.loop_header(args.loop)  # week 6: the loop that will run them, refused here if it cannot
         binary = fault_runs.preflight(args.model)
     except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
     planned = plan(cases, seeds)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-    folder = loop._new_folder(args.evidence_dir, f"{stamp}_suite_{args.model}")
+    named = "" if args.loop == loop.PLAIN else f"_{args.loop}"
+    folder = loop._new_folder(args.evidence_dir, f"{stamp}_suite_{args.model}{named}")
     suite = {
         "label": (
             f"A suite of Klaxon's evaluation runs ({MODES[VERSION]}): one model, its cases and seeds, each run on a"
@@ -1165,6 +1198,7 @@ def _run(args: argparse.Namespace) -> int:
             " any action the diagnosis names, nobody is asked, and nothing runs."
         ),
         "evaluation_version": VERSION,
+        **ran_by,
         "model": args.model,
         "budgets": asdict(budgets),
         "rate": args.rate,
@@ -1180,7 +1214,7 @@ def _run(args: argparse.Namespace) -> int:
 
     def run_one(case: Case, seed: int) -> dict:
         print(f"\n== {case.name}, seed {seed} ==", flush=True)
-        return run_case(case, seed, args.model, budgets, args.rate, folder, binary)
+        return run_case(case, seed, args.model, budgets, args.rate, folder, binary, args.loop)
 
     with fault_runs.stops_as_interrupts():  # a stop signal between runs stops the suite as Ctrl-C does
         done = run_suite(planned, suite, write, fresh_stack, run_one)
@@ -1253,6 +1287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     live_.add_argument("--seeds", default=",".join(str(seed) for seed in SEEDS))
     live_.add_argument("--steps", type=int, default=STEPS)
     live_.add_argument("--tool-calls", type=int, default=TOOL_CALLS)
+    live_.add_argument("--loop", choices=loop.LOOPS, default=loop.PLAIN, help="the loop that runs them (week 6)")
     again = actions.add_parser("report", help="the report, from saved runs; offline")
     again.add_argument("folders", type=Path, nargs="+", help="run folders, or folders of them (a suite's, a week's)")
     again.add_argument("--write", type=Path, help="also write report.json and report.md into this folder")

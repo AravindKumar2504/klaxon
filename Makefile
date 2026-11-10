@@ -26,7 +26,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
 .PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
-	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
+	claude-command claude-check loop-prompt loop-graph investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
 	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration \
 	kind-up kind-down kind-ps kind-check
@@ -34,9 +34,9 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 
-venv: ## create .venv with Klaxon, its test tools and the service libraries
+venv: ## create .venv with Klaxon, its test tools, the service libraries and LangGraph (its libraries pinned: requirements/graph.lock.txt)
 	python3.12 -m venv .venv
-	.venv/bin/pip install -e '.[dev,services]'
+	.venv/bin/pip install -c requirements/graph.lock.txt -e '.[dev,services,graph]'
 
 test: ## offline tests, no Docker needed
 	$(PY) -m pytest -q
@@ -53,7 +53,7 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
-		src/klaxon/patient/cluster.py tests/test_cluster.py
+		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_loop_choice.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -121,11 +121,14 @@ LOOP_ARGS = --alert "$$ALERT" --alert-name "$${ALERT_NAME:-manual}" $${STEPS:+--
 loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...' (OFFERED=1: as a gated or evaluation run, with rollback_deploy)
 	$(PY) -m klaxon.agent.loop prompt $(LOOP_ARGS) $${OFFERED:+--offered}
 
+loop-graph: ## the LangGraph loop's graph in Mermaid, as LangGraph draws it (week 6); calls nothing
+	$(PY) -m klaxon.agent.graph draw
+
 investigate: ## one live run of the loop: Claude on Aravind's seat, the running stack (STEPS=, TOOL_CALLS=, TIME_LIMIT=seconds)
 	$(PY) -m klaxon.agent.loop run $(LOOP_ARGS)
 
-replay-run: ## replay a recorded run offline and check it reproduces: make replay-run RUN=evidence/week3/<run folder>
-	$(PY) -m klaxon.agent.loop replay "$$RUN"
+replay-run: ## replay a recorded run offline and check it reproduces: make replay-run RUN=evidence/week3/<run folder> (LOOP=plain|langgraph; by default the run's own)
+	$(PY) -m klaxon.agent.loop replay "$$RUN" $${LOOP:+--loop "$$LOOP"}
 
 alerts: ## the alert rules (symptoms only) read the running stack once, and print what they read; reads only (WATCH=seconds)
 	$(PY) -m klaxon.alerts $${WATCH:+--watch "$$WATCH"}
@@ -133,9 +136,9 @@ alerts: ## the alert rules (symptoms only) read the running stack once, and prin
 alerts-under-traffic: ## traffic and no fault: do the alert rules stay quiet? (MINUTES=5, RATE=3), saved to evidence/week4/
 	$(PY) -m klaxon.fault_runs quiet $${MINUTES:+--minutes "$$MINUTES"} $${RATE:+--rate "$$RATE"}
 
-investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only)
+investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only; LOOP=langgraph)
 	$(PY) -m klaxon.fault_runs run "$$FAULT" $${STEPS:+--steps "$$STEPS"} $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} \
-		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions}
+		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions} $${LOOP:+--loop "$$LOOP"}
 
 rehearse-fault: ## a fault under traffic and the alert rules, no model: what they see, saved to evidence/week4/ (his OK first)
 	$(PY) -m klaxon.fault_runs rehearse "$$FAULT" $${RATE:+--rate "$$RATE"}
@@ -146,8 +149,9 @@ grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, b
 eval-cases: ## the evaluation's eight cases, each with its right answer and the action that fits; calls nothing (week 5)
 	$(PY) -m klaxon.evaluation cases
 
-eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9
-	$(PY) -m klaxon.evaluation run $${MODEL:+--model "$$MODEL"} $${CASES:+--cases "$$CASES"} $${SEEDS:+--seeds "$$SEEDS"}
+eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9 (LOOP=langgraph)
+	$(PY) -m klaxon.evaluation run $${MODEL:+--model "$$MODEL"} $${CASES:+--cases "$$CASES"} $${SEEDS:+--seeds "$$SEEDS"} \
+		$${LOOP:+--loop "$$LOOP"}
 
 eval-report: ## the evaluation's report, worked out offline from saved runs: make eval-report RUNS='evidence/week5/<suite folder> evidence/week4' (SHOW_JUDGE=1: the judge's verdicts on runs not labeled yet too)
 	$(PY) -m klaxon.evaluation report $$RUNS $${SHOW_JUDGE:+--show-judge}

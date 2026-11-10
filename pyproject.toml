@@ -14,6 +14,10 @@ dependencies = []
 # 2.2.0 (2026-09-07), not 2.3.0: that one was under two weeks old (week 3).
 # pyyaml: only for the test that checks the kind manifests against compose.yaml (week 5, Aravind's choice).
 dev = ["pytest>=8", "ruff>=0.16", "mcp==2.2.0", "pyyaml==6.0.3"]
+# graph: LangGraph, only for the LangGraph loop (week 6, item 2; klaxon.agent.graph): the plain loop needs none of it.
+# 1.2.18 (2026-10-26), the newest release at least two weeks old on 2026-11-10. Every library it brings is pinned in
+# requirements/graph.lock.txt, to a release at least two weeks old; make venv installs them with it.
+graph = ["langgraph==1.2.18"]
 # The live patient services (week 1). Exact versions for the image: requirements/services.lock.txt
 services = [
     "fastapi>=0.142",

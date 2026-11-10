@@ -41,9 +41,16 @@ allowed or not and why, what ran, what came back, and why the run stopped. A liv
 With both, a run can be replayed offline, exactly: the prompts hold nothing that changes between runs except
 what the tools returned. Times are left out of them for that reason.
 
+Two loops (week 6, item 2). The parts of a run are written once, in Investigation: its start, the budgets before each
+step, the model call, the reading of its reply, the rollback check, the tool call. The plain loop runs them with a
+Python while loop; the LangGraph loop (klaxon.agent.graph) runs the same parts as the nodes of a graph, its stop rules
+as edges. A run's trace says which loop ran it. A replay uses that loop unless told otherwise, and either loop replays
+a run made on the other, exactly.
+
 Run: python -m klaxon.agent.loop prompt --alert TEXT   print the system prompt and the first turn; calls no model
      python -m klaxon.agent.loop run --alert TEXT      one live run on Aravind's seat, against this Mac's stack
      python -m klaxon.agent.loop replay FOLDER         replay a recorded run offline and check it reproduces
+         [--loop plain|langgraph]                      on this loop (default: the one that ran it)
 """
 
 from __future__ import annotations
@@ -76,7 +83,7 @@ from klaxon.agent.mcp_client import (
     ToolSpec,
 )
 from klaxon.agent.mcp_server import MAX_RESULT
-from klaxon.agent.model import Message, Model, ModelError, ModelTimeout, ReplayModel, text_sha256
+from klaxon.agent.model import Message, Model, ModelError, ModelTimeout, ReplayModel, Reply, text_sha256
 from klaxon.agent.tools import clean, clean_text
 from klaxon.agent.trace import Trace, read_trace
 from klaxon.patient.stack import REPO
@@ -109,10 +116,21 @@ FULLWIDTH_AT = chr(0xFF20)  # as the live adapter writes at signs in turns: neve
 # the Unicode line and paragraph separators, which json.dumps writes as they are when ensure_ascii is off.
 LINE_BREAKS = {"\n": "\\n", "\u2028": "\\u2028", "\u2029": "\\u2029"}
 TRACE, RECORDING, TOOL_RESULTS = "trace.jsonl", "model-recording.jsonl", "tool-results.jsonl"
+# The two loops (week 6, item 2). Each runs the same parts of a run, written once in Investigation: the plain loop in
+# Python, the LangGraph loop as a graph (klaxon.agent.graph). A run records the one that ran it; the plain loop is the
+# default, and a replay uses the loop its run recorded unless told otherwise (Aravind's choices, 2026-11-10).
+PLAIN, LANGGRAPH = "plain", "langgraph"
+LOOPS = (PLAIN, LANGGRAPH)
+INSTALL_GRAPH = "make venv, or: .venv/bin/pip install -c requirements/graph.lock.txt -e '.[graph]'"
 
 
 class ToolsRefused(RuntimeError):
     """The tool server offers something this loop must not use."""
+
+
+class LoopUnavailable(ValueError):
+    """The loop asked for cannot run here: LangGraph is not installed, or LangSmith tracing, which would send the run
+    off this Mac, is switched on."""
 
 
 class NotAllowed(RuntimeError):
@@ -436,6 +454,8 @@ def allowed_tools(specs: Sequence[ToolSpec]) -> list[ToolSpec]:
 class Investigation:
     """One run: the loop and its state. investigate() is the way in."""
 
+    kind = PLAIN
+
     def __init__(
         self,
         alert: Alert,
@@ -458,6 +478,18 @@ class Investigation:
         self.schemas: dict[str, dict] = {}  # the input schema of each tool the model may call, by name
 
     def run(self) -> RunResult:
+        """The run, in plain Python: its start, then one step after another until one stops it. The LangGraph loop
+        (klaxon.agent.graph) runs the same parts as a graph."""
+        stopped = self._open()
+        while stopped is None:
+            stopped = self._out_of_budget() or self._step()
+        return stopped
+
+    # The parts of a run. Both loops call these, and only these, so the two cannot differ in what a step does.
+
+    def _open(self) -> RunResult | None:
+        """The run's start: its tools opened and checked, the system prompt, the trace's first record, then the alert
+        as the first turn. The run stops here when its tools cannot be used."""
         try:
             specs = allowed_tools(self.tools.open(min(START_TIMEOUT, max(self._seconds_left(), 0.001))))
         except (McpError, ToolsRefused) as exc:
@@ -472,14 +504,20 @@ class Investigation:
         self._start(specs)
         self.state.last_turn = first_turn(self.alert, self.budgets)
         self.state.conversation.append(Message("user", self.state.last_turn))
-        while True:
-            if self._seconds_left() <= 0:
-                return self._stop("time_budget", f"all {self.budgets.seconds:g} s of the run are used")
-            if self.state.steps >= self.budgets.steps:
-                return self._stop("step_budget", f"all {self.budgets.steps} steps of the run are used")
-            stopped = self._step()
-            if stopped is not None:
-                return stopped
+        return None
+
+    def _out_of_budget(self) -> RunResult | None:
+        """The stop rules checked before each step: the run's time, then its steps."""
+        if self._seconds_left() <= 0:
+            return self._stop("time_budget", f"all {self.budgets.seconds:g} s of the run are used")
+        if self.state.steps >= self.budgets.steps:
+            return self._stop("step_budget", f"all {self.budgets.steps} steps of the run are used")
+        return None
+
+    @classmethod
+    def about(cls) -> dict:
+        """What the trace says of the loop that ran the run (week 6): its kind."""
+        return {"kind": cls.kind}
 
     def _start(self, specs: Sequence[ToolSpec]) -> None:
         self.trace.start(
@@ -491,6 +529,7 @@ class Investigation:
             budgets=asdict(self.budgets),
             alert=asdict(self.alert),
             loop={
+                **self.about(),  # which loop ran it: a replay uses the same, unless told otherwise
                 "allowed_tools": sorted(READ_ONLY_TOOLS),
                 "tool_timeout_seconds": TOOL_TIMEOUT,
                 "max_observation_characters": MAX_OBSERVATION,
@@ -504,44 +543,53 @@ class Investigation:
         )
 
     def _step(self) -> RunResult | None:
+        """One step: ask the model, read its reply, then a tool call or the diagnosis and its checks."""
         seen = list(self.state.conversation)
         try:
             reply = self._ask(seen)
         except ModelError as exc:
             return self._failed(seen, exc)
+        reading = self._read(reply)
+        if reading.problems:
+            return self._invalid(seen, reply, reading)
+        if reading.diagnosis is not None:
+            return self._diagnosed(seen, reply, reading)
+        return self._tool(seen, reply, reading)
+
+    def _read(self, reply: Reply) -> Reading:
+        """What the loop reads from a reply: one tool call, a diagnosis, or what is wrong with it. It uses a step."""
         self.state.steps += 1
         self.state.failed_in_a_row = 0
         calls = {call_id: (call.tool, call.arguments) for call_id, call in self.state.calls.items()}
         offered = {action.name: action.input_schema for action in self.actions}
         reading = read_reply(reply.text, self.schemas, calls, actions=offered)
-        if reading.problems:
-            return self._invalid(seen, reply, reading)
-        self.state.invalid_in_a_row = 0
-        if reading.diagnosis is not None:
-            why = TAKEN
-            if self._names_no_rollback_action(reading.diagnosis):
-                if ROLLBACK_NAMED in self.state.sent_back:
-                    why += STILL_UNNAMED  # sent back once already: this reply is taken as it comes
-                elif self.state.steps < self.budgets.steps and self._seconds_left() > 0:
-                    self.trace.step(
-                        system=self.system,
-                        messages=seen,
-                        reply=reply,
-                        proposed=reading.value,
-                        allowed=False,
-                        why=SENT_BACK,
-                    )
-                    self.state.sent_back.append(ROLLBACK_NAMED)
-                    self._add(reply.text, ROLLBACK_UNNAMED)
-                    return None
-                else:
-                    why += NO_STEP_TO_SEND_BACK  # sending it back would end the run with no diagnosis at all
-            self.trace.step(
-                system=self.system, messages=seen, reply=reply, proposed=reading.value, allowed=True, why=why
-            )
-            confidence = f"{reading.diagnosis.confidence:g}"
-            return self._stop("diagnosed", f"confidence {confidence}", reading.diagnosis)
-        return self._tool(seen, reply, reading)
+        if not reading.problems:
+            self.state.invalid_in_a_row = 0
+        return reading
+
+    def _diagnosed(self, seen: list[Message], reply: Reply, reading: Reading) -> RunResult | None:
+        """A diagnosis that passed validation meets the run's checks: taken, and the run stops; or sent back once."""
+        why = TAKEN
+        if self._names_no_rollback_action(reading.diagnosis):
+            if ROLLBACK_NAMED in self.state.sent_back:
+                why += STILL_UNNAMED  # sent back once already: this reply is taken as it comes
+            elif self.state.steps < self.budgets.steps and self._seconds_left() > 0:
+                self.trace.step(
+                    system=self.system,
+                    messages=seen,
+                    reply=reply,
+                    proposed=reading.value,
+                    allowed=False,
+                    why=SENT_BACK,
+                )
+                self.state.sent_back.append(ROLLBACK_NAMED)
+                self._add(reply.text, ROLLBACK_UNNAMED)
+                return None
+            else:
+                why += NO_STEP_TO_SEND_BACK  # sending it back would end the run with no diagnosis at all
+        self.trace.step(system=self.system, messages=seen, reply=reply, proposed=reading.value, allowed=True, why=why)
+        confidence = f"{reading.diagnosis.confidence:g}"
+        return self._stop("diagnosed", f"confidence {confidence}", reading.diagnosis)
 
     def _names_no_rollback_action(self, diagnosis: Diagnosis) -> bool:
         """Whether the rollback check applies: the run has it, offers rollback_deploy, and the diagnosis proposes a
@@ -709,6 +757,29 @@ def known_checks(checks: Sequence[str]) -> tuple[str, ...]:
     return tuple(checks)
 
 
+def runner(loop_kind: str) -> type[Investigation]:
+    """The loop that runs a run: the plain one, or the LangGraph one (week 6), imported only here and only when asked
+    for, so the plain loop needs nothing installed. Refused: a loop this code does not know (ValueError), and the
+    LangGraph loop where it cannot run (LoopUnavailable)."""
+    if loop_kind == PLAIN:
+        return Investigation
+    if loop_kind != LANGGRAPH:
+        raise ValueError(f"no loop {clean_text(str(loop_kind), 64)!r}; the loops are: {', '.join(LOOPS)}")
+    try:
+        from klaxon.agent import graph
+    except ImportError as exc:
+        raise LoopUnavailable(f"the LangGraph loop needs LangGraph installed ({INSTALL_GRAPH}): {exc}") from None
+    graph.check_ready()
+    return graph.GraphInvestigation
+
+
+def loop_header(loop_kind: str) -> dict:
+    """The loop that will run a run, as the run's own files name it (week 6): its kind, and LangGraph's version for
+    the LangGraph loop. Refused as runner() refuses: a harness asks before it touches anything."""
+    about = runner(loop_kind).about()
+    return {"loop_kind": about.pop("kind"), **about}
+
+
 def investigate(
     alert: Alert,
     model: Model,
@@ -719,14 +790,17 @@ def investigate(
     extra: Mapping[str, object] | None = None,
     actions: Sequence[ActionSpec] = (),
     checks: Sequence[str] = CHECKS,
+    loop_kind: str = PLAIN,
 ) -> RunResult:
     """Investigate one alert, until a diagnosis or a stop rule. The tools are opened here, and always closed.
     actions: the write actions its diagnosis may name (none by default); the loop runs none of them. checks: the
-    checks a diagnosis meets before it is taken (all of them by default; a replay passes the ones its run had)."""
+    checks a diagnosis meets before it is taken (all of them by default; a replay passes the ones its run had).
+    loop_kind: the loop that runs it, the plain one by default (week 6: or LANGGRAPH, the same parts as a graph)."""
+    kind = runner(loop_kind)  # before the trace is opened: a loop that cannot run leaves nothing behind
     with Trace(trace_path, clock=clock) as trace:
         try:
             budgets = budgets or Budgets()
-            run = Investigation(alert, model, tools, trace, budgets, clock, extra or {}, actions, checks)
+            run = kind(alert, model, tools, trace, budgets, clock, extra or {}, actions, checks)
             return run.run()
         finally:
             tools.close()
@@ -806,9 +880,19 @@ def recorded_checks(recorded: Mapping) -> tuple[str, ...]:
     return known_checks(checks)
 
 
-def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[str]]:
+def recorded_loop(recorded: Mapping) -> str:
+    """The loop that ran a recorded run, so that a replay uses the same: the plain loop for a run recorded before the
+    trace named it (week 6), as it was the only one. A name this code does not know is refused: ValueError."""
+    kind = recorded.get("kind", PLAIN)
+    if kind not in LOOPS:
+        raise ValueError(f"the trace names a loop this code does not know: {clean_text(str(kind), 64)!r}")
+    return kind
+
+
+def replay(folder: Path | str, out: Path | str, loop_kind: str | None = None) -> tuple[RunResult, bool, list[str]]:
     """Replay the run recorded in folder, writing the replay's trace to out. Returns the replay's result, whether
-    the whole run could be compared, and how the two traces differ."""
+    the whole run could be compared, and how the two traces differ. loop_kind: the loop that replays it, by default
+    the one that ran it (week 6); either loop replays a run made on the other."""
     folder = Path(folder)
     recorded = read_trace(folder / TRACE)
     start = recorded[0]
@@ -816,8 +900,9 @@ def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[s
     budgets = Budgets(**start["budgets"])
     offered = offered_actions(start["extra"].get("loop", {}))
     checks = recorded_checks(start["extra"].get("loop", {}))
+    kind = recorded_loop(start["extra"].get("loop", {})) if loop_kind is None else loop_kind
     model, tools = ReplayModel(folder / RECORDING), ReplayTools(folder / TOOL_RESULTS)
-    result = investigate(alert, model, tools, out, budgets, actions=offered, checks=checks)
+    result = investigate(alert, model, tools, out, budgets, actions=offered, checks=checks, loop_kind=kind)
     whole = recorded[-1].get("reason") not in NOT_REPLAYABLE
     return result, whole, compare(recorded, read_trace(out), whole)
 
@@ -895,17 +980,20 @@ def investigate_live(
     binary: Path,
     actions: Sequence[ActionSpec] = (),
     tool_client: ToolClient | None = None,
+    loop_kind: str = PLAIN,
 ) -> RunResult:
     """One live run into folder: Claude on Aravind's seat, Klaxon's tools through its MCP server. Every reply and
     every tool result is recorded before the loop uses it, with header at the top of each file. actions: the write
     actions its diagnosis may name (none by default). tool_client: the tools' client, Klaxon's MCP server by default;
-    an evaluation run's case may wrap it (klaxon.evaluation.Withheld), and its results are recorded all the same."""
+    an evaluation run's case may wrap it (klaxon.evaluation.Withheld), and its results are recorded all the same.
+    loop_kind: the loop that runs it (week 6), the plain one by default."""
     from klaxon.agent.claude_code import ClaudeCode
     from klaxon.agent.model import Recording
 
     model = ClaudeCode(Recording(folder / RECORDING, dict(header)), model=model_id, binary=binary)
     tools = RecordedTools(McpClient() if tool_client is None else tool_client, folder / TOOL_RESULTS, header)
-    return investigate(alert, model, tools, folder / TRACE, budgets, extra={"run": dict(header)}, actions=actions)
+    extra = {"run": dict(header)}
+    return investigate(alert, model, tools, folder / TRACE, budgets, extra=extra, actions=actions, loop_kind=loop_kind)
 
 
 def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, argv: Sequence[str]) -> int:
@@ -934,14 +1022,24 @@ def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, arg
     return 0 if result.reason == "diagnosed" else 1
 
 
-def _replay(folder: Path) -> int:
+def replayed_by(start: Mapping) -> str:
+    """Which loop a trace's run was run by, in words, from its start record: as the trace says it, never assumed."""
+    about = start.get("extra", {}).get("loop", {})
+    if about.get("kind") == LANGGRAPH:
+        return f"the LangGraph loop (LangGraph {clean_text(str(about.get('langgraph_version')), 40)})"
+    return "the plain loop"
+
+
+def _replay(folder: Path, loop_kind: str | None = None) -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="klaxon-replay-") as scratch:
-            result, whole, differences = replay(folder, Path(scratch) / TRACE)
+            result, whole, differences = replay(folder, Path(scratch) / TRACE, loop_kind)
+            by = replayed_by(read_trace(Path(scratch) / TRACE)[0])
     except (OSError, ValueError, KeyError, TypeError) as exc:
         problem = f"{type(exc).__name__}: {clean_text(str(exc), 300)}"
         print(f"Cannot replay {clean_text(str(folder))}: {problem}", file=sys.stderr)
         return 2
+    print(f"Replayed by {by}.")
     _print_result(result)
     if differences:
         print("Not reproduced:\n" + "\n".join(f"  {difference}" for difference in differences))
@@ -976,9 +1074,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     live.add_argument("--model", default=DEFAULT_MODEL)
     live.add_argument("--evidence-dir", type=Path, default=REPO / "evidence" / "week3")
     again.add_argument("folder", type=Path, help=f"a run's folder, with {TRACE}, {RECORDING} and {TOOL_RESULTS}")
+    again.add_argument("--loop", choices=LOOPS, help="the loop that replays it (default: the one that ran it)")
     args = parser.parse_args(argv)
     if args.action == "replay":
-        return _replay(args.folder)
+        return _replay(args.folder, args.loop)
     try:
         alert = Alert(args.alert_name, args.alert, args.fired_at)
         budgets = Budgets(steps=args.steps, tool_calls=args.tool_calls, seconds=args.seconds)
