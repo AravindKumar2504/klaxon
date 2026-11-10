@@ -88,7 +88,7 @@ kind-ps: ## the kind cluster's pods: ready, restarts, images
 kind-reader: ## a token of klaxon-reader, which may only read, for Klaxon's tools on kind: an hour long, in .kind/ (make kind-up first)
 	$(PY) -m klaxon.patient.cluster reader
 
-kind-check: ## on the kind cluster, the money check again and again while traffic flows (CHECKS=20, RATE=5), saved to evidence/week5/kind/
+kind-check: ## on the kind cluster, the money check again and again while traffic flows (CHECKS=20, RATE=5), saved to evidence/week6/kind/
 	$(PY) -m klaxon.patient.cluster check --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)
 
 test-integration: ## tests against the running stack's PostgreSQL and Kafka (make up first)

@@ -47,7 +47,7 @@ NAMESPACE = "klaxon"
 KUBECONFIG = REPO / ".kind" / "kubeconfig"
 IMAGE = "klaxon-patient:dev"  # compose.yaml's name for our services' image
 NODE = f"{NAME}-control-plane"  # the node's container, as kind names it
-EVIDENCE = REPO / "evidence" / "week5" / "kind"
+EVIDENCE = REPO / "evidence" / "week6" / "kind"  # week 5's first run on kind: evidence/week5/kind
 # Any of these could aim docker, kind or kubectl at another host, cluster or file.
 FOREIGN_TARGETS = (*stack.FOREIGN_TARGETS, "KUBECONFIG", "KIND_CLUSTER_NAME", "KIND_EXPERIMENTAL_PROVIDER")
 WAIT_SECONDS = 300  # each workload's wait in up(): Kafka and Grafana's stack are the slowest to start
@@ -488,7 +488,7 @@ def check(rate: float, checks: int, seed: int, command: str) -> int:
     now = datetime.now(timezone.utc)
     run = under_traffic.run_live(rate=rate, checks=checks, seed=seed)
     printed = under_traffic.render(
-        run, where=WHERE, title="Klaxon week 5: the money check on kind, while traffic flows"
+        run, where=WHERE, title="Klaxon week 6: the money check on kind, while traffic flows"
     )
     _say(printed)
     path = write_evidence(evidence(run, printed, before, pods(), command, now), now)
@@ -670,7 +670,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("down", help="delete the cluster and its data (synthetic)")
     commands.add_parser("ps", help="the pods: ready, phase, restarts, images")
     commands.add_parser("reader", help="a token of klaxon-reader for Klaxon's tools, an hour long, in .kind/")
-    checking = commands.add_parser("check", help="the money check while traffic flows, saved to evidence/week5/kind")
+    checking = commands.add_parser("check", help="the money check while traffic flows, saved to evidence/week6/kind")
     checking.add_argument("--checks", type=int, default=20)
     checking.add_argument("--rate", type=float, default=5.0)
     checking.add_argument("--seed", type=int, default=7)
