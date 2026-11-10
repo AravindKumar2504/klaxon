@@ -111,6 +111,32 @@ DEPLOY_SETTINGS = (
     "WEBHOOK_SECRET_VERSION",
 )
 ONE_SHOT = {"kafka-init": "one-shot: creates the Kafka topics, then exits"}
+PLATFORM_VARIABLE = "KLAXON_PLATFORM"  # set by the harness for a run on kind; the tool server reads it at its start
+PLATFORMS = ("compose", "kind")
+REVISION = "deployment.kubernetes.io/revision"  # the annotation Kubernetes numbers each rollout with
+NAME_LABEL = "app.kubernetes.io/name"  # each of our workloads, and its pods, by service name (deploy/kind)
+# What the two tools say they read (the system prompt lists it): on Compose, word for word as before week 6, so its
+# prompt does not change; on kind, what they read there (Aravind's choice, 2026-11-09).
+HEALTH_SAYS = {
+    "compose": "Each container of the payments system: running or not, its health check, restarts, and when it started.",
+    "kind": (
+        "Each pod of the payments system, on its Kubernetes cluster: its phase, whether it is ready (a pod that is not"
+        " ready is taken out of its Service and gets no traffic), its last failed readiness check, restarts, and when"
+        " it started."
+    ),
+}
+DEPLOYS_SAY = {
+    "compose": (
+        "When each service's container was last created (a deploy, a restart with new settings, or a rollback),"
+        f" newest first, with its image and its behavior settings: {', '.join(DEPLOY_SETTINGS)}. No other setting"
+        " is shown."
+    ),
+    "kind": (
+        "When each service was last rolled out on its Kubernetes cluster (a deploy, a restart with new settings, or a"
+        " rollback: each makes a new revision), newest first, with its revision, its image and its behavior settings:"
+        f" {', '.join(DEPLOY_SETTINGS)}. No other setting is shown."
+    ),
+}
 HOME = str(Path.home())
 CONTAINER_ID = re.compile(r"[0-9a-f]{12,64}")
 
@@ -302,11 +328,17 @@ class Sources:
     inspect: Callable[..., list[dict]] = lambda *ids: stack.inspect(*ids, timeout=DOCKER_TIMEOUT)
     money_check: Callable[..., live.LiveCheck] = live.check_live
     now: Callable[[], float] = time.time
+    # Where the stack runs (week 6, item 3): Compose, or the kind cluster, where service_health and recent_deploys
+    # read pods and rollouts as klaxon-reader, which Kubernetes lets only read (deploy/kind/01-klaxon-access.yaml).
+    platform: str = field(default_factory=lambda: os.environ.get(PLATFORM_VARIABLE) or "compose")
+    cluster_get: Callable[[str], dict] = lambda what: _read_cluster(what)
 
     def __post_init__(self) -> None:
         for url in (self.prometheus_url, self.loki_url, self.tempo_url):
             require_local(url)
         live.require_local_sources()  # the money check's provider, database and Kafka, which the environment can set
+        if self.platform not in PLATFORMS:
+            raise ValueError(f"{PLATFORM_VARIABLE} must be one of {', '.join(PLATFORMS)}")
 
 
 # Reading the sources.
@@ -728,6 +760,8 @@ def _docker_text(value: object) -> str | None:
 
 
 def _service_health(sources: Sources, args: dict) -> dict:
+    if sources.platform == "kind":
+        return _pods_health(sources)
     services = []
     for row, full in _docker_view(sources):
         state = full.get("State") or {}
@@ -751,6 +785,8 @@ def _service_health(sources: Sources, args: dict) -> dict:
 
 
 def _recent_deploys(sources: Sources, args: dict) -> dict:
+    if sources.platform == "kind":
+        return _rollouts(sources)
     now = sources.now()
     deploys = []
     for row, full in _docker_view(sources):
@@ -773,6 +809,158 @@ def _recent_deploys(sources: Sources, args: dict) -> dict:
         "deploys": deploys,
         "note": "Each container's creation: a deploy, a restart with new settings, or a rollback. Newest first.",
     }
+
+
+# On the kind cluster (week 6, item 3): the same two tools, reading pods and rollouts as klaxon-reader.
+
+
+def _read_cluster(what: str) -> dict:
+    """One kind of object in the cluster's namespace, as klaxon-reader reads it. The cluster's code is loaded here, on
+    kind only: the loop, which imports these tools for their cleaning, never loads it (it also holds kind's deploys)."""
+    from klaxon.patient import cluster
+
+    try:
+        text = cluster.reader_kubectl("get", what, "--output", "json", timeout=DOCKER_TIMEOUT)
+    except cluster.ClusterError as exc:  # its last words, never the command line, which names this Mac's folders
+        said = re.search(r" failed \(-?\d+\): (.*)\Z", str(exc), re.DOTALL)  # where cluster._run puts kubectl's stderr
+        reason = _last_line(said.group(1) if said else str(exc))
+        raise ToolUnavailable(f"the kind cluster could not be read: {clean_text(reason, MAX_FIELD)}") from None
+    return json.loads(text)
+
+
+def _cluster_items(sources: Sources, what: str) -> list[dict]:
+    """The objects of one kind, once the cluster is known to be this Mac's (each read checks it)."""
+    try:
+        found = sources.cluster_get(what)
+    except subprocess.TimeoutExpired:
+        raise ToolUnavailable(f"the kind cluster did not answer within {DOCKER_TIMEOUT:.0f} s: is it up?") from None
+    except ValueError:  # not JSON
+        raise ToolUnavailable("the kind cluster answered something that is not JSON") from None
+    except OSError as exc:
+        raise ToolUnavailable(f"kubectl could not be started ({type(exc).__name__})") from None
+    items = found.get("items") if isinstance(found, dict) else None
+    if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+        raise ToolUnavailable(f"the kind cluster's {what} came back in an unexpected shape")
+    return items
+
+
+def _meta(item: dict) -> dict:
+    return item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+
+
+def _labeled(item: dict) -> str | None:
+    labels = _meta(item).get("labels") or {}
+    return _docker_text(labels.get(NAME_LABEL)) if isinstance(labels, dict) else None
+
+
+def _containers(template: object) -> list[dict]:
+    spec = (template or {}).get("spec") if isinstance(template, dict) else None
+    found = (spec or {}).get("containers") if isinstance(spec, dict) else None
+    return [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
+
+
+def _template_settings(template: object) -> dict[str, str]:
+    """The behavior settings a pod template gives, and no other variable: a value written in it, never a reference
+    (the passwords are references to a Secret that klaxon-reader cannot read)."""
+    out = {}
+    for container in _containers(template):
+        for item in container.get("env") or []:
+            if isinstance(item, dict) and item.get("name") in DEPLOY_SETTINGS and isinstance(item.get("value"), str):
+                out[item["name"]] = clean_text(item["value"], 100)
+    return out
+
+
+def _pods_health(sources: Sources) -> dict:
+    """service_health on kind: each pod, its phase, ready or not, restarts, when it started; and, for a pod that is
+    not ready, its last failed readiness check, from its events."""
+    pods = _cluster_items(sources, "pods")
+    events = _cluster_items(sources, "events")
+    services = []
+    for pod in pods:
+        status = pod.get("status") if isinstance(pod.get("status"), dict) else {}
+        containers = [c for c in status.get("containerStatuses") or [] if isinstance(c, dict)]
+        phase = str(status.get("phase") or "unknown")
+        ready = bool(containers) and all(c.get("ready") is True for c in containers)
+        restarts = [c.get("restartCount") for c in containers]
+        started = _docker_seconds(status.get("startTime"))
+        name = _docker_text(_meta(pod).get("name"))
+        service = _labeled(pod)
+        entry = {
+            "service": service,
+            "pod": name,
+            "state": clean_text(phase.lower(), 40),
+            "health": "ready" if ready else "not ready",
+            "restarts": sum(restarts) if restarts and all(isinstance(r, int) for r in restarts) else None,
+            "started_at": _iso(started) if started else None,
+        }
+        if phase in ("Succeeded", "Failed"):
+            ended = [((c.get("state") or {}).get("terminated") or {}).get("exitCode") for c in containers]
+            entry["exit_code"] = ended[0] if len(ended) == 1 and isinstance(ended[0], int) else None
+        if not ready and phase == "Running":
+            failed = [
+                e
+                for e in events
+                if (e.get("involvedObject") or {}).get("name") == _meta(pod).get("name")
+                and e.get("reason") == "Unhealthy"
+            ]
+            if failed:
+                last = max(failed, key=lambda e: str(e.get("lastTimestamp") or e.get("eventTime") or ""))
+                entry["last_health_check"] = clean_text(str(last.get("message", "")).strip(), MAX_FIELD)
+        if service in ONE_SHOT:
+            entry["note"] = ONE_SHOT[service]
+        services.append(entry)
+    return {"at": _iso(sources.now()), "services": sorted(services, key=lambda s: (str(s["service"]), str(s["pod"])))}
+
+
+def _rollouts(sources: Sources) -> dict:
+    """recent_deploys on kind: each Deployment's current revision (when its ReplicaSet was made, its number, image and
+    behavior settings), and each StatefulSet's pod (when it was made). Newest first."""
+    now = sources.now()
+    replica_sets = _cluster_items(sources, "replicasets")
+    pods = _cluster_items(sources, "pods")
+    deploys = []
+    for deployment in _cluster_items(sources, "deployments"):
+        meta = _meta(deployment)
+        revision = (meta.get("annotations") or {}).get(REVISION)
+        current = [
+            rs
+            for rs in replica_sets
+            if any(
+                o.get("uid") == meta.get("uid") for o in _meta(rs).get("ownerReferences") or [] if isinstance(o, dict)
+            )
+            and (_meta(rs).get("annotations") or {}).get(REVISION) == revision
+        ]
+        made = _docker_seconds(_meta(current[0]).get("creationTimestamp")) if len(current) == 1 else None
+        template = (deployment.get("spec") or {}).get("template")
+        deploys.append(_rollout_entry(_labeled(deployment), made, now, template, revision))
+    for statefulset in _cluster_items(sources, "statefulsets"):
+        name = _labeled(statefulset)
+        own = [p for p in pods if _labeled(p) == name]
+        made = max((_docker_seconds(_meta(p).get("creationTimestamp")) or 0.0 for p in own), default=0.0) or None
+        deploys.append(_rollout_entry(name, made, now, (statefulset.get("spec") or {}).get("template"), None))
+    deploys.sort(key=lambda d: d["deployed_at"] or "", reverse=True)
+    return {
+        "at": _iso(now),
+        "deploys": deploys,
+        "note": (
+            "On the kind cluster: each Deployment's current revision (a deploy, a restart with new settings, or a"
+            " rollback each make a new one), and each StatefulSet's pod, when it was made. Newest first."
+        ),
+    }
+
+
+def _rollout_entry(service: str | None, made: float | None, now: float, template: object, revision: object) -> dict:
+    images = [_docker_text(c.get("image")) for c in _containers(template)]
+    entry = {
+        "service": service,
+        "deployed_at": _iso(made) if made else None,
+        "minutes_ago": round((now - made) / 60, 1) if made else None,
+        "image": images[0] if len(images) == 1 else None,
+        "settings": _template_settings(template),
+    }
+    if revision is not None:
+        entry["revision"] = int(revision) if str(revision).isdigit() else None
+    return entry
 
 
 MONEY_CHECK = {
@@ -890,16 +1078,14 @@ def make_tools(sources: Sources | None = None) -> dict[str, Tool]:
         Tool(
             "service_health",
             "Service health",
-            "Each container of the payments system: running or not, its health check, restarts, and when it started.",
+            HEALTH_SAYS[s.platform],
             NO_ARGUMENTS,
             lambda args: _service_health(s, args),
         ),
         Tool(
             "recent_deploys",
             "Recent deploys",
-            "When each service's container was last created (a deploy, a restart with new settings, or a rollback),"
-            f" newest first, with its image and its behavior settings: {', '.join(DEPLOY_SETTINGS)}. No other setting"
-            " is shown.",
+            DEPLOYS_SAY[s.platform],
             NO_ARGUMENTS,
             lambda args: _recent_deploys(s, args),
         ),

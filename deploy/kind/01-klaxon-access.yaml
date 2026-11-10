@@ -1,0 +1,41 @@
+# What Klaxon's own tools may do on the cluster (week 6, item 3): read, and only read, in this namespace. Kubernetes
+# enforces it: a token of klaxon-reader can get, list and watch pods, their events and the workloads, and nothing
+# else. No Secret, no ConfigMap, no logs or exec, no write of any kind, no other namespace. The harness (make kind-up,
+# the faults) keeps the cluster's admin access; Klaxon's tools never get it. make kind-up applies this file right
+# after the namespace; each run on kind is given a token of klaxon-reader that lasts an hour (.kind/, not committed).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: klaxon-reader
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: klaxon-reader, app.kubernetes.io/part-of: klaxon }
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: klaxon-reader
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: klaxon-reader, app.kubernetes.io/part-of: klaxon }
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: klaxon-reader
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: klaxon-reader, app.kubernetes.io/part-of: klaxon }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: klaxon-reader
+subjects:
+  - kind: ServiceAccount
+    name: klaxon-reader
+    namespace: klaxon

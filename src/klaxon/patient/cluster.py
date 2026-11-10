@@ -24,6 +24,8 @@ import re
 import shutil
 import subprocess
 import sys
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +33,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import klaxon
-from klaxon.patient import stack
+from klaxon.patient import deploys, stack
 
 if TYPE_CHECKING:  # the traffic and the check need the service libraries; up, down and ps do not
     from klaxon.demo import under_traffic
@@ -49,6 +51,16 @@ EVIDENCE = REPO / "evidence" / "week5" / "kind"
 # Any of these could aim docker, kind or kubectl at another host, cluster or file.
 FOREIGN_TARGETS = (*stack.FOREIGN_TARGETS, "KUBECONFIG", "KIND_CLUSTER_NAME", "KIND_EXPERIMENTAL_PROVIDER")
 WAIT_SECONDS = 300  # each workload's wait in up(): Kafka and Grafana's stack are the slowest to start
+JOB_POLL_SECONDS = 2.0  # how often up() looks at a Job: its failure is noticed within this, not at the end of the wait
+# Week 6, item 3. kind-up applies server-side, as this one manager, and takes back every field another manager set
+# (kubectl set env, a fault's patch): the manifests' settings win, as compose.yaml's do at each make up.
+FIELD_MANAGER = "klaxon-kind-up"
+ACCESS_FILE = "01-klaxon-access.yaml"  # what Klaxon's tools may read on the cluster, and nothing more
+READER = "klaxon-reader"  # its ServiceAccount
+READER_KUBECONFIG = REPO / ".kind" / "reader.kubeconfig"  # a token of klaxon-reader, made for each run on kind
+READER_CONTEXT = f"{CONTEXT}-reader"
+TOKEN_SECONDS = 3600  # how long a reader's token lasts: an hour, about four times a gated run
+JOBS = ("job/kafka-init",)  # made again at each kind-up: a Job's template cannot change once it is made
 # The money check's addresses can come from these (klaxon.checks.live). On the cluster they must be its defaults,
 # the ports deploy/kind/cluster.yaml maps, or the check could read another stack while its run says kind.
 ADDRESS_VARIABLES = ("KLAXON_READONLY_DSN", "KLAXON_PROVIDER_URL", "KLAXON_KAFKA_BOOTSTRAP")
@@ -135,27 +147,67 @@ def _run(binary: str, args: list[str], *, stdin: str | None = None, timeout: flo
     return done.stdout
 
 
-def _kubectl(*args: str, stdin: str | None = None, timeout: float = 600) -> str:
+def _kubectl(
+    *args: str, stdin: str | None = None, timeout: float = 600, config: Path | None = None, context: str = CONTEXT
+) -> str:
     # Its discovery cache in .kind/ too: nothing of this cluster goes to ~/.kube.
-    target = ["--kubeconfig", str(KUBECONFIG), "--context", CONTEXT, "--namespace", NAMESPACE]
+    config = config or KUBECONFIG
+    target = ["--kubeconfig", str(config), "--context", context, "--namespace", NAMESPACE]
     target += ["--cache-dir", str(KUBECONFIG.parent / "cache")]
     return _run(kubectl_binary(), [*target, *args], stdin=stdin, timeout=timeout)
 
 
-def ensure_cluster_local() -> None:
+def ensure_cluster_local(config: Path | None = None, context: str = CONTEXT) -> None:
     """Refuse unless this repo's kubeconfig names the cluster's API server on 127.0.0.1, where kind puts it."""
-    if not KUBECONFIG.is_file():
-        raise ClusterError(f"no kind cluster here: {_shown(KUBECONFIG)} is missing (make kind-up)")
-    server = _kubectl("config", "view", "--minify", "--output", "jsonpath={.clusters[0].cluster.server}").strip()
+    config = config or KUBECONFIG
+    if not config.is_file():
+        raise ClusterError(f"no kind cluster here: {_shown(config)} is missing (make kind-up)")
+    view = ("config", "view", "--minify", "--output", "jsonpath={.clusters[0].cluster.server}")
+    server = _kubectl(*view, config=config, context=context).strip()
     if urlparse(server).hostname != "127.0.0.1":
         raise ClusterError(f"refusing: the cluster's API server is {server!r}, not on this Mac")
 
 
 def kubectl(*args: str, stdin: str | None = None, timeout: float = 600) -> str:
     """kubectl on this cluster only: its own kubeconfig, the context kind-klaxon, the namespace klaxon, and an API
-    server on 127.0.0.1."""
+    server on 127.0.0.1. With the cluster's admin access: for make kind-*, the faults and the harness, never Klaxon's
+    tools."""
     ensure_cluster_local()
     return _kubectl(*args, stdin=stdin, timeout=timeout)
+
+
+def reader_kubectl(*args: str, timeout: float = 600) -> str:
+    """kubectl as klaxon-reader, which Kubernetes lets only get, list and watch in the namespace (deploy/kind,
+    01-klaxon-access.yaml): what Klaxon's tools read the cluster with. The same checks as kubectl()."""
+    ensure_cluster_local(READER_KUBECONFIG, READER_CONTEXT)
+    return _kubectl(*args, timeout=timeout, config=READER_KUBECONFIG, context=READER_CONTEXT)
+
+
+def make_reader_kubeconfig() -> Path:
+    """A kubeconfig for klaxon-reader with a token of its own that lasts TOKEN_SECONDS, written beside the cluster's
+    (readable by this user only, never committed). Made for each run on kind: the tools' access ends with the token."""
+    token = kubectl("create", "token", READER, f"--duration={TOKEN_SECONDS}s").strip()
+    if not token or any(c.isspace() for c in token):
+        raise ClusterError(f"kubectl create token gave no token for {READER}")
+    view = json.loads(kubectl("config", "view", "--minify", "--raw", "--output", "json"))
+    (entry,) = view.get("clusters") or [None]
+    server = (entry or {}).get("cluster", {}).get("server", "")
+    if urlparse(server).hostname != "127.0.0.1":
+        raise ClusterError(f"refusing: the cluster's API server is {server!r}, not on this Mac")
+    config = {
+        "apiVersion": "v1",
+        "kind": "Config",
+        "clusters": [{"name": CONTEXT, "cluster": entry["cluster"]}],
+        "users": [{"name": READER, "user": {"token": token}}],
+        "contexts": [{"name": READER_CONTEXT, "context": {"cluster": CONTEXT, "user": READER, "namespace": NAMESPACE}}],
+        "current-context": READER_CONTEXT,
+    }
+    READER_KUBECONFIG.parent.mkdir(exist_ok=True)
+    READER_KUBECONFIG.unlink(missing_ok=True)
+    descriptor = os.open(READER_KUBECONFIG, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as out:
+        out.write(json.dumps(config, indent=2) + "\n")
+    return READER_KUBECONFIG
 
 
 def clusters() -> list[str]:
@@ -180,17 +232,51 @@ def configmaps() -> dict:
     }
 
 
-def apply(*files: str) -> None:
-    kubectl("apply", *(part for file in files for part in ("--filename", str(DEPLOY / file))))
+SERVER_SIDE = ("apply", "--server-side", "--force-conflicts", f"--field-manager={FIELD_MANAGER}")
 
 
-def wait(workload: str) -> None:
-    """Wait until a workload is ready (a Deployment's or StatefulSet's rollout) or done (a Job)."""
+def manifests(files: tuple[str, ...], image: str = IMAGE) -> str:
+    """These manifests as one stream, our image named as given: the same files, with klaxon-patient:dev replaced by
+    the tag of the image this kind-up built, so a code change rolls our workloads and none other changes."""
+    texts = [(DEPLOY / file).read_text(encoding="utf-8") for file in files]
+    return "\n---\n".join(text.replace(f"image: {IMAGE}", f"image: {image}") for text in texts)
+
+
+def apply(*files: str, image: str = IMAGE) -> None:
+    kubectl(*SERVER_SIDE, "--filename", "-", stdin=manifests(files, image))
+
+
+def wait(workload: str, clock=time.monotonic, sleep=time.sleep) -> None:
+    """Wait until a workload is ready (a Deployment's or StatefulSet's rollout) or done (a Job). A Job that failed
+    stops the wait at once, with its reason: it is never retried (backoffLimit 0, as compose.yaml runs it once)."""
     limit = f"--timeout={WAIT_SECONDS}s"
-    if workload.startswith("job/"):
-        kubectl("wait", "--for=condition=complete", workload, limit, timeout=WAIT_SECONDS + 60)
-    else:
+    if not workload.startswith("job/"):
         kubectl("rollout", "status", workload, limit, timeout=WAIT_SECONDS + 60)
+        return
+    deadline = clock() + WAIT_SECONDS
+    while True:
+        status = json.loads(kubectl("get", workload, "--output", "json")).get("status") or {}
+        held = {c.get("type"): c for c in status.get("conditions") or [] if c.get("status") == "True"}
+        if "Complete" in held:
+            return
+        if "Failed" in held or status.get("failed"):
+            why = (held.get("Failed") or {}).get("message") or f"{status.get('failed')} pod(s) failed"
+            raise ClusterError(f"{workload} failed: {why} (kubectl logs {workload} shows its output)")
+        if clock() >= deadline:
+            raise ClusterError(f"{workload} did not finish within {WAIT_SECONDS} s (make kind-ps)")
+        sleep(JOB_POLL_SECONDS)
+
+
+def content_tag() -> str:
+    """Our image, tagged by its own id: klaxon-patient:<12 hex>. The same code builds the same id, and a code change
+    a new one, which is what makes up() roll our workloads after a change and leave them be otherwise."""
+    found = stack._run(["image", "inspect", "--format", "{{.Id}}", IMAGE]).strip()
+    match = re.fullmatch(r"sha256:([0-9a-f]{64})", found)
+    if match is None:
+        raise ClusterError(f"docker gave {IMAGE} an image id that is not one")
+    tagged = f"{IMAGE.split(':')[0]}:{match.group(1)[:12]}"
+    stack._run(["tag", IMAGE, tagged])
+    return tagged
 
 
 def compose_running() -> list[str]:
@@ -224,14 +310,17 @@ def up() -> None:
     ensure_cluster_local()
     _say(f"Building our image, {IMAGE}, as compose.yaml builds it")
     stack.compose("build", "fake-provider")  # one service's build makes the image all five of ours use
-    _say(f"Loading {IMAGE} into the cluster (it is never pulled)")
-    _run(kind_binary(), ["load", "docker-image", IMAGE, "--name", NAME], timeout=600)
-    _say(f"Applying {NAMESPACE_FILE} and the ConfigMaps of compose.yaml's mounted files")
-    apply(NAMESPACE_FILE)
-    kubectl("apply", "--filename", "-", stdin=json.dumps(configmaps()))
+    image = content_tag()
+    _say(f"Loading it into the cluster as {image}, its own id (it is never pulled)")
+    _run(kind_binary(), ["load", "docker-image", image, "--name", NAME], timeout=600)
+    _say(f"Applying {NAMESPACE_FILE}, {ACCESS_FILE} and the ConfigMaps of compose.yaml's mounted files")
+    apply(NAMESPACE_FILE, ACCESS_FILE)
+    kubectl(*SERVER_SIDE, "--filename", "-", stdin=json.dumps(configmaps()))
     for files, waits in STAGES:
+        for job in (workload for workload in waits if workload in JOBS):
+            kubectl("delete", job, "--ignore-not-found", "--wait=true")  # made again, as Compose runs it at each up
         _say(f"Applying {', '.join(files)}")
-        apply(*files)
+        apply(*files, image=image)
         for workload in waits:
             _say(f"  waiting for {workload}")
             wait(workload)
@@ -407,6 +496,161 @@ def check(rate: float, checks: int, seed: int, command: str) -> int:
     return 0 if run.passed else 1
 
 
+# Deploys on the cluster (week 6, item 3): as klaxon.patient.deploys does them on Compose, in kind's own log.
+
+REVISION = "deployment.kubernetes.io/revision"  # the annotation Kubernetes numbers each rollout with
+
+
+def kind_log_path() -> Path:
+    """kind's own deploy log, apart from Compose's, so a rollback on one is never planned from the other's deploys:
+    ~/.klaxon/deploys-kind.jsonl, or the file KLAXON_KIND_DEPLOY_LOG names."""
+    named = os.environ.get("KLAXON_KIND_DEPLOY_LOG")
+    return Path(named) if named else Path.home() / ".klaxon" / "deploys-kind.jsonl"
+
+
+class ClusterDeployer:
+    """Deploys one of our services on the kind cluster, and logs each deploy, as deploys.Deployer does on Compose and
+    with the same rules: one at a time under the log's lock, only known settings, an expect that must still hold.
+
+    A deploy is a rollout: one JSON patch of the Deployment's behavior settings, whose first step makes Kubernetes
+    refuse the whole patch if the Deployment changed since it was read (its resourceVersion), then a wait until the
+    rollout is done. What runs is the Deployment's current ReplicaSet, which every rollout makes anew; the log names
+    it by the SHA-256 of its uid, a 64-hex id as a Compose container's is, so the log's lines read the same and a
+    rollback refuses unless the revision it was planned on is the one running. The kubectl it is given decides with
+    which access: the cluster's admin for the faults (the harness)."""
+
+    def __init__(
+        self,
+        log: deploys.DeployLog | None = None,
+        kubectl: Callable[..., str] = kubectl,
+        ensure_local: Callable[[], None] = stack.ensure_local,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self.log = log or deploys.DeployLog(kind_log_path())
+        self._kubectl, self._ensure_local, self._clock = kubectl, ensure_local, clock
+
+    def check_local(self) -> None:
+        """Docker must talk to this Mac (kind's node runs in it); each kubectl call checks the API server too."""
+        self._ensure_local()
+
+    def _get(self, *what: str) -> dict:
+        return json.loads(self._kubectl("get", *what, "--output", "json"))
+
+    def _current(self, service: str) -> tuple[dict, dict]:
+        """The Deployment, and the ReplicaSet that runs it, once its rollout is done: one running revision."""
+        if service not in deploys.SERVICES:
+            raise deploys.DeployError(f"no settings are known for the service {service!r}")
+        deployment = self._get("deployment", service)
+        meta, status = deployment.get("metadata") or {}, deployment.get("status") or {}
+        wanted = (deployment.get("spec") or {}).get("replicas", 1)
+        done = (
+            status.get("observedGeneration", 0) >= meta.get("generation", 1)
+            and status.get("updatedReplicas") == wanted
+            and status.get("readyReplicas") == wanted
+            and status.get("availableReplicas") == wanted
+            and not status.get("unavailableReplicas")
+        )
+        if not done:
+            raise deploys.DeployError(
+                f"{service} is not one ready revision: a rollout is going on, or its pod is not ready"
+            )
+        revision = (meta.get("annotations") or {}).get(REVISION)
+        sets = [
+            replica_set
+            for replica_set in self._get("replicasets", "--selector", f"app.kubernetes.io/name={service}")["items"]
+            if any(
+                owner.get("uid") == meta.get("uid") for owner in replica_set["metadata"].get("ownerReferences") or []
+            )
+            and (replica_set["metadata"].get("annotations") or {}).get(REVISION) == revision
+        ]
+        if revision is None or len(sets) != 1:
+            raise deploys.DeployError(f"{service}'s current revision could not be found")
+        return deployment, sets[0]
+
+    @staticmethod
+    def _settings(service: str, template: Mapping) -> dict[str, str] | None:
+        (container,) = template["spec"]["containers"]
+        environment = {item["name"]: item["value"] for item in container.get("env") or [] if "value" in item}
+        return deploys.settings_of(service, environment)
+
+    def running(self, service: str) -> deploys.Running:
+        """The service's running revision and its settings. Reads only."""
+        _, current = self._current(service)
+        identity = hashlib.sha256(str(current["metadata"]["uid"]).encode()).hexdigest()
+        return deploys.Running(identity, self._settings(service, current["spec"]["template"]))
+
+    def deploy(
+        self, service: str, settings: Mapping[str, str], by: str, expect: deploys.Expect | None = None
+    ) -> deploys.Deploy | None:
+        """Roll the service out with these settings, wait until the rollout is done, and log the deploy, all under
+        the deploy lock; with expect, only if the service still runs that revision with those settings and the log's
+        latest line for it is that one (else DeployChanged, and nothing is done). None, with nothing done, when it
+        already runs them. A service whose revision cannot be read is deployed all the same, as on Compose."""
+        wanted = deploys.check_settings(service, settings)
+        self.check_local()
+        with self.log.locked():
+            try:
+                before: deploys.Running | None = self.running(service)
+            except deploys.DeployError:
+                before = None
+            if expect is not None:
+                latest = self.log.latest(service)
+                if (
+                    before is None
+                    or before.container != expect.container
+                    or before.settings != expect.settings
+                    or latest is None
+                    or latest.seq != expect.seq
+                ):
+                    raise deploys.DeployChanged(f"{service} changed since it was looked at: nothing was deployed")
+            if before is not None and before.settings == wanted:
+                return None
+            deployment = self._get("deployment", service)
+            patch = self._patch(service, deployment, wanted)
+            try:
+                self._kubectl("patch", "deployment", service, "--type", "json", "--patch", patch)
+            except ClusterError:
+                # Refused whole: nothing changed. Moved on since it was read (the patch's test step), or another cause.
+                read = deployment["metadata"]["resourceVersion"]
+                if self._get("deployment", service)["metadata"].get("resourceVersion") != read:
+                    raise deploys.DeployChanged(f"{service} changed since it was read: nothing was deployed") from None
+                raise deploys.DeployError(
+                    f"{service}'s rollout was refused by the cluster: nothing was deployed"
+                ) from None
+            status = ("rollout", "status", f"deployment/{service}", f"--timeout={WAIT_SECONDS}s")
+            self._kubectl(*status, timeout=WAIT_SECONDS + 60)
+            after = self.running(service)
+            record = self.log.append(
+                at=deploys.utc_now(self._clock),
+                service=service,
+                by=" ".join(by.split())[: deploys.MAX_BY] or "unknown",
+                container=after.container,
+                settings=after.settings,
+                replaced_container=None if before is None else before.container,
+                replaced_settings=None if before is None else before.settings,
+            )
+        if after.settings != wanted:  # logged as it happened, then said
+            raise deploys.DeployError(
+                f"{service} was rolled out, but its new revision does not run the settings asked for"
+            )
+        return record
+
+    @staticmethod
+    def _patch(service: str, deployment: Mapping, wanted: Mapping[str, str]) -> str:
+        """The JSON patch: first a test of the Deployment's resourceVersion, then one replace per behavior setting,
+        at its place in the container's environment. Each setting must be there already, as the manifests set it."""
+        version = deployment["metadata"]["resourceVersion"]
+        (container,) = deployment["spec"]["template"]["spec"]["containers"]
+        places = {item["name"]: n for n, item in enumerate(container.get("env") or [])}
+        steps: list[dict] = [{"op": "test", "path": "/metadata/resourceVersion", "value": version}]
+        for name, (inside, _) in deploys.SERVICES[service].items():
+            if inside not in places:
+                raise deploys.DeployError(f"{service}'s manifest does not set {inside}: nothing was deployed")
+            path = f"/spec/template/spec/containers/0/env/{places[inside]}/value"
+            steps.append({"op": "replace", "path": path, "value": wanted[name]})
+        return json.dumps(steps)
+
+
 def _ps() -> None:
     rows = pods()
     if not rows:
@@ -425,6 +669,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("up", help="create the cluster, build and load our image, start in order, wait")
     commands.add_parser("down", help="delete the cluster and its data (synthetic)")
     commands.add_parser("ps", help="the pods: ready, phase, restarts, images")
+    commands.add_parser("reader", help="a token of klaxon-reader for Klaxon's tools, an hour long, in .kind/")
     checking = commands.add_parser("check", help="the money check while traffic flows, saved to evidence/week5/kind")
     checking.add_argument("--checks", type=int, default=20)
     checking.add_argument("--rate", type=float, default=5.0)
@@ -437,6 +682,9 @@ def main(argv: list[str] | None = None) -> int:
             down()
         elif args.command == "ps":
             _ps()
+        elif args.command == "reader":
+            path = make_reader_kubeconfig()
+            _say(f"A token of {READER} for Klaxon's tools, for {TOKEN_SECONDS // 60} minutes: {_shown(path)}.")
         else:
             command = (
                 f"python -m klaxon.patient.cluster check --checks {args.checks} --rate {args.rate:g} --seed {args.seed}"

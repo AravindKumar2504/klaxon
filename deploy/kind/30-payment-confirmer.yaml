@@ -9,6 +9,9 @@ metadata:
   labels: { app.kubernetes.io/name: payment-confirmer, app.kubernetes.io/part-of: klaxon }
 spec:
   replicas: 1
+  # Replaced, never rolled: the old pod stops before the new one starts, as Compose recreates a container.
+  # A rolling update would run two consumers at once, the old settings beside the new (week 5's review).
+  strategy: { type: Recreate }
   selector:
     matchLabels: { app.kubernetes.io/name: payment-confirmer }
   template:

@@ -78,9 +78,17 @@ from klaxon.agent.tools import clean_text
 from klaxon.agent.trace import read_trace
 from klaxon.checks import live
 from klaxon.checks.money import format_cents
+from klaxon.patient import cluster
 from klaxon.patient.deploys import Deploy, Deployer
 from klaxon.patient.stack import REPO, StackError
 
+# Where a run ran (week 6, item 3): the Compose stack, or the kind cluster. Compose's words are as before.
+PLATFORMS = ("compose", "kind")
+KIND_EVIDENCE = REPO / "evidence" / "week6" / "kind"  # a fault's rehearsals on the cluster
+WHERE = {
+    "compose": "this Mac's Docker Compose stack",
+    "kind": "this Mac's kind cluster (Kubernetes in Docker, from our own manifests in deploy/kind)",
+}
 QUIET_LABEL = (
     "Real run on this Mac's Docker Compose stack: synthetic traffic from klaxon.traffic and no fault, with the alert"
     " rules of klaxon.alerts evaluated again and again. No model was called. Synthetic data, a simulated provider."
@@ -142,6 +150,7 @@ class Record:
     # An evaluation run (week 5, klaxon.evaluation): its case (name, kind, right answer, any tool withheld), seed and
     # model. Its gate plans any action the diagnosis names, and nobody is asked: nothing runs.
     case: dict | None = None
+    platform: str = "compose"  # where it ran (week 6, item 3): "compose", or "kind" (klaxon.patient.cluster)
 
 
 @dataclass
@@ -491,11 +500,11 @@ def label(record: Record) -> str:
     """What this run's evidence is, from what the run did: it never claims a step the run did not reach."""
     if record.traffic is None:
         return (
-            "Real run on this Mac's Docker Compose stack, which stopped before its synthetic traffic began: no fault"
+            f"Real run on {WHERE[record.platform]}, which stopped before its synthetic traffic began: no fault"
             f" was injected and no model was called. The run stopped: {record.stopped}."
         )
     said = [
-        "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a"
+        f"Real run on {WHERE[record.platform]}, with synthetic traffic from klaxon.traffic: synthetic data, a"
         " simulated provider, no real money."
     ]
     if "injected_at" not in record.timings:
@@ -874,16 +883,25 @@ def _rehearse(args: argparse.Namespace, argv: Sequence[str]) -> int:
     """A fault under traffic, with the rules and no model (week 4, item 4): what they see of it, and when its alert
     fires, saved as a run's evidence is."""
     fault = faults.get(args.fault)
+    command = shlex.join(["python", "-m", "klaxon.fault_runs", *argv])
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
-        parts = Stack(faults.LocalStack(), alerts.Alerting())
-        header = {"fault_name": fault.name} | _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
-    except (ValueError, StackError) as exc:
+        if args.platform == "kind":  # week 6, item 3: the fault deployed as a rollout, in kind's own deploy log
+            cluster.ready()  # the cluster up, every pod ready, the Compose stack down, the ports the cluster's
+            parts = Stack(faults.LocalStack(deployer=cluster.ClusterDeployer()), alerts.Alerting())
+            header = {"fault_name": fault.name} | cluster.provenance(
+                command, datetime.now(timezone.utc), cluster.describe()
+            )
+        else:
+            parts = Stack(faults.LocalStack(), alerts.Alerting())
+            header = {"fault_name": fault.name} | _provenance(command)
+    except (ValueError, StackError, cluster.ClusterError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-    folder = loop._new_folder(args.evidence_dir, f"{stamp}_rehearsal_{fault.name}")
-    record = Record(fault.describe(), asdict(settings), {})
+    evidence_dir = args.evidence_dir or (KIND_EVIDENCE if args.platform == "kind" else REPO / "evidence" / "week4")
+    folder = loop._new_folder(evidence_dir, f"{stamp}_rehearsal_{fault.name}")
+    record = Record(fault.describe(), asdict(settings), {}, platform=args.platform)
     print(f"The run's folder: {clean_text(str(folder))}", flush=True)
     code = 0
     try:
@@ -962,10 +980,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "rehearse", help="a fault under traffic and the alert rules, no model: what they see"
     )
     rehearsal.add_argument("fault", choices=sorted(faults.FAULTS))
+    rehearsal.add_argument("--platform", choices=PLATFORMS, default="compose", help="where: Compose, or kind")
     for sub in (live, calm, rehearsal):
         sub.add_argument("--rate", type=float, default=3.0, help="new payments per second, on average")
         sub.add_argument("--seed", type=int, default=7)
-        sub.add_argument("--evidence-dir", type=Path, default=REPO / "evidence" / "week4")
+        # A rehearsal's folder follows its platform: evidence/week4, or evidence/week6/kind on the cluster.
+        default = None if sub is rehearsal else REPO / "evidence" / "week4"
+        sub.add_argument("--evidence-dir", type=Path, default=default)
     again = actions.add_parser("grade", help="compare a saved run's diagnosis with its fault's cause; offline")
     again.add_argument("folder", type=Path)
     args = parser.parse_args(argv)

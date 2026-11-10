@@ -29,7 +29,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 	claude-command claude-check loop-prompt investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
 	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration \
-	kind-up kind-down kind-ps kind-check
+	kind-up kind-down kind-ps kind-check kind-reader
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -85,6 +85,9 @@ kind-down: ## delete the kind cluster and its data (synthetic): the next make ki
 kind-ps: ## the kind cluster's pods: ready, restarts, images
 	$(PY) -m klaxon.patient.cluster ps
 
+kind-reader: ## a token of klaxon-reader, which may only read, for Klaxon's tools on kind: an hour long, in .kind/ (make kind-up first)
+	$(PY) -m klaxon.patient.cluster reader
+
 kind-check: ## on the kind cluster, the money check again and again while traffic flows (CHECKS=20, RATE=5), saved to evidence/week5/kind/
 	$(PY) -m klaxon.patient.cluster check --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)
 
@@ -137,8 +140,8 @@ investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make
 	$(PY) -m klaxon.fault_runs run "$$FAULT" $${STEPS:+--steps "$$STEPS"} $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} \
 		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions}
 
-rehearse-fault: ## a fault under traffic and the alert rules, no model: what they see, saved to evidence/week4/ (his OK first)
-	$(PY) -m klaxon.fault_runs rehearse "$$FAULT" $${RATE:+--rate "$$RATE"}
+rehearse-fault: ## a fault under traffic and the alert rules, no model: what they see, saved to evidence/week4/ (his OK first; PLATFORM=kind: on the kind cluster, saved to evidence/week6/kind/)
+	$(PY) -m klaxon.fault_runs rehearse "$$FAULT" $${RATE:+--rate "$$RATE"} $${PLATFORM:+--platform "$$PLATFORM"}
 
 grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, by the rule; offline: make grade-run RUN=evidence/week4/<folder>
 	$(PY) -m klaxon.fault_runs grade "$$RUN"

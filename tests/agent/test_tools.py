@@ -4,6 +4,8 @@ import base64
 import json
 import re
 import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import psycopg
@@ -865,3 +867,267 @@ def test_the_tools_refuse_to_start_if_the_money_check_would_read_another_host(mo
     monkeypatch.setattr(live, "require_local_sources", elsewhere)
     with pytest.raises(ValueError, match="must be this Mac"):
         Fake().sources()
+
+
+# On the kind cluster (week 6, item 3): the same two tools, reading pods and rollouts as klaxon-reader. The objects
+# below are made up, in the shapes `kubectl get ... --output json` gives.
+
+KIND_NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
+
+
+def k8s_time(seconds_before: float) -> str:
+    return datetime.fromtimestamp(KIND_NOW - seconds_before, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def kind_world(**overrides):
+    api = {
+        "name": "payments-api",
+        "env": [
+            {"name": "DATABASE_URL", "valueFrom": {"secretKeyRef": {"name": "patient-dev-secrets", "key": "K"}}},
+            {"name": "CHARGE_AMOUNT_UNIT", "value": "dollars"},
+            {"name": "PROVIDER_URL", "value": "http://fake-provider:8000"},
+        ],
+        "image": "klaxon-patient:ab12cd34ef56",
+    }
+    world = {
+        "deployments": [
+            {
+                "metadata": {
+                    "uid": "d-uid",
+                    "labels": {t.NAME_LABEL: "payments-api"},
+                    "annotations": {t.REVISION: "2"},
+                },
+                "spec": {"template": {"spec": {"containers": [api]}}},
+            }
+        ],
+        "replicasets": [
+            {
+                "metadata": {
+                    "uid": "rs1",
+                    "creationTimestamp": k8s_time(3600),
+                    "annotations": {t.REVISION: "1"},
+                    "ownerReferences": [{"uid": "d-uid"}],
+                }
+            },
+            {
+                "metadata": {
+                    "uid": "rs2",
+                    "creationTimestamp": k8s_time(120),
+                    "annotations": {t.REVISION: "2"},
+                    "ownerReferences": [{"uid": "d-uid"}],
+                }
+            },
+        ],
+        "statefulsets": [
+            {
+                "metadata": {"labels": {t.NAME_LABEL: "postgres"}},
+                "spec": {"template": {"spec": {"containers": [{"name": "postgres", "image": "postgres:18.1"}]}}},
+            }
+        ],
+        "pods": [
+            {
+                "metadata": {
+                    "name": "payments-api-7c9-x",
+                    "labels": {t.NAME_LABEL: "payments-api"},
+                    "creationTimestamp": k8s_time(110),
+                },
+                "status": {
+                    "phase": "Running",
+                    "startTime": k8s_time(110),
+                    "containerStatuses": [{"ready": False, "restartCount": 1}],
+                },
+            },
+            {
+                "metadata": {
+                    "name": "postgres-0",
+                    "labels": {t.NAME_LABEL: "postgres"},
+                    "creationTimestamp": k8s_time(7200),
+                },
+                "status": {
+                    "phase": "Running",
+                    "startTime": k8s_time(7200),
+                    "containerStatuses": [{"ready": True, "restartCount": 0}],
+                },
+            },
+            {
+                "metadata": {
+                    "name": "kafka-init-abc",
+                    "labels": {t.NAME_LABEL: "kafka-init"},
+                    "creationTimestamp": k8s_time(7000),
+                },
+                "status": {
+                    "phase": "Succeeded",
+                    "startTime": k8s_time(7000),
+                    "containerStatuses": [
+                        {"ready": False, "restartCount": 0, "state": {"terminated": {"exitCode": 0}}}
+                    ],
+                },
+            },
+        ],
+        "events": [
+            {
+                "involvedObject": {"name": "payments-api-7c9-x"},
+                "reason": "Unhealthy",
+                "lastTimestamp": k8s_time(30),
+                "message": "Readiness probe failed: timed out",
+            },
+            {
+                "involvedObject": {"name": "payments-api-7c9-x"},
+                "reason": "Unhealthy",
+                "lastTimestamp": k8s_time(60),
+                "message": "Readiness probe failed: an older one",
+            },
+        ],
+    }
+    world.update(overrides)
+    asked = []
+
+    def get(what):
+        asked.append(what)
+        answer = world[what]
+        if isinstance(answer, BaseException):
+            raise answer
+        return {"items": answer}
+
+    sources = Sources(
+        platform="kind",
+        cluster_get=get,
+        now=lambda: KIND_NOW,
+        ensure_local=lambda: pytest.fail("docker is never read on kind"),
+        containers=lambda: pytest.fail("docker is never read on kind"),
+        money_check=lambda **kw: pytest.fail("no money check expected"),
+    )
+    return make_tools(sources), asked
+
+
+def test_on_kind_recent_deploys_gives_each_deployments_current_revision_and_never_a_secret():
+    tools, asked = kind_world()
+    out = tools["recent_deploys"].call({})
+    assert out["deploys"] == [
+        {
+            "service": "payments-api",
+            "deployed_at": k8s_time(120),
+            "minutes_ago": 2.0,
+            "image": "klaxon-patient:ab12cd34ef56",
+            "settings": {"CHARGE_AMOUNT_UNIT": "dollars"},
+            "revision": 2,
+        },
+        {
+            "service": "postgres",
+            "deployed_at": k8s_time(7200),
+            "minutes_ago": 120.0,
+            "image": "postgres:18.1",
+            "settings": {},
+        },
+    ]
+    assert "kind cluster" in out["note"]
+    text = json.dumps(out)
+    assert "DATABASE_URL" not in text and "secretKeyRef" not in text and "PROVIDER_URL" not in text
+    assert set(asked) <= {"deployments", "replicasets", "statefulsets", "pods"}
+
+
+def test_on_kind_service_health_gives_each_pod_ready_or_not_and_why_not():
+    tools, asked = kind_world()
+    out = tools["service_health"].call({})
+    by_pod = {s["pod"]: s for s in out["services"]}
+    assert by_pod["payments-api-7c9-x"] == {
+        "service": "payments-api",
+        "pod": "payments-api-7c9-x",
+        "state": "running",
+        "health": "not ready",
+        "restarts": 1,
+        "started_at": k8s_time(110),
+        "last_health_check": "Readiness probe failed: timed out",
+    }
+    assert by_pod["postgres-0"]["health"] == "ready" and "last_health_check" not in by_pod["postgres-0"]
+    done = by_pod["kafka-init-abc"]
+    assert done["state"] == "succeeded" and done["exit_code"] == 0 and done["note"] == t.ONE_SHOT["kafka-init"]
+    assert set(asked) == {"pods", "events"}
+
+
+def test_on_kind_the_two_tools_say_what_they_read_and_compose_keeps_its_words():
+    kind, _ = kind_world()
+    compose = Fake().tools()
+    assert kind["service_health"].description == t.HEALTH_SAYS["kind"] and "pod" in t.HEALTH_SAYS["kind"]
+    assert kind["recent_deploys"].description == t.DEPLOYS_SAY["kind"] and "revision" in t.DEPLOYS_SAY["kind"]
+    # Compose's, word for word as before week 6, so its system prompt is unchanged.
+    assert compose["service_health"].description == (
+        "Each container of the payments system: running or not, its health check, restarts, and when it started."
+    )
+    assert compose["recent_deploys"].description.startswith("When each service's container was last created")
+
+
+@pytest.mark.parametrize(
+    "raised, says",
+    [
+        (subprocess.TimeoutExpired(["kubectl"], 15), "did not answer within 15 s"),
+        (ValueError("not json"), "not JSON"),
+        (OSError("no such file"), "kubectl could not be started"),
+        (t.ToolUnavailable("the kind cluster could not be read: forbidden"), "forbidden"),
+    ],
+)
+def test_on_kind_a_cluster_that_cannot_be_read_is_a_tool_error_the_model_can_read(raised, says):
+    tools, _ = kind_world(pods=raised)
+    with pytest.raises(t.ToolUnavailable, match=says):
+        tools["service_health"].call({})
+
+
+def test_on_kind_a_list_in_an_unexpected_shape_is_refused():
+    tools, _ = kind_world(deployments=["not an object"])
+    with pytest.raises(t.ToolUnavailable, match="unexpected shape"):
+        tools["recent_deploys"].call({})
+
+
+def test_the_platform_comes_from_the_environment_and_must_be_one_known(monkeypatch):
+    monkeypatch.setenv(t.PLATFORM_VARIABLE, "kind")
+    assert Sources(money_check=lambda **kw: None).platform == "kind"
+    monkeypatch.delenv(t.PLATFORM_VARIABLE)
+    assert Sources(money_check=lambda **kw: None).platform == "compose"
+    monkeypatch.setenv(t.PLATFORM_VARIABLE, "kubernetes-somewhere")
+    with pytest.raises(ValueError, match="must be one of compose, kind"):
+        Sources(money_check=lambda **kw: None)
+
+
+def test_reading_the_cluster_says_its_last_words_never_the_command_line(monkeypatch):
+    from klaxon.patient import cluster
+
+    def refused(*args, **kwargs):
+        raise cluster.ClusterError(
+            f"kubectl --kubeconfig {Path.home()}/x get pods failed (1): Error from server (Forbidden): pods is forbidden"
+        )
+
+    monkeypatch.setattr(cluster, "reader_kubectl", refused)
+    with pytest.raises(t.ToolUnavailable) as raised:
+        t._read_cluster("pods")
+    assert str(raised.value) == "the kind cluster could not be read: Error from server (Forbidden): pods is forbidden"
+    assert str(Path.home()) not in str(raised.value)
+
+
+def test_on_kind_a_setting_given_by_reference_is_never_shown():
+    # Only a value written in the template shows: a reference (to a Secret or a ConfigMap) is never read or shown.
+    deployments = [
+        {
+            "metadata": {"uid": "d-uid", "labels": {t.NAME_LABEL: "payments-api"}, "annotations": {t.REVISION: "1"}},
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "payments-api",
+                                "image": "x",
+                                "env": [
+                                    {
+                                        "name": "CHARGE_AMOUNT_UNIT",
+                                        "valueFrom": {"configMapKeyRef": {"name": "c", "key": "k"}},
+                                    },
+                                ],
+                            }
+                        ]
+                    }
+                }
+            },
+        }
+    ]
+    tools, _ = kind_world(deployments=deployments)
+    (entry,) = [d for d in tools["recent_deploys"].call({})["deploys"] if d["service"] == "payments-api"]
+    assert entry["settings"] == {}

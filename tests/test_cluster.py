@@ -250,9 +250,10 @@ def test_the_secret_holds_exactly_what_the_specs_read_and_no_spec_holds_one_itse
 
 
 def test_up_applies_each_manifest_once_in_compose_yamls_order_and_waits_for_each_workload():
-    staged = [cluster.NAMESPACE_FILE] + [file for files, _ in cluster.STAGES for file in files]
+    staged = [cluster.NAMESPACE_FILE, cluster.ACCESS_FILE] + [file for files, _ in cluster.STAGES for file in files]
     assert sorted(staged) == FILES and len(set(staged)) == len(staged)
     assert {o["kind"] for o in DOCS[cluster.NAMESPACE_FILE]} == {"Namespace", "Secret"}
+    assert [o["kind"] for o in DOCS[cluster.ACCESS_FILE]] == ["ServiceAccount", "Role", "RoleBinding"]
     stage_of = {}
     for n, (files, waits) in enumerate(cluster.STAGES):
         inside = [
@@ -285,6 +286,9 @@ class Fake:
         self.published = "".join(f"{node}/tcp -> 127.0.0.1:{host}\n" for node, host, _ in cluster.port_mappings())
         self.pods = [made_up_pod("payments-api-5d9c7-x2v4q", ready=True)]
         self.docker_local = True
+        self.image_id = "sha256:" + "ab12cd34ef56" + "0" * 52  # made up
+        self.job_statuses = [{"conditions": [{"type": "Complete", "status": "True"}]}]  # one per look, the last kept
+        self.token = "made-up-token-not-real"
         self.kubeconfig = tmp_path / "kubeconfig"
         monkeypatch.setattr(cluster, "KUBECONFIG", self.kubeconfig)
         monkeypatch.setattr(cluster, "EVIDENCE", tmp_path / "evidence")
@@ -311,6 +315,8 @@ class Fake:
             return self.published
         if args[0] == "inspect":
             return "kindest/node:v0.0.0-made-up\n"
+        if args[:2] == ["image", "inspect"]:
+            return self.image_id + "\n"
         return ""
 
     def run(self, binary: str, args: list[str], *, stdin: str | None = None, timeout: float = 600) -> str:
@@ -327,10 +333,18 @@ class Fake:
             return ""
         assert tool == "kubectl"
         rest = args[8:]
+        if rest[:3] == ["config", "view", "--minify"] and "--raw" in rest:
+            server = {"server": self.server, "certificate-authority-data": "bWFkZSB1cA=="}
+            return json.dumps({"clusters": [{"name": cluster.CONTEXT, "cluster": server}]})
         if rest[:2] == ["config", "view"]:
             return self.server
         if rest[:2] == ["get", "pods"]:
             return json.dumps({"items": self.pods})
+        if rest[:2] == ["get", "job/kafka-init"]:
+            status = self.job_statuses.pop(0) if len(self.job_statuses) > 1 else self.job_statuses[0]
+            return json.dumps({"status": status})
+        if rest[:3] == ["create", "token", cluster.READER]:
+            return self.token + "\n"
         if rest[:1] == ["version"]:
             return json.dumps(
                 {"clientVersion": {"gitVersion": "v0.0-made-up"}, "serverVersion": {"gitVersion": "v0.1"}}
@@ -434,19 +448,27 @@ def test_up_refuses_a_docker_that_is_not_on_this_mac(fake):
     assert fake.actions() == ["docker context inspect"]
 
 
+TAG = "klaxon-patient:ab12cd34ef56"  # the made-up image id's first 12 hex digits
+APPLY = "kubectl apply --server-side --force-conflicts --field-manager=klaxon-kind-up --filename - <stdin"
+
+
 def expected_up(create: list[str]) -> list[str]:
-    files = lambda names: " ".join(f"--filename {cluster.DEPLOY / name}" for name in names)  # noqa: E731
     out = ["docker context inspect", "kind get clusters", *create, "compose build fake-provider"]
-    out += ["kind load docker-image klaxon-patient:dev --name klaxon"]
-    out += [f"kubectl apply {files([cluster.NAMESPACE_FILE])}", "kubectl apply --filename - <stdin"]
-    for names, waits in cluster.STAGES:
-        out.append(f"kubectl apply {files(names)}")
+    out += ["docker image inspect --format {{.Id}} klaxon-patient:dev", f"docker tag klaxon-patient:dev {TAG}"]
+    out += [f"kind load docker-image {TAG} --name klaxon", APPLY, APPLY]
+    for _names, waits in cluster.STAGES:
+        out += [f"kubectl delete {job} --ignore-not-found --wait=true" for job in waits if job in cluster.JOBS]
+        out.append(APPLY)
         for workload in waits:
             if workload.startswith("job/"):
-                out.append(f"kubectl wait --for=condition=complete {workload} --timeout=300s")
+                out.append(f"kubectl get {workload} --output json")
             else:
                 out.append(f"kubectl rollout status {workload} --timeout=300s")
     return out
+
+
+def streams(fake) -> list[str]:
+    return [stdin for tool, _, stdin in fake.calls if stdin]
 
 
 def test_up_creates_the_cluster_builds_and_loads_our_image_then_applies_in_order_and_waits(fake):
@@ -458,8 +480,10 @@ def test_up_creates_the_cluster_builds_and_loads_our_image_then_applies_in_order
     for i, args in enumerate(calls):
         if args[8:10] != ["config", "view"]:
             assert i > 0 and calls[i - 1][8:10] == ["config", "view"], args
-    (configmaps,) = [stdin for tool, _, stdin in fake.calls if stdin]
+    first, configmaps, *staged = streams(fake)
+    assert first == cluster.manifests((cluster.NAMESPACE_FILE, cluster.ACCESS_FILE))
     assert json.loads(configmaps) == cluster.configmaps()
+    assert staged == [cluster.manifests(files, TAG) for files, _ in cluster.STAGES]
 
 
 def test_up_on_a_cluster_that_is_there_creates_nothing(fake):
@@ -598,8 +622,10 @@ def test_the_compose_runs_printout_is_as_it_was():
 
 def test_the_make_targets_drive_this_module():
     makefile = (cluster.REPO / "Makefile").read_text()
-    for command in ("up", "down", "ps"):
+    for command in ("up", "down", "ps", "reader"):
         assert f"\t$(PY) -m klaxon.patient.cluster {command}\n" in makefile
+    # Week 6, item 3: a token for Klaxon's tools, and a fault rehearsed on kind.
+    assert "kind-reader:" in makefile and '--platform "$$PLATFORM"}' in makefile
     assert "\t$(PY) -m klaxon.patient.cluster check --checks $(or $(CHECKS),20) --rate $(or $(RATE),5)\n" in makefile
     assert ".kind/" in (cluster.REPO / ".gitignore").read_text().splitlines()
 
@@ -625,3 +651,337 @@ def test_the_check_refuses_when_the_money_checks_address_is_set_elsewhere(fake, 
     with pytest.raises(cluster.ClusterError, match=f"{name} is set"):
         cluster.check(5.0, 2, 7, "made up")
     assert fake.calls == [("docker", ["context", "inspect"], None)]  # nothing else ran
+
+
+# Week 6, item 3: kind ready for faults (known gap 13), and what Klaxon's tools may read there.
+
+
+def test_up_tags_our_image_by_its_content_so_only_our_workloads_name_the_new_tag(fake):
+    cluster.up()
+    staged = streams(fake)[2:]
+    for text in staged:
+        for doc in yaml.safe_load_all(text):
+            if doc and doc["kind"] in ("Deployment", "StatefulSet", "Job"):
+                images = [c["image"] for c in doc["spec"]["template"]["spec"]["containers"]]
+                ours = WORKLOADS[doc["metadata"]["name"]]["spec"]["template"]["spec"]["containers"][0]["image"] == OURS
+                assert images == ([TAG] if ours else [c["image"] for c in container_list(doc["metadata"]["name"])])
+    assert all(OURS not in text for text in staged)
+    # The same files otherwise: only the image line changed.
+    assert [t.replace(TAG, OURS) for t in staged] == [cluster.manifests(f) for f, _ in cluster.STAGES]
+
+
+def container_list(name: str) -> list[dict]:
+    return WORKLOADS[name]["spec"]["template"]["spec"]["containers"]
+
+
+def test_a_code_change_gives_a_new_tag_and_the_same_code_the_same(fake):
+    cluster.up()
+    first = streams(fake)[-1]
+    fake.calls.clear()
+    cluster.up()  # the same image id: the same manifests, so nothing rolls
+    assert streams(fake)[-1] == first
+    fake.calls.clear()
+    fake.image_id = "sha256:" + "ffffeeee0000" + "1" * 52  # a code change builds another image
+    cluster.up()
+    assert "image: klaxon-patient:ffffeeee0000" in streams(fake)[-1] and first != streams(fake)[-1]
+
+
+@pytest.mark.parametrize("image_id", ["", "not-an-id", "sha256:XYZ", "sha256:" + "a" * 63])
+def test_an_image_id_that_is_not_one_stops_up_before_anything_is_loaded(fake, image_id):
+    fake.image_id = image_id
+    with pytest.raises(cluster.ClusterError, match="image id that is not one"):
+        cluster.up()
+    assert not [a for a in fake.actions() if a.startswith(("kind load", "kubectl apply", "docker tag"))]
+
+
+def test_every_apply_is_server_side_and_takes_back_what_another_manager_set(fake):
+    # kubectl set env, or a fault's patch, owns the fields it changed: kind-up forces the manifests' values back.
+    cluster.up()
+    applies = [args[8:] for args in fake.kubectl_calls() if args[8:9] == ["apply"]]
+    assert len(applies) == 2 + len(cluster.STAGES)
+    assert all(rest == list(cluster.SERVER_SIDE) + ["--filename", "-"] for rest in applies)
+
+
+def test_up_makes_the_topics_job_again_right_before_its_stage():
+    # Asserted in the order of expected_up: delete, then apply, then the wait. Here: what a Job is, and that it is one.
+    assert cluster.JOBS == ("job/kafka-init",) and WORKLOADS["kafka-init"]["kind"] == "Job"
+    assert [w for _, waits in cluster.STAGES for w in waits if w.startswith("job/")] == list(cluster.JOBS)
+
+
+def test_a_topics_job_that_failed_stops_up_at_once_with_its_reason(fake):
+    fake.kubeconfig.write_text("made up")
+    fake.job_statuses = [
+        {"failed": 1, "conditions": [{"type": "Failed", "status": "True", "message": "BackoffLimitExceeded"}]}
+    ]
+    slept = []
+    with pytest.raises(cluster.ClusterError, match="job/kafka-init failed: BackoffLimitExceeded"):
+        cluster.wait("job/kafka-init", clock=iter([0.0, 0.0, 1000.0]).__next__, sleep=slept.append)
+    assert slept == []  # at the first look, not after the 300 s wait
+
+
+def test_a_failed_pod_of_the_job_counts_before_kubernetes_marks_the_job_failed(fake):
+    fake.kubeconfig.write_text("made up")
+    fake.job_statuses = [{"failed": 1, "conditions": []}]
+    with pytest.raises(cluster.ClusterError, match="1 pod"):
+        cluster.wait("job/kafka-init", clock=iter([0.0, 0.0, 1000.0]).__next__, sleep=lambda s: None)
+
+
+def test_a_running_job_is_looked_at_again_until_it_is_done(fake):
+    fake.kubeconfig.write_text("made up")
+    fake.job_statuses = [{"active": 1}, {"active": 1}, {"conditions": [{"type": "Complete", "status": "True"}]}]
+    slept = []
+    cluster.wait("job/kafka-init", clock=lambda: 0.0, sleep=slept.append)
+    assert slept == [cluster.JOB_POLL_SECONDS, cluster.JOB_POLL_SECONDS]
+
+
+def test_a_job_that_never_finishes_stops_at_the_end_of_the_wait(fake):
+    fake.kubeconfig.write_text("made up")
+    fake.job_statuses = [{"active": 1}]
+    times = iter([0.0, 100.0, 299.0, 300.0])
+    with pytest.raises(cluster.ClusterError, match="did not finish within 300 s"):
+        cluster.wait("job/kafka-init", clock=lambda: next(times), sleep=lambda s: None)
+
+
+def test_the_two_consumers_are_replaced_never_rolled_and_the_others_roll():
+    # Week 5's review: a rolling update ran the old and the new consumer together. Compose recreates a container.
+    for name in ("ledger-consumer", "payment-confirmer"):
+        assert WORKLOADS[name]["spec"]["strategy"] == {"type": "Recreate"}
+    for name in ("payments-api", "webhook-receiver"):
+        assert "strategy" not in WORKLOADS[name]["spec"]  # Kubernetes' rolling update: old and new serve a moment
+
+
+ACCESS = {doc["kind"]: doc for doc in DOCS["01-klaxon-access.yaml"]}
+
+
+def test_klaxons_reader_may_only_get_list_and_watch_pods_events_and_workloads_in_the_namespace():
+    role = ACCESS["Role"]
+    assert role["rules"] == [
+        {"apiGroups": [""], "resources": ["pods", "events"], "verbs": ["get", "list", "watch"]},
+        {
+            "apiGroups": ["apps"],
+            "resources": ["deployments", "replicasets", "statefulsets"],
+            "verbs": ["get", "list", "watch"],
+        },
+    ]
+    allowed = {resource for rule in role["rules"] for resource in rule["resources"]}
+    assert not allowed & {"secrets", "configmaps", "pods/log", "pods/exec", "serviceaccounts", "*"}
+    assert {verb for rule in role["rules"] for verb in rule["verbs"]} == {"get", "list", "watch"}
+    binding = ACCESS["RoleBinding"]
+    assert binding["roleRef"] == {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": cluster.READER}
+    assert binding["subjects"] == [{"kind": "ServiceAccount", "name": cluster.READER, "namespace": cluster.NAMESPACE}]
+    assert ACCESS["ServiceAccount"]["automountServiceAccountToken"] is False  # no pod ever runs with it
+    assert not [o for o in OBJECTS if o["kind"] in ("ClusterRole", "ClusterRoleBinding")]  # nothing cluster-wide
+
+
+def test_the_readers_kubeconfig_holds_a_token_of_its_own_readable_by_this_user_only(fake, monkeypatch, tmp_path):
+    monkeypatch.setattr(cluster, "READER_KUBECONFIG", tmp_path / "reader.kubeconfig")
+    fake.kubeconfig.write_text("made up")
+    path = cluster.make_reader_kubeconfig()
+    assert path.stat().st_mode & 0o777 == 0o600
+    config = json.loads(path.read_text())
+    assert config["users"] == [{"name": cluster.READER, "user": {"token": fake.token}}]
+    assert config["clusters"][0]["cluster"]["server"] == SERVER and config["current-context"] == cluster.READER_CONTEXT
+    assert config["contexts"][0]["context"]["namespace"] == cluster.NAMESPACE
+    assert ["create", "token", cluster.READER, "--duration=3600s"] in [args[8:] for args in fake.kubectl_calls()]
+    # Made again for the next run: never added to, never left as it was.
+    fake.token = "another-made-up-token"
+    cluster.make_reader_kubeconfig()
+    assert json.loads(path.read_text())["users"][0]["user"]["token"] == "another-made-up-token"
+
+
+def test_no_readers_kubeconfig_for_a_cluster_that_is_not_on_this_mac(fake, monkeypatch, tmp_path):
+    monkeypatch.setattr(cluster, "READER_KUBECONFIG", tmp_path / "reader.kubeconfig")
+    fake.kubeconfig.write_text("made up")
+    fake.server = "https://10.0.0.9:6443"
+    with pytest.raises(cluster.ClusterError, match="not on this Mac"):
+        cluster.make_reader_kubeconfig()
+    assert not (tmp_path / "reader.kubeconfig").exists()
+
+
+def test_the_reader_kubectl_names_the_readers_own_file_and_context(fake, monkeypatch, tmp_path):
+    reader = tmp_path / "reader.kubeconfig"
+    monkeypatch.setattr(cluster, "READER_KUBECONFIG", reader)
+    with pytest.raises(cluster.ClusterError, match="missing"):
+        cluster.reader_kubectl("get", "pods")
+    reader.write_text("made up")
+    cluster.reader_kubectl("get", "pods", "--output", "json")
+    *_, check, call = fake.kubectl_calls()
+    for args in (check, call):
+        assert args[:6] == ["--kubeconfig", str(reader), "--context", cluster.READER_CONTEXT, "--namespace", "klaxon"]
+    assert call[8:] == ["get", "pods", "--output", "json"]
+
+
+# kind's deployer, against a made-up cluster: a Deployment and its ReplicaSets, as kubectl gives them.
+
+GOOD_API = {"PROVIDER_BREAKER": "on", "CHARGE_AMOUNT_UNIT": "cents", "REFUND_CONNECTION": "returned"}
+
+
+class MadeUpCluster:
+    """The payments API's Deployment and its ReplicaSets, as `kubectl get ... --output json` describes them; each
+    patch makes a new revision. Made up for the tests: not a cluster."""
+
+    def __init__(self, ready: bool = True) -> None:
+        self.calls: list[list[str]] = []
+        self.version, self.revision, self.ready = 100, 1, ready
+        self.env = [{"name": "DATABASE_URL", "valueFrom": {"secretKeyRef": {"name": "s", "key": "k"}}}]
+        self.env += [{"name": name, "value": value} for name, value in GOOD_API.items()]
+        self.sets = [self._set(1)]
+        self.refuse = None  # None, or "moved" (another change got there first), or "other"
+
+    def _set(self, revision: int) -> dict:
+        template = {"spec": {"containers": [{"name": "payments-api", "env": json.loads(json.dumps(self.env))}]}}
+        return {
+            "metadata": {
+                "uid": f"rs-uid-{revision}",
+                "annotations": {cluster.REVISION: str(revision)},
+                "ownerReferences": [{"uid": "deployment-uid"}],
+            },
+            "spec": {"template": template},
+        }
+
+    def deployment(self) -> dict:
+        n = 1 if self.ready else 0
+        return {
+            "metadata": {
+                "uid": "deployment-uid",
+                "generation": self.revision,
+                "resourceVersion": str(self.version),
+                "annotations": {cluster.REVISION: str(self.revision)},
+            },
+            "spec": {"replicas": 1, "template": {"spec": {"containers": [{"name": "payments-api", "env": self.env}]}}},
+            "status": {
+                "observedGeneration": self.revision,
+                "updatedReplicas": 1,
+                "readyReplicas": n,
+                "availableReplicas": n,
+            },
+        }
+
+    def __call__(self, *args: str, timeout: float = 600) -> str:
+        self.calls.append(list(args))
+        if args[:2] == ("get", "deployment"):
+            return json.dumps(self.deployment())
+        if args[:2] == ("get", "replicasets"):
+            return json.dumps({"items": self.sets})
+        if args[:2] == ("patch", "deployment"):
+            if self.refuse is not None:
+                if self.refuse == "moved":
+                    self.version += 1
+                raise cluster.ClusterError("kubectl patch failed (1): made up")
+            steps = json.loads(args[args.index("--patch") + 1])
+            assert steps[0] == {"op": "test", "path": "/metadata/resourceVersion", "value": str(self.version)}
+            for step in steps[1:]:
+                index = int(step["path"].split("/")[-2])
+                self.env[index] = dict(self.env[index], value=step["value"])
+            self.version, self.revision = self.version + 1, self.revision + 1
+            self.sets.append(self._set(self.revision))
+            return "deployment.apps/payments-api patched\n"
+        return ""
+
+
+def deployer(tmp_path, made_up):
+    log = cluster.deploys.DeployLog(tmp_path / "deploys-kind.jsonl")
+    return cluster.ClusterDeployer(log, kubectl=made_up, ensure_local=lambda: None, clock=lambda: 1_800_000_000.0)
+
+
+def test_kinds_deployer_names_the_running_revision_by_its_replica_sets_uid(tmp_path):
+    made_up = MadeUpCluster()
+    running = deployer(tmp_path, made_up).running("payments-api")
+    assert running.container == cluster.hashlib.sha256(b"rs-uid-1").hexdigest() and running.settings == GOOD_API
+
+
+def test_a_deployment_mid_rollout_or_not_ready_is_not_one_running_revision(tmp_path):
+    with pytest.raises(cluster.deploys.DeployError, match="not one ready revision"):
+        deployer(tmp_path, MadeUpCluster(ready=False)).running("payments-api")
+
+
+def test_a_kind_deploy_is_one_patch_tested_on_the_resource_version_then_a_rollout_logged_as_on_compose(tmp_path):
+    made_up = MadeUpCluster()
+    bad = GOOD_API | {"CHARGE_AMOUNT_UNIT": "dollars"}
+    record = deployer(tmp_path, made_up).deploy("payments-api", bad, by="klaxon.faults")
+    (patch,) = [c for c in made_up.calls if c[0] == "patch"]
+    steps = json.loads(patch[patch.index("--patch") + 1])
+    assert steps == [
+        {"op": "test", "path": "/metadata/resourceVersion", "value": "100"},
+        {"op": "replace", "path": "/spec/template/spec/containers/0/env/1/value", "value": "on"},
+        {"op": "replace", "path": "/spec/template/spec/containers/0/env/2/value", "value": "dollars"},
+        {"op": "replace", "path": "/spec/template/spec/containers/0/env/3/value", "value": "returned"},
+    ]
+    assert ["rollout", "status", "deployment/payments-api", "--timeout=300s"] in made_up.calls
+    assert record.settings == bad and record.replaced_settings == GOOD_API and record.by == "klaxon.faults"
+    assert record.container == cluster.hashlib.sha256(b"rs-uid-2").hexdigest()
+    assert record.replaced_container == cluster.hashlib.sha256(b"rs-uid-1").hexdigest()
+    assert cluster.deploys.DeployLog(tmp_path / "deploys-kind.jsonl").records() == [record]
+
+
+def test_a_kind_deploy_of_the_settings_it_runs_does_nothing(tmp_path):
+    made_up = MadeUpCluster()
+    assert deployer(tmp_path, made_up).deploy("payments-api", GOOD_API, by="x") is None
+    assert not [c for c in made_up.calls if c[0] in ("patch", "rollout")]
+
+
+def test_a_kind_deploy_that_expects_what_no_longer_runs_changes_nothing(tmp_path):
+    made_up = MadeUpCluster()
+    expect = cluster.deploys.Expect(container="0" * 64, settings=GOOD_API, seq=1)
+    with pytest.raises(cluster.deploys.DeployChanged):
+        deployer(tmp_path, made_up).deploy(
+            "payments-api", GOOD_API | {"REFUND_CONNECTION": "kept"}, by="x", expect=expect
+        )
+    assert not [c for c in made_up.calls if c[0] == "patch"]
+
+
+@pytest.mark.parametrize("refuse, error", [("moved", "DeployChanged"), ("other", "DeployError")])
+def test_a_patch_the_cluster_refuses_deploys_nothing_and_says_whether_the_deployment_moved(tmp_path, refuse, error):
+    made_up = MadeUpCluster()
+    made_up.refuse = refuse
+    with pytest.raises(cluster.deploys.DeployError) as raised:
+        deployer(tmp_path, made_up).deploy("payments-api", GOOD_API | {"REFUND_CONNECTION": "kept"}, by="x")
+    assert type(raised.value).__name__ == error
+    assert cluster.deploys.DeployLog(tmp_path / "deploys-kind.jsonl").records() == []
+
+
+def test_a_kind_deploy_needs_each_setting_in_the_manifest_already(tmp_path):
+    made_up = MadeUpCluster()
+    made_up.env = [item for item in made_up.env if item["name"] != "REFUND_CONNECTION"]
+    with pytest.raises(cluster.deploys.DeployError, match="does not set REFUND_CONNECTION"):
+        deployer(tmp_path, made_up).deploy("payments-api", GOOD_API | {"CHARGE_AMOUNT_UNIT": "dollars"}, by="x")
+    assert not [c for c in made_up.calls if c[0] == "patch"]
+
+
+def test_kinds_deploy_log_is_its_own(monkeypatch, tmp_path):
+    monkeypatch.delenv("KLAXON_KIND_DEPLOY_LOG", raising=False)
+    assert cluster.kind_log_path() == Path.home() / ".klaxon" / "deploys-kind.jsonl"
+    assert cluster.kind_log_path() != cluster.deploys.default_log_path() or "KLAXON_DEPLOY_LOG" in cluster.os.environ
+    monkeypatch.setenv("KLAXON_KIND_DEPLOY_LOG", str(tmp_path / "x.jsonl"))
+    assert cluster.kind_log_path() == tmp_path / "x.jsonl"
+    assert cluster.ClusterDeployer(kubectl=MadeUpCluster()).log.path == tmp_path / "x.jsonl"
+
+
+def test_the_reader_command_makes_the_readers_kubeconfig_and_never_prints_its_token(
+    fake, monkeypatch, tmp_path, capsys
+):
+    monkeypatch.setattr(cluster, "READER_KUBECONFIG", tmp_path / "reader.kubeconfig")
+    fake.kubeconfig.write_text("made up")
+    assert cluster.main(["reader"]) == 0
+    out = capsys.readouterr().out
+    assert "for 60 minutes" in out and fake.token not in out
+    assert json.loads((tmp_path / "reader.kubeconfig").read_text())["users"][0]["user"]["token"] == fake.token
+
+
+@pytest.mark.parametrize("token", ["", "two words"])
+def test_no_readers_kubeconfig_without_one_whole_token(fake, monkeypatch, tmp_path, token):
+    monkeypatch.setattr(cluster, "READER_KUBECONFIG", tmp_path / "reader.kubeconfig")
+    fake.kubeconfig.write_text("made up")
+    fake.token = token
+    with pytest.raises(cluster.ClusterError, match="gave no token"):
+        cluster.make_reader_kubeconfig()
+    assert not (tmp_path / "reader.kubeconfig").exists()
+
+
+def test_kinds_deployer_takes_only_a_replica_set_its_own_deployment_owns(tmp_path):
+    made_up = MadeUpCluster()
+    foreign = made_up._set(1)  # the same revision number, but another Deployment's
+    foreign["metadata"] |= {"uid": "someone-elses", "ownerReferences": [{"uid": "another-deployment"}]}
+    made_up.sets.append(foreign)
+    running = deployer(tmp_path, made_up).running("payments-api")
+    assert running.container == cluster.hashlib.sha256(b"rs-uid-1").hexdigest()

@@ -1821,3 +1821,62 @@ def test_the_gated_live_runs_record_what_waiting_cost():
         for key in ("at_request", "at_action", "after_action")
     ]
     assert counted == [12, 28, 28]  # it grew while the request waited, and not after the rollback
+
+
+# A fault rehearsed on the kind cluster (week 6, item 3): kind's deployer, its own record, its own folder.
+
+
+def test_a_rehearsal_on_kind_deploys_with_kinds_deployer_and_says_it_ran_on_the_cluster(monkeypatch, tmp_path):
+    world = World()
+    patch_command(monkeypatch, world)
+    made = []
+    monkeypatch.setattr(fault_runs.faults, "LocalStack", lambda **kw: made.append(kw))
+    monkeypatch.setattr(fault_runs.cluster, "ready", lambda: made.append("ready"))
+    monkeypatch.setattr(fault_runs.cluster, "ClusterDeployer", lambda: "kind's deployer, made up")
+    monkeypatch.setattr(fault_runs.cluster, "describe", lambda: {"kubernetes_server": "v0-made-up"})
+    monkeypatch.setattr(
+        fault_runs.cluster,
+        "provenance",
+        lambda command, now, described: {"rerun_command": command, "cluster": described},
+    )
+    monkeypatch.setattr(fault_runs, "_provenance", lambda command: pytest.fail("Compose's provenance, on kind"))
+    monkeypatch.setattr(fault_runs, "KIND_EVIDENCE", tmp_path / "kind")
+    assert fault_runs.main(["rehearse", "provider-outage", "--platform", "kind"]) == 0
+    assert made == ["ready", {"deployer": "kind's deployer, made up"}]  # checked ready first, then kind's deployer
+    [folder] = (tmp_path / "kind").iterdir()  # its own folder: evidence/week6/kind
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["platform"] == "kind" and saved["label"].startswith("Real run on this Mac's kind cluster (Kubernetes")
+    assert saved["cluster"] == {"kubernetes_server": "v0-made-up"} and "--platform kind" in saved["rerun_command"]
+
+
+def test_a_rehearsal_on_kind_touches_nothing_when_the_cluster_is_not_ready(monkeypatch, tmp_path, capsys):
+    world = World()
+    patch_command(monkeypatch, world)
+
+    def not_ready():
+        raise fault_runs.cluster.ClusterError("not ready: payments-api-5d9c7-x2v4q (make kind-ps)")
+
+    monkeypatch.setattr(fault_runs.cluster, "ready", not_ready)
+    monkeypatch.setattr(fault_runs.faults, "LocalStack", lambda **kw: pytest.fail("nothing is made"))
+    argv = ["rehearse", "provider-outage", "--platform", "kind", "--evidence-dir", str(tmp_path)]
+    assert fault_runs.main(argv) == 2
+    assert list(tmp_path.iterdir()) == [] and "not ready: payments-api" in capsys.readouterr().err
+
+
+def test_a_run_says_where_it_ran_and_compose_keeps_its_words():
+    record = fault_runs.Record({"name": "x"}, {}, {})
+    assert record.platform == "compose"
+    assert fault_runs.label(record).startswith("Real run on this Mac's Docker Compose stack, which stopped before")
+    on_kind = fault_runs.Record({"name": "x"}, {}, {}, platform="kind")
+    assert fault_runs.label(on_kind).startswith("Real run on this Mac's kind cluster (Kubernetes in Docker, from our")
+    assert fault_runs.PLATFORMS == tuple(fault_runs.WHERE) == ("compose", "kind")
+
+
+def test_a_rehearsal_on_compose_keeps_week_4s_folder_and_one_on_kind_has_its_own(monkeypatch, tmp_path):
+    assert fault_runs.KIND_EVIDENCE == fault_runs.REPO / "evidence" / "week6" / "kind"
+    world = World()
+    patch_command(monkeypatch, world)
+    monkeypatch.setattr(fault_runs, "REPO", tmp_path)  # where the default folder is made, for this test
+    assert fault_runs.main(["rehearse", "provider-outage"]) == 0
+    [folder] = (tmp_path / "evidence").glob("*/*")
+    assert folder.parent == tmp_path / "evidence" / "week4" and folder.name.endswith("_rehearsal_provider-outage")
