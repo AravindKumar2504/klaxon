@@ -1,0 +1,617 @@
+{
+  "label": "Real run on this Mac's kind cluster (Kubernetes in Docker, from our own manifests in deploy/kind), with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, money-unit, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. A rehearsal: no model was called and nothing was offered; the fault was cleared once its alert fired, to measure what the rules see of it.",
+  "fault_name": "money-unit",
+  "rerun_command": "python -m klaxon.fault_runs rehearse money-unit --platform kind",
+  "ran_at_utc": "2026-11-10T02:12:05+00:00",
+  "ran_at_local": "2026-11-09T21:12:05-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "035e8de4f865d4e9eeff0d576d70afb291059d11a178cc30fc09d803117f6229",
+  "cluster_files_sha256": "a94fd1a9f1d9e4dc7122b8efb7b4eee1452b7e2b644519dd67b288f710366ceb",
+  "git_commit": "3a03d433e89ea01b0c8068e6debba82177f79a12",
+  "git_clean_code_and_cluster": true,
+  "cluster": {
+    "kind": "kind v0.33.0 go1.27.0 darwin/arm64",
+    "kubectl_client": "v1.36.1",
+    "kubernetes_server": "v1.37.0",
+    "node_image": "kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5",
+    "pods": [
+      {
+        "name": "fake-provider-0",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/klaxon-patient:d9319e775ed4"
+        ],
+        "image_ids": [
+          "docker.io/library/import-2026-11-10@sha256:b0800842d6ddea81ddfa45366dc8670455a0987bcbe2c5cbf12e30a24884256f"
+        ]
+      },
+      {
+        "name": "kafka-0",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/apache/kafka:4.3.1"
+        ],
+        "image_ids": [
+          "docker.io/apache/kafka@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+        ]
+      },
+      {
+        "name": "kafka-init-cl2dv",
+        "phase": "Succeeded",
+        "ready": false,
+        "restarts": 0,
+        "images": [
+          "docker.io/apache/kafka:4.3.1"
+        ],
+        "image_ids": [
+          "docker.io/apache/kafka@sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+        ]
+      },
+      {
+        "name": "ledger-consumer-56d86c44fc-tvt97",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/klaxon-patient:d9319e775ed4"
+        ],
+        "image_ids": [
+          "docker.io/library/import-2026-11-10@sha256:b0800842d6ddea81ddfa45366dc8670455a0987bcbe2c5cbf12e30a24884256f"
+        ]
+      },
+      {
+        "name": "otel-lgtm-0",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/grafana/otel-lgtm:0.34.0"
+        ],
+        "image_ids": [
+          "docker.io/grafana/otel-lgtm@sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+        ]
+      },
+      {
+        "name": "payment-confirmer-56b4f97c44-vhjd9",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/klaxon-patient:d9319e775ed4"
+        ],
+        "image_ids": [
+          "docker.io/library/import-2026-11-10@sha256:b0800842d6ddea81ddfa45366dc8670455a0987bcbe2c5cbf12e30a24884256f"
+        ]
+      },
+      {
+        "name": "payments-api-86d8686747-gl6fv",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/klaxon-patient:d9319e775ed4"
+        ],
+        "image_ids": [
+          "docker.io/library/import-2026-11-10@sha256:b0800842d6ddea81ddfa45366dc8670455a0987bcbe2c5cbf12e30a24884256f"
+        ]
+      },
+      {
+        "name": "postgres-0",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/postgres:18.6-alpine"
+        ],
+        "image_ids": [
+          "docker.io/library/postgres@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395"
+        ]
+      },
+      {
+        "name": "redis-57689464c6-kpv4x",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/redis:8.8.3-alpine"
+        ],
+        "image_ids": [
+          "docker.io/library/redis@sha256:cc9d0aecc235bda23e80287b5ef7c131cae443045b9a332d45932feb71a1e70e"
+        ]
+      },
+      {
+        "name": "webhook-receiver-58999fc568-h99zx",
+        "phase": "Running",
+        "ready": true,
+        "restarts": 0,
+        "images": [
+          "docker.io/library/klaxon-patient:d9319e775ed4"
+        ],
+        "image_ids": [
+          "docker.io/library/import-2026-11-10@sha256:b0800842d6ddea81ddfa45366dc8670455a0987bcbe2c5cbf12e30a24884256f"
+        ]
+      }
+    ]
+  },
+  "fault": {
+    "name": "money-unit",
+    "title": "Customers charged 100 times the amount: a money-unit bug",
+    "cause": "a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "expected_symptoms": [
+      "the money check fails on payments_match_provider, at the first evaluation after the deploy: for each payment since, the provider charged 100 times our amount ('amount differs')",
+      "the ledger books what the provider charged, so it agrees with the provider, and the other invariants pass",
+      "the payment confirmer logs a conflict for each such payment: the provider charged a different amount than our payment's",
+      "a payment whose answer was lost during the fault stays pending for good ('pending but charged, amount differs'): the confirmer refuses the provider's 100 times amount; its client's retries raise the p95 of POST /payments to about 0.6 s, under its threshold",
+      "the API stays healthy, and its answers show the right amount",
+      "refunds send the right amount: a full refund gives back 1% of what was charged"
+    ],
+    "expected_money": {
+      "during": "failed",
+      "after": "failed",
+      "quiet": "failed"
+    },
+    "remedy": "roll the payments API back to CHARGE_AMOUNT_UNIT=cents, then refund each customer charged since the deploy what was charged above the amount, at the provider: our API refunds no more than our recorded amount (a write, so it needs approval)"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "0e3e26d9"
+  },
+  "budgets": {},
+  "stopped": "a rehearsal: the alert fired, and no model was called",
+  "timings": {
+    "injected_at": 77.3,
+    "injection_took": 2.2,
+    "alert_evaluation_began": 94.5,
+    "cleared_at": 97.6
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 1.9,
+      "at_utc": "2026-11-10T02:13:05Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.069,
+            "requests_per_second": 3.047,
+            "share": 0.023
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 76.9,
+      "took": 0.4,
+      "at_utc": "2026-11-10T02:13:22Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.06,
+            "requests_per_second": 3.18,
+            "share": 0.019
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 94.5,
+      "took": 0.8,
+      "at_utc": "2026-11-10T02:13:40Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.106,
+            "requests_per_second": 3.564,
+            "share": 0.03
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "payments_match_provider": 44
+            },
+            "money_off_cents": 0
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 1 of its 5 invariants: payments_match_provider (44 findings).",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (44 findings).",
+        "fired_at": "2026-11-10T02:13:40Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 187.6,
+      "took": 0.7,
+      "at_utc": "2026-11-10T02:15:13Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 3.618,
+            "share": 0.011
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "payments_match_provider": 49
+            },
+            "money_off_cents": 0
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 1 of its 5 invariants: payments_match_provider (49 findings).",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (49 findings).",
+        "fired_at": "2026-11-10T02:15:13Z"
+      }
+    }
+  ],
+  "injected": {
+    "redeployed": "payments-api",
+    "CHARGE_AMOUNT_UNIT": "dollars"
+  },
+  "cleared": {
+    "redeployed": "payments-api",
+    "PROVIDER_BREAKER": "on",
+    "CHARGE_AMOUNT_UNIT": "cents",
+    "REFUND_CONNECTION": "returned"
+  },
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (44 findings).",
+    "fired_at": "2026-11-10T02:13:40Z"
+  },
+  "loop": null,
+  "comparison": null,
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 7,
+      "double_clicks.ran_first": 11,
+      "double_clicks.sent": 18,
+      "not_sent.refunds": 5,
+      "payments.arrived": 582,
+      "payments.succeeded": 580,
+      "payments.unknown": 2,
+      "refunds.succeeded": 56,
+      "retries": 36,
+      "retries.after_409": 11,
+      "retries.after_503": 18,
+      "retries.after_no_answer": 7,
+      "unknown_payments.still_pending": 2
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": false,
+  "rehearsal": true,
+  "gate": null,
+  "verification": null,
+  "undo": null,
+  "damage": {},
+  "deploys": null,
+  "removed_by": null,
+  "case": null,
+  "platform": "kind",
+  "printed_output": [
+    "Klaxon week 4: a rehearsal of a fault, with no model: money-unit",
+    "Real run on this Mac's kind cluster (Kubernetes in Docker, from our own manifests in deploy/kind), with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, money-unit, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. A rehearsal: no model was called and nothing was offered; the fault was cleared once its alert fired, to measure what the rules see of it.",
+    "",
+    "The fault: Customers charged 100 times the amount: a money-unit bug",
+    "  recorded cause: a deploy of the payments API with a money-unit bug (CHARGE_AMOUNT_UNIT=dollars): it reads each payment's amount, already in cents, as dollars and converts it to cents again, so the provider charges every customer 100 times the amount, while our own records keep the right one",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.025 s; 5xx share 0.023; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  76.9 s  p95 0.024 s; 5xx share 0.019; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  94.5 s  p95 0.025 s; 5xx share 0.03; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  after  t= 187.6 s  p95 0.024 s; 5xx share 0.011; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  the fault was injected at t=77.3 s: {\"redeployed\": \"payments-api\", \"CHARGE_AMOUNT_UNIT\": \"dollars\"}",
+    "",
+    "Alert MoneyCheckFailed, fired at 2026-11-10T02:13:40Z: The money check failed 1 of its 5 invariants: payments_match_provider (44 findings).",
+    "",
+    "Cleared at t=97.6 s: {\"redeployed\": \"payments-api\", \"PROVIDER_BREAKER\": \"on\", \"CHARGE_AMOUNT_UNIT\": \"cents\", \"REFUND_CONNECTION\": \"returned\"}",
+    "",
+    "Stopped: a rehearsal: the alert fired, and no model was called"
+  ]
+}

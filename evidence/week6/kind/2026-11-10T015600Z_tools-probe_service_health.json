@@ -1,0 +1,87 @@
+{
+  "at": "2026-11-10T01:56:01Z",
+  "services": [
+    {
+      "service": "fake-provider",
+      "pod": "fake-provider-0",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:54:58Z"
+    },
+    {
+      "service": "kafka",
+      "pod": "kafka-0",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:54:57Z"
+    },
+    {
+      "service": "kafka-init",
+      "pod": "kafka-init-vqzkj",
+      "state": "succeeded",
+      "health": "not ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:55:24Z",
+      "exit_code": 0,
+      "note": "one-shot: creates the Kafka topics, then exits"
+    },
+    {
+      "service": "ledger-consumer",
+      "pod": "ledger-consumer-5d574d5568-bdkgd",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:55:31Z"
+    },
+    {
+      "service": "otel-lgtm",
+      "pod": "otel-lgtm-0",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:54:57Z"
+    },
+    {
+      "service": "payment-confirmer",
+      "pod": "payment-confirmer-77bbb5b5-pzq49",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:55:31Z"
+    },
+    {
+      "service": "payments-api",
+      "pod": "payments-api-6f5944498d-47rzw",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:55:31Z"
+    },
+    {
+      "service": "postgres",
+      "pod": "postgres-0",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:54:55Z"
+    },
+    {
+      "service": "redis",
+      "pod": "redis-57689464c6-9sxhc",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:54:52Z"
+    },
+    {
+      "service": "webhook-receiver",
+      "pod": "webhook-receiver-67fb87c655-n8rjh",
+      "state": "running",
+      "health": "ready",
+      "restarts": 0,
+      "started_at": "2026-11-10T01:55:31Z"
+    }
+  ]
+}
