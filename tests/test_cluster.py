@@ -753,8 +753,15 @@ def test_a_job_that_never_finishes_stops_at_the_end_of_the_wait(fake):
     fake.kubeconfig.write_text("made up")
     fake.job_statuses = [{"active": 1}]
     times = iter([0.0, 100.0, 299.0, 300.0])
+    slept = []
+
+    def sleep(seconds: float) -> None:  # a wait that never ends fails here at once, not after the runner's limit
+        slept.append(seconds)
+        assert len(slept) < 100, "the wait for a Job that never finishes never ended"
+
     with pytest.raises(cluster.ClusterError, match="did not finish within 300 s"):
-        cluster.wait("job/kafka-init", clock=lambda: next(times), sleep=lambda s: None)
+        cluster.wait("job/kafka-init", clock=lambda: next(times), sleep=sleep)
+    assert len(slept) == 2
 
 
 def test_the_two_consumers_are_replaced_never_rolled_and_the_others_roll():
