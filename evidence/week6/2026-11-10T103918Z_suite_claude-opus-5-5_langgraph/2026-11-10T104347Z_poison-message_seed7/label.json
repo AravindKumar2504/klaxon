@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "poison-message",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "9fed6f8602339860e40f73ddc2bba11566f124ad4323c294612a546e39caea2f",
+  "diagnosis_sha256": "88c992f4681150d22399498c1cc746ccb7fe079329fb84b09bb0687e02efaefe",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Because rolling back to BAD_EVENTS=dead_letter moves the unreadable event aside, allowing the backlog to drain and the money check to pass again.",
+  "at": "2026-11-12T23:42:03Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "false-alarm",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "1088b715519aed9673c745ad66764e3903aee9c6516573c0aeed0ff27b049b63",
+  "diagnosis_sha256": "d8f998309f4010c05d10e5308a127170fe0797448b7a911616fb3c79d552cd6b",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Because it correctly recommends no operational fix or action since the system is healthy and the alert is false.",
+  "at": "2026-11-12T23:42:24Z",
+  "how": "typed at a terminal"
+}
