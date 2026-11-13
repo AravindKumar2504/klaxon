@@ -1,0 +1,219 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. No fault was injected: an evaluation case, a false alarm (week 6). No alert was given. The run stopped: not quiet before the false alarm, so none was given: no data for the p95 latency, the share of 5xx answers, the ledger group's lag, the payment-confirmer group's lag: is the traffic reaching the stack?.",
+  "case": {
+    "name": "false-alarm",
+    "kind": "false alarm",
+    "title": "A false alarm: the ledger consumer group said to be 250 messages behind, on a healthy stack",
+    "right_answer": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "right_action": null,
+    "fault": null,
+    "withheld": {},
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action",
+    "seed": 7,
+    "model": null
+  },
+  "seed": 7,
+  "fault_name": null,
+  "rerun_command": "python -m klaxon.evaluation rehearse false-alarm",
+  "ran_at_utc": "2026-11-09T21:25:55+00:00",
+  "ran_at_local": "2026-11-09T16:25:55-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "2770d476c297b8649ca5d12060ec4eb9665cd34046301d3232256e4a078011ad",
+  "stack_files_sha256": "e19fd75c658248679ff74f4c68a12c797099402711ef96d44a942d6b3d4ae4ad",
+  "git_commit": "07c6d0b83f058aed6a595a55d8a1981c1edcb6e1",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:560d737d74cc0de8a3edd87516fcc5844c9d59a41face3276f7d2ae18a4b9fbe"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:560d737d74cc0de8a3edd87516fcc5844c9d59a41face3276f7d2ae18a4b9fbe"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:560d737d74cc0de8a3edd87516fcc5844c9d59a41face3276f7d2ae18a4b9fbe"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:560d737d74cc0de8a3edd87516fcc5844c9d59a41face3276f7d2ae18a4b9fbe"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:560d737d74cc0de8a3edd87516fcc5844c9d59a41face3276f7d2ae18a4b9fbe"
+      }
+    ]
+  },
+  "fault": {
+    "name": "false-alarm",
+    "kind": "false alarm",
+    "title": "A false alarm: the ledger consumer group said to be 250 messages behind, on a healthy stack",
+    "right_answer": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "right_action": null,
+    "fault": null,
+    "withheld": {},
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action",
+    "seed": 7,
+    "model": null
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 7,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "2a3b7dcb"
+  },
+  "budgets": {},
+  "stopped": "not quiet before the false alarm, so none was given: no data for the p95 latency, the share of 5xx answers, the ledger group's lag, the payment-confirmer group's lag: is the traffic reaching the stack?",
+  "timings": {},
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 300.0,
+      "took": 0.9,
+      "at_utc": "2026-11-09T22:56:22Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.0,
+            "requests_per_second": null,
+            "share": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "injected": null,
+  "cleared": null,
+  "alert": null,
+  "loop": null,
+  "comparison": null,
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 12,
+      "double_clicks.ran_first": 13,
+      "double_clicks.sent": 25,
+      "not_sent.refunds": 3,
+      "payments.arrived": 903,
+      "payments.succeeded": 903,
+      "refunds.succeeded": 91,
+      "retries": 35,
+      "retries.after_409": 13,
+      "retries.after_503": 22
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": false,
+  "rehearsal": true,
+  "gate": null,
+  "verification": null,
+  "undo": null,
+  "damage": {},
+  "deploys": null,
+  "removed_by": null,
+  "printed_output": [
+    "Klaxon week 6: an evaluation run (case false-alarm, seed 7): a false alarm",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. No fault was injected: an evaluation case, a false alarm (week 6). No alert was given. The run stopped: not quiet before the false alarm, so none was given: no data for the p95 latency, the share of 5xx answers, the ledger group's lag, the payment-confirmer group's lag: is the traffic reaching the stack?.",
+    "",
+    "The case: A false alarm: the ledger consumer group said to be 250 messages behind, on a healthy stack",
+    "  right answer: Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t= 300.0 s  p95 - s; 5xx share -; lag ledger -, payment-confirmer -; money check passed; firing: none",
+    "",
+    "Stopped: not quiet before the false alarm, so none was given: no data for the p95 latency, the share of 5xx answers, the ledger group's lag, the payment-confirmer group's lag: is the traffic reaching the stack?"
+  ]
+}
