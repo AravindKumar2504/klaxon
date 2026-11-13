@@ -997,3 +997,27 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - *Why start early.* Week 5 was accepted a day early. Two more days make room for what the runs show.
 
 **One idea to own before item 3: a Deployment keeps its history.** Each rollout makes a new revision, and Kubernetes keeps the ones before. Undoing a bad rollout means putting back the revision before it. Klaxon's rule stays the one from week 4: code plans it from the deploy log, checks that nothing changed since, and runs it only after your typed yes.
+
+## Week 6, item 3 (built 2026-11-09, run on kind 2026-11-10): the patient on kind, ready for faults
+
+**What it is.** The kind cluster made fit for faults, and Klaxon's two docker tools taught to read Kubernetes. The five gaps week 5 found on kind (known gap 13) are fixed, and each fault was rehearsed on the cluster, with no model.
+
+**The five fixes.**
+- *Our image is tagged by what it is built from:* the SHA-256 of its build files. Docker gave each build a new id, so every `make kind-up` rolled every workload. Now the same files roll nothing, and a change rolls our four.
+- *The two consumers are replaced, never rolled* (`Recreate`), as Compose recreates a container. The payments API and the receiver still roll.
+- *`make kind-up` puts every manifest's settings back,* taking back any field a fault's patch or `kubectl set env` changed, as `make up` does on Compose.
+- *The topics Job is made again each time,* and its failure is seen within 2 seconds, not after 300.
+- *Readiness stays Kubernetes':* a pod that fails its check leaves its Service. So each fault was rehearsed on kind before any live run on it.
+
+**Klaxon's tools on kind.** On a run on kind, `service_health` reads each pod (ready or not, restarts, when it started), and `recent_deploys` reads each Deployment's rollouts (when, the image, the behavior settings), in the same shape as on Compose. They read as `klaxon-reader`, an account that may only get, list and watch pods, events and workloads in the klaxon namespace: no Secret, no logs, no write. Kubernetes enforces that, not Klaxon. On Compose their words are as before, so the system prompt did not change.
+
+**A deploy on kind is a rollout.** One JSON patch of the behavior settings, whose first step makes Kubernetes refuse the whole patch if the Deployment changed since it was read. Then a wait until the rollout is done. Each deploy goes into kind's own deploy log, so a rollback on one platform is never planned from the other's deploys.
+
+**What ran** (your OK, 2026-11-10 UTC, no model). `make kind-up` from no cluster in 72 s. `make kind-check`: 20 of 20 money checks passed under traffic, then once more on the quiet cluster. Both tools answered through klaxon-reader. A one-line code change, then its revert: each rolled our workloads. Each of the six faults on a fresh cluster raised an alert. Five raised the same alert as on Compose, within about a second. Pool exhaustion raised the errors alert at 65 s; on Compose, its three seeds gave the latency alert once and the errors alert twice.
+
+**What to read in the code.** In `src/klaxon/patient/cluster.py`: `content_tag`, `up`, `make_reader_kubeconfig` and `ClusterDeployer`. In `src/klaxon/agent/tools.py`: `_pods_health` and `_rollouts`. `deploy/kind/01-klaxon-access.yaml`.
+
+**Likely questions.**
+- *Why not let the tools use the admin account?* Klaxon is read-only by default. An account that can only read makes Kubernetes enforce that, so a bug in a tool cannot change the cluster.
+- *Why replace the consumers instead of rolling them?* A rollout runs the old and the new pod together for a few seconds. For a consumer, both settings would be at work at once, so a fault's effect, or a rollback's, would not be clean.
+- *Why rehearse each fault on kind first?* Kubernetes takes a failing pod out of its Service, which Compose does not, so a fault's symptoms could differ. Five did not; the sixth stayed within what Compose's own seeds show.
