@@ -807,6 +807,16 @@ def test_the_prompt_command_prints_the_system_prompt_and_first_turn_and_calls_no
     assert "This run allows 6 steps" in out
 
 
+def test_the_prompt_command_shows_a_gated_or_evaluation_runs_prompt_with_rollback_deploy_offered(capsys):
+    # Week 6: make loop-prompt OFFERED=1, so the line on how a rollback is planned can be read where runs see it.
+    assert loop.main(["prompt", "--alert", "x"]) == 0
+    plain = capsys.readouterr().out
+    assert loop.main(["prompt", "--alert", "x", "--offered"]) == 0
+    offered = capsys.readouterr().out
+    assert "fix_action" not in plain and catalog.ROLLBACK_DEPLOY.description in offered
+    assert loop.ACTIONS_HEADING in offered and "Code plans it from that log" in offered
+
+
 @pytest.mark.parametrize(
     "argv",
     [["prompt", "--alert", ""], ["prompt", "--alert", "x", "--steps", "1"], ["run", "--alert", "x", "--seconds", "0"]],
@@ -1145,11 +1155,11 @@ def test_with_an_action_offered_the_prompt_says_it_runs_only_if_a_human_approves
     assert "@" not in system
 
 
-def offered_run(folder, script):
+def offered_run(folder, script, checks=loop.CHECKS):
     folder.mkdir(parents=True)
     model = MadeUpLive(Recording(folder / loop.RECORDING), script)
     tools = mc.RecordedTools(Served().client, folder / loop.TOOL_RESULTS)
-    return loop.investigate(ALERT, model, tools, folder / loop.TRACE, actions=[catalog.ROLLBACK_DEPLOY])
+    return loop.investigate(ALERT, model, tools, folder / loop.TRACE, actions=[catalog.ROLLBACK_DEPLOY], checks=checks)
 
 
 def naming(action):
@@ -1249,3 +1259,171 @@ def test_the_loop_never_imports_the_code_that_acts():
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60, check=True)
     assert done.stdout.strip() == "[]"
+
+
+# The rollback check (week 6; Aravind's call at his review of week 5, 2026-11-09): where rollback_deploy is offered, a
+# fix of kind rollback names its action, or the gate would plan nothing and ask nobody. Sent back once.
+
+ROLLBACK_ACTION = {"name": "rollback_deploy", "arguments": {"service": "ledger-consumer"}}
+
+
+def unnamed():
+    return diagnose("c1")  # its fix is of kind rollback, and it names no action
+
+
+def named():
+    reply = json.loads(unnamed())
+    reply["diagnosis"]["fix_action"] = ROLLBACK_ACTION
+    return json.dumps(reply)
+
+
+def checked(tmp_path, script, budgets=None, clock=None, checks=loop.CHECKS, actions=(catalog.ROLLBACK_DEPLOY,)):
+    model = ScriptedModel(script)
+    result = loop.investigate(
+        ALERT,
+        model,
+        Served().client,
+        tmp_path / "trace.jsonl",
+        budgets or loop.Budgets(),
+        clock=clock or time.monotonic,
+        actions=list(actions),
+        checks=checks,
+    )
+    return result, model, read_trace(tmp_path / "trace.jsonl")
+
+
+def test_a_rollback_with_no_action_named_is_sent_back_once_then_taken_as_it_comes(tmp_path):
+    result, model, trace = checked(tmp_path, [tool(), unnamed(), unnamed()])
+    assert (result.reason, result.steps, result.tool_calls) == ("diagnosed", 3, 1)
+    assert result.sent_back == (loop.ROLLBACK_NAMED,) and result.diagnosis.fix_action is None
+    sent, taken = steps(trace)[1], steps(trace)[2]
+    assert (sent["allowed"], sent["why"]) == (False, loop.SENT_BACK)
+    assert (taken["allowed"], taken["why"]) == (True, loop.TAKEN + loop.STILL_UNNAMED)
+    # The model saw its reply, then the check's words, then what is left: 2 of 12 steps and 1 of 10 tool calls used.
+    assert model.calls[2][1][-2:] == (
+        Message("assistant", unnamed()),
+        Message("user", f"{loop.ROLLBACK_UNNAMED}\n\n{loop.left_note(10, 9)}"),
+    )
+    assert trace[-1]["reason"] == "diagnosed" and "fix_action" not in trace[-1]["diagnosis"]
+
+
+def test_after_the_check_a_diagnosis_that_names_the_action_is_taken(tmp_path):
+    result, _, trace = checked(tmp_path, [tool(), unnamed(), named()])
+    assert result.reason == "diagnosed" and result.diagnosis.fix_action.name == "rollback_deploy"
+    assert result.sent_back == (loop.ROLLBACK_NAMED,) and steps(trace)[2]["why"] == loop.TAKEN
+
+
+def test_the_check_sends_back_only_once_whatever_comes_after(tmp_path):
+    # An invalid reply, then the same unnamed rollback again: taken, never sent back a second time.
+    result, _, trace = checked(tmp_path, [tool(), unnamed(), "oops", unnamed()])
+    assert (result.reason, result.steps, result.sent_back) == ("diagnosed", 4, (loop.ROLLBACK_NAMED,))
+    assert [s["why"] for s in steps(trace)].count(loop.SENT_BACK) == 1
+
+
+@pytest.mark.parametrize(
+    "actions, checks",
+    [((), loop.CHECKS), ((catalog.ROLLBACK_DEPLOY,), ())],
+    ids=["no action offered", "a run without the check"],
+)
+def test_without_rollback_deploy_offered_or_without_the_check_the_diagnosis_is_taken_at_once(tmp_path, actions, checks):
+    result, _, trace = checked(tmp_path, [tool(), unnamed()], checks=checks, actions=actions)
+    assert (result.reason, result.steps, result.sent_back) == ("diagnosed", 2, ())
+    assert steps(trace)[1]["why"] == loop.TAKEN
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [diagnose("c1", kind="code_change"), diagnose("c1", kind="none"), named()],
+    ids=["a code change", "no fix", "a rollback that names its action"],
+)
+def test_the_check_leaves_other_fixes_and_a_named_action_alone(tmp_path, reply):
+    result, _, trace = checked(tmp_path, [tool(), reply])
+    assert (result.reason, result.steps, result.sent_back) == ("diagnosed", 2, ())
+    assert steps(trace)[1]["why"] == loop.TAKEN
+
+
+def test_with_no_step_left_the_check_takes_the_diagnosis_and_says_why(tmp_path):
+    # Sending it back on the run's last step would end the run with no diagnosis at all.
+    result, _, trace = checked(tmp_path, [tool(), unnamed()], budgets=loop.Budgets(steps=2))
+    assert (result.reason, result.steps, result.sent_back) == ("diagnosed", 2, ())
+    assert steps(trace)[1]["why"] == loop.TAKEN + loop.NO_STEP_TO_SEND_BACK
+
+
+def test_with_no_time_left_the_check_takes_the_diagnosis_and_says_why(tmp_path):
+    clock = Clock()
+
+    def late(system, turns):  # the model answers after the run's time is used
+        clock.now += 1000
+        return unnamed()
+
+    result, _, trace = checked(tmp_path, [tool(), late], budgets=loop.Budgets(8, 5, 300), clock=clock)
+    assert (result.reason, result.sent_back) == ("diagnosed", ())
+    assert steps(trace)[1]["why"] == loop.TAKEN + loop.NO_STEP_TO_SEND_BACK
+
+
+def test_the_trace_records_the_checks_a_run_had(tmp_path):
+    _, _, trace = checked(tmp_path, [tool(), named()])
+    assert trace[0]["extra"]["loop"]["checks"] == [loop.ROLLBACK_NAMED]
+    _, _, trace = checked(tmp_path / "none", [tool(), named()], checks=())
+    assert trace[0]["extra"]["loop"]["checks"] == []
+
+
+def test_a_run_the_check_sent_back_replays_exactly(tmp_path):
+    recorded = offered_run(tmp_path / "run", [tool(), unnamed(), named()])
+    assert recorded.sent_back == (loop.ROLLBACK_NAMED,)
+    result, whole, differences = loop.replay(tmp_path / "run", tmp_path / "replay.jsonl")
+    assert (whole, differences, result.sent_back) == (True, [], (loop.ROLLBACK_NAMED,))
+    assert result.diagnosis == recorded.diagnosis and result.steps == 3
+
+
+def test_a_run_recorded_before_the_check_replays_without_it(tmp_path):
+    """Week 5's runs: their traces name no checks, and one of them ended in a rollback with no action named. A replay
+    applies only the checks a run had, so it takes that diagnosis, as the run did."""
+    recorded = offered_run(tmp_path / "run", [tool(), unnamed()], checks=())
+    assert (recorded.reason, recorded.steps, recorded.sent_back) == ("diagnosed", 2, ())
+    path = tmp_path / "run" / loop.TRACE
+    lines = path.read_text().splitlines()
+    start = json.loads(lines[0])
+    del start["extra"]["loop"]["checks"]  # as a trace written before week 6
+    path.write_text("\n".join([json.dumps(start), *lines[1:]]) + "\n")
+    result, whole, differences = loop.replay(tmp_path / "run", tmp_path / "replay.jsonl")
+    assert (whole, differences, result.steps, result.sent_back) == (True, [], 2, ())
+
+
+@pytest.mark.parametrize(
+    "checks, why",
+    [
+        (["rollback_named", "rollback_named"], "name one twice"),
+        (["restart_check"], "no check 'restart_check'"),
+        ("rollback_named", "a list of names"),
+        ([7], "a list of names"),
+    ],
+)
+def test_checks_a_loop_does_not_know_are_refused_before_anything_runs(tmp_path, checks, why):
+    with pytest.raises(ValueError, match=why):
+        loop.known_checks(checks)
+    model = ScriptedModel([tool()])
+    with pytest.raises(ValueError, match=why):
+        loop.investigate(ALERT, model, Served().client, tmp_path / "t.jsonl", checks=checks)
+    assert model.calls == []
+
+
+def test_a_trace_whose_checks_are_not_a_list_cannot_be_replayed():
+    with pytest.raises(ValueError, match="not a list"):
+        loop.recorded_checks({"checks": "rollback_named"})
+    assert loop.recorded_checks({}) == () and loop.recorded_checks({"checks": []}) == ()
+    assert loop.recorded_checks({"checks": ["rollback_named"]}) == (loop.ROLLBACK_NAMED,)
+
+
+def test_rollback_deploy_says_code_plans_it_from_the_deploy_log_even_when_the_tools_cannot_see_deploys():
+    """Week 6 (Aravind's call at his review of week 5, and the words he chose): in week 5, 5 of the 6 runs that could
+    not read deploys named no rollback. The line is in the system prompt of every run that offers the action."""
+    line = (
+        "Code plans it from that log, not from your tools' results, so you can name it even when they cannot see"
+        " deploys: if the log holds no deploy of that service to undo, or the service changed since, code refuses it."
+    )
+    assert line in catalog.ROLLBACK_DEPLOY.description
+    system = loop.system_prompt([mc.ToolSpec(**_spec(t)) for t in REAL.values()], [catalog.ROLLBACK_DEPLOY])
+    assert line in system
+    # The action as the catalog first offered it is frozen: the runs of week 4, item 2 replay with it.
+    assert "Code plans it" not in catalog.FIRST_OFFERED["rollback_deploy"].description

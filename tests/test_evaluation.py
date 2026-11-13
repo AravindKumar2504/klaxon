@@ -428,7 +428,7 @@ def test_a_false_alarms_evidence_is_saved_and_printed(tmp_path, capsys):
     saved = json.loads((tmp_path / fault_runs.RUN_FILE).read_text())
     assert saved["label"] == evaluation.label(record) and saved["case"]["name"] == "false-alarm"
     printed = saved["printed_output"]
-    assert printed[0] == "Klaxon week 5: an evaluation run (case false-alarm, seed 7): a false alarm"
+    assert printed[0] == "Klaxon week 6: an evaluation run (case false-alarm, seed 7): a false alarm"
     assert any("written by the harness, not raised by the rules" in line for line in printed)
     assert "Saved in" in capsys.readouterr().out
     # The review's finding L2: a false alarm's run is graded by the rule, as a fault run is, and says so.
@@ -474,7 +474,7 @@ def test_an_evaluation_run_on_a_fault_plans_the_rollback_asks_nobody_and_the_har
     assert "withheld" not in text
     printed = fault_runs.render(record).splitlines()
     assert (
-        printed[0] == "Klaxon week 5: an evaluation run on case duplicate-delivery, seed 7, a fault: duplicate-delivery"
+        printed[0] == "Klaxon week 6: an evaluation run on case duplicate-delivery, seed 7, a fault: duplicate-delivery"
     )
     whole = "\n".join(printed)
     assert "The gate: not asked: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent" in whole
@@ -1270,9 +1270,16 @@ def test_make_label_pick_prints_the_command_never_a_verdict_and_refuses_runs_not
 
 
 # The live runs of week 5, item 3, replayed: regression tests from evidence. Each suite found is in, the pilot's
-# first (2026-11-06 UTC); a suite run later joins on its own.
+# first (2026-11-06 UTC). Their folder is named here, not taken from evaluation.EVIDENCE, which names the folder new
+# runs go to (week 6's since version 2).
 
-WEEK5_RUNS = sorted(path.parent for path in evaluation.EVIDENCE.glob("*_suite_*/*/run.json"))
+WEEK5 = evaluation.REPO / "evidence" / "week5"
+WEEK5_RUNS = sorted(path.parent for path in WEEK5.glob("*_suite_*/*/run.json"))
+
+
+def test_all_48_of_week_5s_live_runs_are_replayed():
+    # So the replays below can never shrink to none unseen, as they did for a moment when new runs moved to week 6.
+    assert len(WEEK5_RUNS) == 48 and evaluation.EVIDENCE != WEEK5
 
 
 @pytest.mark.parametrize("folder", WEEK5_RUNS, ids=lambda folder: f"{folder.parent.name[-17:]}/{folder.name[18:]}")
@@ -1310,7 +1317,7 @@ def test_each_week_5_live_run_replays_exactly_and_is_graded_as_it_was(folder, tm
 
 def test_label_pick_says_which_runs_it_passes_over_and_its_command_has_no_tilde(tmp_path, capsys, monkeypatch):
     # Two runs the judge graded, both made up from a copy; a third whose run.json cannot be read.
-    source = sorted(path.parent for path in evaluation.EVIDENCE.glob("*_suite_*/*/judgment.json"))[:2]
+    source = sorted(path.parent for path in WEEK5.glob("*_suite_*/*/judgment.json"))[:2]
     for folder in source:
         shutil.copytree(folder, tmp_path / folder.name, ignore=shutil.ignore_patterns("label.json"))
     broken = tmp_path / "2026-11-07T000000Z_money-unit_seed1"
@@ -1323,3 +1330,43 @@ def test_label_pick_says_which_runs_it_passes_over_and_its_command_has_no_tilde(
     assert f"Passed over, as it cannot be read: {broken.name}: " in err
     command = out.strip().splitlines()[-1]
     assert command.startswith("make label RUN=") and "~" not in command and str(tmp_path.resolve()) in command
+
+
+# Version 2 of how the runs are made (week 6, after Aravind's review of week 5): the false alarm's warm-up, and each
+# run's version recorded, so the report never counts week 5's runs and week 6's in one row.
+
+
+def test_the_false_alarm_warms_up_five_minutes_and_the_faults_keep_one():
+    # Aravind's choice (2026-11-09): 5 minutes, so no restart is there to blame when the alert fires.
+    assert evaluation.FALSE_ALARM_WARMUP_SECONDS == 300.0 and fault_runs.WARMUP_SECONDS == 60.0
+    world = World()
+    record = case_record(FALSE)
+    evaluation.false_alarm(FALSE, record, world.stack(), Settings(run_id="r1"), diagnosed(world, NOTHING_WRONG), None)
+    assert [e["began"] for e in record.evaluations if e["phase"] == "before"][0] == 300.0
+
+
+def test_a_suite_and_each_of_its_runs_record_version_2_and_the_report_says_week_6(monkeypatch, tmp_path):
+    assert evaluation.VERSION == 2 and evaluation.EVIDENCE == evaluation.REPO / "evidence" / "week6"
+    world = DockerStack()
+    patch_suite(monkeypatch, world)
+    argv = ["run", "--cases", "duplicate-delivery,false-alarm", "--seeds", "7", "--evidence-dir", str(tmp_path)]
+    assert evaluation.main(argv) == 0
+    [suite_folder] = tmp_path.iterdir()
+    suite = json.loads((suite_folder / evaluation.SUITE_FILE).read_text())
+    assert suite["evaluation_version"] == 2 and "(evaluation, week 6)" in suite["label"]
+    runs = [suite_folder / run["folder"] for run in suite["runs"]]
+    assert [json.loads((run / fault_runs.RUN_FILE).read_text())["evaluation_version"] for run in runs] == [2, 2]
+    made = evaluation.report([suite_folder])
+    assert {row["mode"] for row in made["summary"]} == {"evaluation, week 6"}
+
+
+def test_week_5s_runs_and_week_6s_are_never_counted_in_one_row(tmp_path):
+    source = WEEK5_RUNS[0]
+    old = Path(shutil.copytree(source, tmp_path / "week5" / source.name))
+    new = Path(shutil.copytree(source, tmp_path / "week6" / source.name))
+    saved = json.loads((new / fault_runs.RUN_FILE).read_text())
+    assert "evaluation_version" not in saved  # week 5's runs say nothing of it: version 1
+    (new / fault_runs.RUN_FILE).write_text(json.dumps(saved | {"evaluation_version": 2}))
+    rows = [row for row in evaluation.report([old, new])["summary"] if row["case"] == saved["case"]["name"]]
+    assert sorted((row["mode"], row["runs"]) for row in rows) == [("evaluation", 1), ("evaluation, week 6", 1)]
+    assert evaluation._mode({"case": {}, "evaluation_version": 3}) == "evaluation, version 3"

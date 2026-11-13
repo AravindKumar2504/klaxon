@@ -1,0 +1,406 @@
+{
+  "label": "Worked out offline from saved runs by klaxon.evaluation: no model was called and nothing was run. The rule's verdicts are klaxon.grading's, worked out again with the newest rubric for each run's system; the judge's are Claude's (klaxon.judge), recorded responses saved beside the runs it judged; Aravind's were typed at a terminal (make label). The costs are Claude Code's estimates at API prices; the seat is not billed per call; they leave out the judge's calls.",
+  "made_at_utc": "2026-11-10T01:22:05Z",
+  "from": [
+    "evidence/week6/2026-11-10T004809Z_suite_claude-opus-5-5"
+  ],
+  "judge_held_back": 0,
+  "left_out": [],
+  "suites": [
+    {
+      "folder": "2026-11-10T004809Z_suite_claude-opus-5-5",
+      "model": "claude-opus-5-5",
+      "planned": 6,
+      "with_an_outcome": 6,
+      "not_run": [],
+      "stopped": null
+    }
+  ],
+  "runs": [
+    {
+      "folder": "2026-11-10T004824Z_false-alarm_seed7",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation, week 6",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.75,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 46.1,
+      "steps": 9,
+      "tool_calls": 6,
+      "calls": 9,
+      "failed_calls": 0,
+      "accepted_calls": 9,
+      "cost_usd": 0.3804,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-10T005443Z_missing-deploys_seed7",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation, week 6",
+      "seed": 7,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "step_budget",
+      "diagnosed": false,
+      "confidence": null,
+      "verdict": null,
+      "rubric": null,
+      "fix_fits": null,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": null,
+      "action_where_none_fits": false,
+      "gate": null,
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 94.1,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.4346,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "damage_at_diagnosis": null,
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-10T005941Z_false-alarm_seed8",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation, week 6",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "partly",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 52.4,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.4475,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-10T010606Z_missing-deploys_seed8",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation, week 6",
+      "seed": 8,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.55,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.2,
+      "diagnosis_seconds": 105.0,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.4925,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 19,
+          "matches_provider": 20
+        }
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-10T011115Z_false-alarm_seed9",
+      "case": "false-alarm",
+      "kind": "false alarm",
+      "mode": "evaluation, week 6",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.8,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": null,
+      "right_action": null,
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "no action",
+      "alert_after_fault_seconds": null,
+      "diagnosis_seconds": 27.6,
+      "steps": 6,
+      "tool_calls": 5,
+      "calls": 6,
+      "failed_calls": 0,
+      "accepted_calls": 6,
+      "cost_usd": 0.1534,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "damage_at_diagnosis": {
+        "outcome": "passed",
+        "findings": {}
+      },
+      "graders_disagree": false
+    },
+    {
+      "folder": "2026-11-10T011716Z_missing-deploys_seed9",
+      "case": "missing-deploys",
+      "kind": "missing evidence",
+      "mode": "evaluation, week 6",
+      "seed": 9,
+      "model": "claude-opus-5-5",
+      "answered_by": [
+        "claude-opus-5-5"
+      ],
+      "answered_by_another_model": false,
+      "not_run": null,
+      "loop": "diagnosed",
+      "diagnosed": true,
+      "confidence": 0.6,
+      "verdict": "names the cause",
+      "rubric": 4,
+      "fix_fits": true,
+      "judge": null,
+      "judge_fix_fits": null,
+      "judge_why": null,
+      "aravind": null,
+      "aravind_fix_fits": null,
+      "grader_problems": [],
+      "offered": true,
+      "named_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "right_action": [
+        "rollback_deploy",
+        "ledger-consumer"
+      ],
+      "action_right": true,
+      "action_where_none_fits": false,
+      "gate": "not asked",
+      "alert_after_fault_seconds": 17.3,
+      "diagnosis_seconds": 100.2,
+      "steps": 10,
+      "tool_calls": 8,
+      "calls": 10,
+      "failed_calls": 0,
+      "accepted_calls": 10,
+      "cost_usd": 0.5409,
+      "calls_without_cost": 0,
+      "damage_at_alert": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        }
+      },
+      "damage_at_diagnosis": {
+        "outcome": "failed",
+        "findings": {
+          "posted_exactly_once": 7,
+          "matches_provider": 8
+        }
+      },
+      "graders_disagree": false
+    }
+  ],
+  "summary": [
+    {
+      "model": "claude-opus-5-5",
+      "case": "false-alarm",
+      "mode": "evaluation, week 6",
+      "kind": "false alarm",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 3,
+      "graded": 3,
+      "names_the_cause": 1,
+      "partly": 2,
+      "misses_the_cause": 0,
+      "fix_fits": 3,
+      "judged": 0,
+      "judge_names_the_cause": 0,
+      "judge_fix_fits": 0,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 0,
+      "action_judged": 3,
+      "action_right": 3,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": null,
+      "median_diagnosis_seconds": 46.1,
+      "median_steps": 9,
+      "median_calls": 9,
+      "calls": 25,
+      "cost_usd": 0.9813
+    },
+    {
+      "model": "claude-opus-5-5",
+      "case": "missing-deploys",
+      "mode": "evaluation, week 6",
+      "kind": "missing evidence",
+      "runs": 3,
+      "not_run": 0,
+      "ran": 3,
+      "diagnosed": 2,
+      "graded": 2,
+      "names_the_cause": 2,
+      "partly": 0,
+      "misses_the_cause": 0,
+      "fix_fits": 2,
+      "judged": 0,
+      "judge_names_the_cause": 0,
+      "judge_fix_fits": 0,
+      "judge_no_verdict": 0,
+      "graders_disagree": 0,
+      "labeled": 0,
+      "action_judged": 2,
+      "action_right": 2,
+      "action_where_none_fits": 0,
+      "refused_by_code": 0,
+      "median_alert_after_fault_seconds": 17.3,
+      "median_diagnosis_seconds": 100.2,
+      "median_steps": 10,
+      "median_calls": 10,
+      "calls": 30,
+      "cost_usd": 1.468
+    }
+  ]
+}

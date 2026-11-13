@@ -17,6 +17,11 @@ again, at most `retries` times in a row. A model call that failed or timed out i
 RecordingFailed). Each user turn ends with what is left; when one tool call or one step is left, it says the
 next reply must be the diagnosis. A tool call after that is refused, and the run stops.
 
+Checks (week 6). A diagnosis that passed validation meets the run's checks before the loop takes it. One so far: where
+rollback_deploy is offered, a fix of kind rollback must name its action in fix_action, or its gate would plan nothing.
+Such a diagnosis is sent back once, as a step of its own, and the reply after it is taken as it comes. With no step
+or time left to send it back, it is taken, and the trace says why. Each run records its checks; a replay applies those.
+
 It acts on nothing. It calls only the read-only tools on its allow-list, through Klaxon's MCP server, a process
 of its own (python -m klaxon.agent.mcp_server), and refuses to start if the server offers any other tool, or
 one not marked read-only. The fix in a diagnosis is proposed, never applied: a human decides. A run may offer
@@ -56,7 +61,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from klaxon.agent.catalog import FIRST_OFFERED
+from klaxon.agent.catalog import FIRST_OFFERED, ROLLBACK_DEPLOY
 from klaxon.agent.claude_code import DEFAULT_MODEL
 from klaxon.agent.contract import MAX_REPLY, ActionSpec, Diagnosis, Reading, read_reply, reply_schema
 from klaxon.agent.mcp_client import (
@@ -95,6 +100,10 @@ MAX_OBSERVATION = MAX_RESULT  # characters of one tool result the model sees: al
 MAX_ALERT = {"name": 100, "summary": 1000, "fired_at": 40}
 # Exact types: a reply Klaxon refused, or could not record, is never asked for again; nor one a retry cannot change.
 RETRYABLE = (ModelError, ModelTimeout)
+# The checks a diagnosis meets, beyond its schema, before the loop takes it (week 6). Each run records the ones it had,
+# and a replay applies only those, so a run recorded before a check existed replays as it ran.
+ROLLBACK_NAMED = "rollback_named"  # a fix of kind rollback names its action, where rollback_deploy is offered
+CHECKS = (ROLLBACK_NAMED,)
 FULLWIDTH_AT = chr(0xFF20)  # as the live adapter writes at signs in turns: never "@path" on Claude Code's command line
 # What a reader can take for the end of a line, once cleaning has dropped the control characters: a newline, and
 # the Unicode line and paragraph separators, which json.dumps writes as they are when ensure_ascii is off.
@@ -189,6 +198,7 @@ class State:
     invalid_in_a_row: int = 0
     failed_in_a_row: int = 0
     calls: dict[str, Call] = field(default_factory=dict)
+    sent_back: list[str] = field(default_factory=list)  # the checks that sent a diagnosis back, each at most once
 
 
 @dataclass(frozen=True)
@@ -200,6 +210,7 @@ class RunResult:
     tool_calls: int
     seconds: float
     trace: Path
+    sent_back: tuple[str, ...] = ()  # the checks that sent a diagnosis back in this run (week 6)
 
 
 # What the model is told.
@@ -384,6 +395,21 @@ def retry_turn(problems: Sequence[str], in_a_row: int, retries: int) -> str:
     )
 
 
+# The turn that sends back a diagnosis whose fix is a rollback but names no action (week 6: Aravind's call at his review
+# of week 5, 2026-11-09; these words were in the option he chose, the same day). In week 5 one run did so (Sonnet 5.5,
+# pool exhaustion, seed 8): its gate then planned nothing and asked nobody.
+ROLLBACK_UNNAMED = (
+    'Your diagnosis proposes a rollback (its proposed_fix has kind "rollback"), but it names no action in fix_action,'
+    " so nothing would be planned or asked. If an action listed at the end of the system prompt carries out your fix,"
+    " name it in fix_action. If none does, change proposed_fix to say what to do instead. Reply with your whole"
+    " diagnosis again, as one JSON object."
+)
+TAKEN = "a diagnosis that passed validation; its fix is proposed, not applied"
+SENT_BACK = "sent back once by a check: its fix is a rollback, and it names no action"
+NO_STEP_TO_SEND_BACK = "; its fix is a rollback with no action named, and no step was left to send it back"
+STILL_UNNAMED = "; its fix is still a rollback with no action named, after the check sent it back once"
+
+
 def _as_turn(text: str) -> str:
     """A reply as it goes back into the conversation: whole, unless it was too long to be used."""
     return text if len(text) <= MAX_REPLY else f"{text[:MAX_REPLY]}...[{len(text) - MAX_REPLY} more characters]"
@@ -420,10 +446,12 @@ class Investigation:
         clock: Callable[[], float],
         extra: Mapping[str, object],
         actions: Sequence[ActionSpec] = (),
+        checks: Sequence[str] = CHECKS,
     ) -> None:
         self.alert, self.model, self.tools, self.trace = alert, model, tools, trace
         self.budgets, self.clock, self.extra = budgets, clock, dict(extra)
         self.actions = tuple(actions)  # the write actions a diagnosis may name; this loop runs none of them
+        self.checks = known_checks(checks)
         self.started = clock()
         self.state = State()
         self.system = ""
@@ -469,6 +497,7 @@ class Investigation:
                 "system_sha256": text_sha256(self.system),
                 "offered_actions": [action.name for action in self.actions],
                 "offered_action_specs": [asdict(action) for action in self.actions],  # as offered: a replay's too
+                "checks": list(self.checks),  # the checks this run had: a replay applies these, and only these
             },
             tool_server=getattr(self.tools, "server_info", {}),
             **self.extra,
@@ -489,13 +518,40 @@ class Investigation:
             return self._invalid(seen, reply, reading)
         self.state.invalid_in_a_row = 0
         if reading.diagnosis is not None:
-            why = "a diagnosis that passed validation; its fix is proposed, not applied"
+            why = TAKEN
+            if self._names_no_rollback_action(reading.diagnosis):
+                if ROLLBACK_NAMED in self.state.sent_back:
+                    why += STILL_UNNAMED  # sent back once already: this reply is taken as it comes
+                elif self.state.steps < self.budgets.steps and self._seconds_left() > 0:
+                    self.trace.step(
+                        system=self.system,
+                        messages=seen,
+                        reply=reply,
+                        proposed=reading.value,
+                        allowed=False,
+                        why=SENT_BACK,
+                    )
+                    self.state.sent_back.append(ROLLBACK_NAMED)
+                    self._add(reply.text, ROLLBACK_UNNAMED)
+                    return None
+                else:
+                    why += NO_STEP_TO_SEND_BACK  # sending it back would end the run with no diagnosis at all
             self.trace.step(
                 system=self.system, messages=seen, reply=reply, proposed=reading.value, allowed=True, why=why
             )
             confidence = f"{reading.diagnosis.confidence:g}"
             return self._stop("diagnosed", f"confidence {confidence}", reading.diagnosis)
         return self._tool(seen, reply, reading)
+
+    def _names_no_rollback_action(self, diagnosis: Diagnosis) -> bool:
+        """Whether the rollback check applies: the run has it, offers rollback_deploy, and the diagnosis proposes a
+        fix of kind rollback without naming an action, so its gate would plan nothing and ask nobody."""
+        return (
+            ROLLBACK_NAMED in self.checks
+            and any(action.name == ROLLBACK_DEPLOY.name for action in self.actions)
+            and diagnosis.proposed_fix.kind == "rollback"
+            and diagnosis.fix_action is None
+        )
 
     def _ask(self, seen: list[Message]):
         """Ask the model, within the time left: a live adapter's own deadline is lowered to it for this call."""
@@ -636,7 +692,21 @@ class Investigation:
     def _stop(self, reason: str, detail: str, diagnosis: Diagnosis | None = None) -> RunResult:
         record = self.trace.stop(reason, detail, diagnosis=None if diagnosis is None else diagnosis.as_dict())
         seconds = record["totals"]["seconds"]
-        return RunResult(reason, detail, diagnosis, self.state.steps, self.state.tool_calls, seconds, self.trace.path)
+        state = self.state
+        sent_back = tuple(state.sent_back)
+        return RunResult(reason, detail, diagnosis, state.steps, state.tool_calls, seconds, self.trace.path, sent_back)
+
+
+def known_checks(checks: Sequence[str]) -> tuple[str, ...]:
+    """The checks a run has, each one this loop knows, each once, in the order given. Anything else: ValueError."""
+    if isinstance(checks, str) or not all(isinstance(name, str) for name in checks):
+        raise ValueError("a run's checks are a list of names")
+    unknown = [name for name in checks if name not in CHECKS]
+    if unknown:
+        raise ValueError(f"no check {clean_text(unknown[0], 64)!r}; the checks are: {', '.join(CHECKS)}")
+    if len(set(checks)) != len(checks):
+        raise ValueError("a run's checks name one twice")
+    return tuple(checks)
 
 
 def investigate(
@@ -648,12 +718,16 @@ def investigate(
     clock: Callable[[], float] = time.monotonic,
     extra: Mapping[str, object] | None = None,
     actions: Sequence[ActionSpec] = (),
+    checks: Sequence[str] = CHECKS,
 ) -> RunResult:
     """Investigate one alert, until a diagnosis or a stop rule. The tools are opened here, and always closed.
-    actions: the write actions its diagnosis may name (none by default); the loop runs none of them."""
+    actions: the write actions its diagnosis may name (none by default); the loop runs none of them. checks: the
+    checks a diagnosis meets before it is taken (all of them by default; a replay passes the ones its run had)."""
     with Trace(trace_path, clock=clock) as trace:
         try:
-            return Investigation(alert, model, tools, trace, budgets or Budgets(), clock, extra or {}, actions).run()
+            budgets = budgets or Budgets()
+            run = Investigation(alert, model, tools, trace, budgets, clock, extra or {}, actions, checks)
+            return run.run()
         finally:
             tools.close()
 
@@ -723,6 +797,15 @@ def offered_actions(recorded: Mapping) -> list[ActionSpec]:
     return offered
 
 
+def recorded_checks(recorded: Mapping) -> tuple[str, ...]:
+    """The checks a recorded run had, so that a replay applies the same: none for a run recorded before the trace
+    named them (week 6), as none existed then. A list that is not one of known names is refused: ValueError."""
+    checks = recorded.get("checks", [])
+    if not isinstance(checks, list):
+        raise ValueError("the trace's checks are not a list")
+    return known_checks(checks)
+
+
 def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[str]]:
     """Replay the run recorded in folder, writing the replay's trace to out. Returns the replay's result, whether
     the whole run could be compared, and how the two traces differ."""
@@ -732,8 +815,9 @@ def replay(folder: Path | str, out: Path | str) -> tuple[RunResult, bool, list[s
     alert = Alert(**start["extra"]["alert"])
     budgets = Budgets(**start["budgets"])
     offered = offered_actions(start["extra"].get("loop", {}))
+    checks = recorded_checks(start["extra"].get("loop", {}))
     model, tools = ReplayModel(folder / RECORDING), ReplayTools(folder / TOOL_RESULTS)
-    result = investigate(alert, model, tools, out, budgets, actions=offered)
+    result = investigate(alert, model, tools, out, budgets, actions=offered, checks=checks)
     whole = recorded[-1].get("reason") not in NOT_REPLAYABLE
     return result, whole, compare(recorded, read_trace(out), whole)
 
@@ -775,7 +859,9 @@ def rerun_command(argv: Sequence[str]) -> str:
     return clean_text(shlex.join(["python", "-m", "klaxon.agent.loop", *argv]), 2000)
 
 
-def _show_prompt(alert: Alert, budgets: Budgets) -> int:
+def _show_prompt(alert: Alert, budgets: Budgets, offered: bool = False) -> int:
+    """The system prompt and the first turn, as a run would get them. offered: as a gated or an evaluation run gets
+    it, with rollback_deploy offered (week 6: so the line on how a rollback is planned can be read where it is)."""
     client = McpClient()
     try:
         specs = allowed_tools(client.open())
@@ -784,7 +870,7 @@ def _show_prompt(alert: Alert, budgets: Budgets) -> int:
         return 2
     finally:
         client.close()
-    system = system_prompt(specs)
+    system = system_prompt(specs, (ROLLBACK_DEPLOY,) if offered else ())
     print(f"System prompt ({len(system):,} characters, sha256 {text_sha256(system)}):\n\n{system}\n")
     print(f"First turn:\n\n{first_turn(alert, budgets)}")
     return 0
@@ -884,6 +970,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         sub.add_argument("--steps", type=int, default=Budgets.steps)
         sub.add_argument("--tool-calls", type=int, default=Budgets.tool_calls)
         sub.add_argument("--seconds", type=float, default=Budgets.seconds)
+    show.add_argument(
+        "--offered", action="store_true", help="with rollback_deploy offered, as gated and evaluation runs"
+    )
     live.add_argument("--model", default=DEFAULT_MODEL)
     live.add_argument("--evidence-dir", type=Path, default=REPO / "evidence" / "week3")
     again.add_argument("folder", type=Path, help=f"a run's folder, with {TRACE}, {RECORDING} and {TOOL_RESULTS}")
@@ -897,7 +986,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(exc, file=sys.stderr)
         return 2
     if args.action == "prompt":
-        return _show_prompt(alert, budgets)
+        return _show_prompt(alert, budgets, args.offered)
     return _live(alert, budgets, args.model, args.evidence_dir, argv)
 
 

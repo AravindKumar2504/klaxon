@@ -415,7 +415,7 @@ def at_alert(evaluation: Mapping) -> dict:
 
 
 def summary(result: RunResult) -> dict:
-    return {
+    found = {
         "reason": result.reason,
         "detail": result.detail,
         "steps": result.steps,
@@ -424,6 +424,9 @@ def summary(result: RunResult) -> dict:
         "diagnosis": None if result.diagnosis is None else result.diagnosis.as_dict(),
         "trace": result.trace.name,
     }
+    if result.sent_back:  # only then (week 6): a run no check sent back is saved as before
+        found["sent_back"] = list(result.sent_back)
+    return found
 
 
 def quiet(
@@ -708,7 +711,8 @@ def render(record: Record) -> str:
         title = "Klaxon week 4: a rehearsal of a fault, with no model"
     if record.case is not None:
         what = "a rehearsal of" if record.rehearsal else "an evaluation run on"
-        title = f"Klaxon week 5: {what} case {record.case['name']}, seed {record.case['seed']}, a fault"
+        # Every evaluation run made since version 2 of the harness (klaxon.evaluation.VERSION) is week 6's.
+        title = f"Klaxon week 6: {what} case {record.case['name']}, seed {record.case['seed']}, a fault"
     lines = [
         f"{title}: {f['name']}",
         label(record),

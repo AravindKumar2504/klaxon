@@ -121,8 +121,8 @@ claude-check: ## one tiny live call to Claude on Aravind's seat ("Reply with the
 # pasted into the shell's text: an apostrophe in an alert cannot break the command or run as one.
 LOOP_ARGS = --alert "$$ALERT" --alert-name "$${ALERT_NAME:-manual}" $${STEPS:+--steps "$$STEPS"} \
 	$${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} $${TIME_LIMIT:+--seconds "$$TIME_LIMIT"}
-loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...'
-	$(PY) -m klaxon.agent.loop prompt $(LOOP_ARGS)
+loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...' (OFFERED=1: as a gated or evaluation run, with rollback_deploy)
+	$(PY) -m klaxon.agent.loop prompt $(LOOP_ARGS) $${OFFERED:+--offered}
 
 investigate: ## one live run of the loop: Claude on Aravind's seat, the running stack (STEPS=, TOOL_CALLS=, TIME_LIMIT=seconds)
 	$(PY) -m klaxon.agent.loop run $(LOOP_ARGS)
@@ -155,7 +155,7 @@ eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing a
 eval-report: ## the evaluation's report, worked out offline from saved runs: make eval-report RUNS='evidence/week5/<suite folder> evidence/week4' (SHOW_JUDGE=1: the judge's verdicts on runs not labeled yet too)
 	$(PY) -m klaxon.evaluation report $$RUNS $${SHOW_JUDGE:+--show-judge}
 
-rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week5/ (his OK first): make rehearse-case CASE=false-alarm
+rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week6/ (his OK first): make rehearse-case CASE=false-alarm
 	$(PY) -m klaxon.evaluation rehearse "$$CASE" $${SEED:+--seed "$$SEED"}
 
 # The graders (week 5, item 2). RUN may name several folders, or a folder of runs: it is split on spaces, never pasted
