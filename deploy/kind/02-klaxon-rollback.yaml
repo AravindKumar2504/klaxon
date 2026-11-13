@@ -1,0 +1,45 @@
+# Klaxon's one write on the cluster (week 6, item 4): an approved rollback of one of our four services, and nothing
+# else. Kubernetes enforces it: a token of klaxon-rollback can get, watch and patch those four Deployments, named, and
+# read ReplicaSets to find the revision that runs. No create, no delete, no other workload, no pod, no Secret, no
+# ConfigMap, no other namespace. Only the approval gate uses it, after Aravind's typed approval (make approve); the
+# loop and its tools never get it (they read as klaxon-reader, 01-klaxon-access.yaml). The harness keeps the cluster's
+# admin access. make kind-up applies this file with the access file; each gated run on kind is given a token of
+# klaxon-rollback that lasts an hour (.kind/, not committed).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: klaxon-rollback
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: klaxon-rollback, app.kubernetes.io/part-of: klaxon }
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: klaxon-rollback
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: klaxon-rollback, app.kubernetes.io/part-of: klaxon }
+rules:
+  # list and watch by name: kubectl rollout status watches its Deployment with a metadata.name field selector.
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["ledger-consumer", "payment-confirmer", "payments-api", "webhook-receiver"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: klaxon-rollback
+  namespace: klaxon
+  labels: { app.kubernetes.io/name: klaxon-rollback, app.kubernetes.io/part-of: klaxon }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: klaxon-rollback
+subjects:
+  - kind: ServiceAccount
+    name: klaxon-rollback
+    namespace: klaxon

@@ -60,6 +60,12 @@ READER = "klaxon-reader"  # its ServiceAccount
 READER_KUBECONFIG = REPO / ".kind" / "reader.kubeconfig"  # a token of klaxon-reader, made for each run on kind
 READER_CONTEXT = f"{CONTEXT}-reader"
 TOKEN_SECONDS = 3600  # how long a reader's token lasts: an hour, about four times a gated run
+# Week 6, item 4: Klaxon's one write on the cluster, an approved rollback, through an account of its own that can
+# change only our four Deployments (02-klaxon-rollback.yaml). Its token, too, is made for each gated run, for an hour.
+ROLLBACK_FILE = "02-klaxon-rollback.yaml"
+ROLLBACK = "klaxon-rollback"  # its ServiceAccount
+ROLLBACK_KUBECONFIG = REPO / ".kind" / "rollback.kubeconfig"
+ROLLBACK_CONTEXT = f"{CONTEXT}-rollback"
 JOBS = ("job/kafka-init",)  # made again at each kind-up: a Job's template cannot change once it is made
 # The money check's addresses can come from these (klaxon.checks.live). On the cluster they must be its defaults,
 # the ports deploy/kind/cluster.yaml maps, or the check could read another stack while its run says kind.
@@ -183,12 +189,20 @@ def reader_kubectl(*args: str, timeout: float = 600) -> str:
     return _kubectl(*args, timeout=timeout, config=READER_KUBECONFIG, context=READER_CONTEXT)
 
 
-def make_reader_kubeconfig() -> Path:
-    """A kubeconfig for klaxon-reader with a token of its own that lasts TOKEN_SECONDS, written beside the cluster's
-    (readable by this user only, never committed). Made for each run on kind: the tools' access ends with the token."""
-    token = kubectl("create", "token", READER, f"--duration={TOKEN_SECONDS}s").strip()
+def rollback_kubectl(*args: str, stdin: str | None = None, timeout: float = 600) -> str:
+    """kubectl as klaxon-rollback, which Kubernetes lets only get, watch and patch our four Deployments and read their
+    ReplicaSets (deploy/kind, 02-klaxon-rollback.yaml): what the approval gate rolls a service back with, after a
+    person's typed yes (week 6, item 4). The same checks as kubectl()."""
+    ensure_cluster_local(ROLLBACK_KUBECONFIG, ROLLBACK_CONTEXT)
+    return _kubectl(*args, stdin=stdin, timeout=timeout, config=ROLLBACK_KUBECONFIG, context=ROLLBACK_CONTEXT)
+
+
+def _account_kubeconfig(account: str, path: Path, context: str) -> Path:
+    """A kubeconfig for one of Klaxon's accounts with a token of its own that lasts TOKEN_SECONDS, written beside the
+    cluster's (readable by this user only, never committed), made again each time: the access ends with the token."""
+    token = kubectl("create", "token", account, f"--duration={TOKEN_SECONDS}s").strip()
     if not token or any(c.isspace() for c in token):
-        raise ClusterError(f"kubectl create token gave no token for {READER}")
+        raise ClusterError(f"kubectl create token gave no token for {account}")
     view = json.loads(kubectl("config", "view", "--minify", "--raw", "--output", "json"))
     (entry,) = view.get("clusters") or [None]
     server = (entry or {}).get("cluster", {}).get("server", "")
@@ -198,16 +212,27 @@ def make_reader_kubeconfig() -> Path:
         "apiVersion": "v1",
         "kind": "Config",
         "clusters": [{"name": CONTEXT, "cluster": entry["cluster"]}],
-        "users": [{"name": READER, "user": {"token": token}}],
-        "contexts": [{"name": READER_CONTEXT, "context": {"cluster": CONTEXT, "user": READER, "namespace": NAMESPACE}}],
-        "current-context": READER_CONTEXT,
+        "users": [{"name": account, "user": {"token": token}}],
+        "contexts": [{"name": context, "context": {"cluster": CONTEXT, "user": account, "namespace": NAMESPACE}}],
+        "current-context": context,
     }
-    READER_KUBECONFIG.parent.mkdir(exist_ok=True)
-    READER_KUBECONFIG.unlink(missing_ok=True)
-    descriptor = os.open(READER_KUBECONFIG, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    path.parent.mkdir(exist_ok=True)
+    path.unlink(missing_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as out:
         out.write(json.dumps(config, indent=2) + "\n")
-    return READER_KUBECONFIG
+    return path
+
+
+def make_reader_kubeconfig() -> Path:
+    """klaxon-reader's kubeconfig, made for each run on kind: the tools' access ends with its token."""
+    return _account_kubeconfig(READER, READER_KUBECONFIG, READER_CONTEXT)
+
+
+def make_rollback_kubeconfig() -> Path:
+    """klaxon-rollback's kubeconfig, made for each gated run on kind (week 6, item 4): the gate's access to roll a
+    service back ends with its token."""
+    return _account_kubeconfig(ROLLBACK, ROLLBACK_KUBECONFIG, ROLLBACK_CONTEXT)
 
 
 def clusters() -> list[str]:
@@ -327,8 +352,10 @@ def up() -> None:
     image = content_tag()
     _say(f"Loading it into the cluster as {image}, its own id (it is never pulled)")
     _run(kind_binary(), ["load", "docker-image", image, "--name", NAME], timeout=600)
-    _say(f"Applying {NAMESPACE_FILE}, {ACCESS_FILE} and the ConfigMaps of compose.yaml's mounted files")
-    apply(NAMESPACE_FILE, ACCESS_FILE)
+    _say(
+        f"Applying {NAMESPACE_FILE}, {ACCESS_FILE}, {ROLLBACK_FILE} and the ConfigMaps of compose.yaml's mounted files"
+    )
+    apply(NAMESPACE_FILE, ACCESS_FILE, ROLLBACK_FILE)
     kubectl(*SERVER_SIDE, "--filename", "-", stdin=json.dumps(configmaps()))
     for files, waits in STAGES:
         for job in (workload for workload in waits if workload in JOBS):
@@ -663,6 +690,28 @@ class ClusterDeployer:
             path = f"/spec/template/spec/containers/0/env/{places[inside]}/value"
             steps.append({"op": "replace", "path": path, "value": wanted[name]})
         return json.dumps(steps)
+
+
+def klaxons_deployer() -> ClusterDeployer:
+    """The deployer the approval gate rolls a service back with on kind (week 6, item 4): kind's own deploy log, the
+    faults' too, and its lock, so a rollback is planned from the deploy it undoes and waits for any other; and
+    klaxon-rollback's access, never the admin's. Putting back the settings before the bad deploy makes the same pod
+    template as the revision before it, so Kubernetes brings that revision back, as kubectl rollout undo does, but
+    only if the Deployment is unchanged since it was read: the patch's test of its resourceVersion."""
+    return ClusterDeployer(kubectl=rollback_kubectl)
+
+
+HEALTH_KINDS = "deployments,statefulsets,pods"  # what verification reads of the cluster, as klaxon-reader
+
+
+def health_objects() -> list[dict]:
+    """The namespace's Deployments, StatefulSets and pods, as klaxon-reader reads them: what verification judges the
+    cluster's health by (klaxon.agent.verify.cluster_unwell). Reads only."""
+    found = json.loads(reader_kubectl("get", HEALTH_KINDS, "--output", "json"))
+    items = found.get("items") if isinstance(found, dict) else None
+    if not isinstance(items, list):
+        raise ClusterError("the cluster's workloads came back in an unexpected shape")
+    return items
 
 
 def _ps() -> None:

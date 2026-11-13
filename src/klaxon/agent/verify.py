@@ -352,6 +352,44 @@ def containers_unwell(rows: Sequence[Mapping]) -> str | None:
     return f"not healthy: {', '.join(sorted(wrong))}" if wrong else None
 
 
+def rolled_out(item: Mapping) -> bool:
+    """Whether a Deployment's rollout is done, as kubectl rollout status says it: its newest generation seen, every
+    replica updated, no old one left, and every updated one available."""
+    meta, spec, status = (item.get(key) or {} for key in ("metadata", "spec", "status"))
+    updated = status.get("updatedReplicas", 0)
+    return (
+        status.get("observedGeneration", 0) >= meta.get("generation", 1)
+        and updated >= spec.get("replicas", 1)
+        and status.get("replicas", 0) <= updated
+        and status.get("availableReplicas", 0) >= updated
+    )
+
+
+def cluster_unwell(objects: Sequence[Mapping]) -> str | None:
+    """Why the kind cluster is not all healthy, or None (week 6, item 4), from its Deployments, StatefulSets and pods
+    as klaxon-reader reads them (klaxon.patient.cluster.health_objects): each Deployment rolled out; each StatefulSet
+    ready, at its newest revision; and each pod ready, or done (the topics Job's), as kind-check reads them. A pod on
+    its way out, which a rollout is deleting, does not count."""
+    if not any(item.get("kind") == "Pod" for item in objects):
+        return "the cluster lists no pod of the stack"
+    wrong = []
+    for item in objects:
+        meta, spec, status = (item.get(key) or {} for key in ("metadata", "spec", "status"))
+        name = clean_text(str(meta.get("name")), 64)
+        if item.get("kind") == "Deployment" and not rolled_out(item):
+            wrong.append(f"{name} rolling out")
+        elif item.get("kind") == "StatefulSet":
+            newest = status.get("updateRevision") in (None, status.get("currentRevision"))
+            if status.get("readyReplicas") != spec.get("replicas", 1) or not newest:
+                wrong.append(f"{name} not ready")
+        elif item.get("kind") == "Pod" and not meta.get("deletionTimestamp"):
+            containers = status.get("containerStatuses") or []
+            ready = bool(containers) and all(c.get("ready") for c in containers)
+            if not ready and status.get("phase") != "Succeeded":
+                wrong.append(f"{name} {clean_text(str(status.get('phase')), 20)}")
+    return f"not healthy: {', '.join(sorted(wrong))}" if wrong else None
+
+
 @dataclass(frozen=True)
 class Health:
     healthy: bool
@@ -369,9 +407,12 @@ def wait_healthy(
     clock: Callable[[], float] = time.monotonic,
     within: float = HEALTHY_WITHIN_SECONDS,
     every: float = EVERY_SECONDS,
+    unwell: Callable[[Sequence[Mapping]], str | None] = containers_unwell,
+    what: str = "docker",
 ) -> Health:
     """Evaluate the rules, and read the containers, every `every` seconds, until both are fine at QUIET_IN_A_ROW
-    rounds in a row; at most `within` seconds."""
+    rounds in a row; at most `within` seconds. On kind (week 6, item 4): containers reads the cluster's workloads,
+    unwell is cluster_unwell, and what names the cluster."""
     started = clock()
     rounds: list[dict] = []
     read: list[bool] = []  # at each round, whether the books rule had a verdict to read
@@ -381,10 +422,10 @@ def wait_healthy(
         why = metrics_unwell(evaluation)
         read.append(books_read(evaluation))
         try:
-            unwell = containers_unwell(containers())
-        except Exception as exc:  # docker out of reach: not healthy, as far as anyone can tell
-            unwell = f"docker could not be read ({type(exc).__name__})"
-        why = "; ".join(part for part in (why, unwell) if part) or None
+            sick = unwell(containers())
+        except Exception as exc:  # docker (or the cluster) out of reach: not healthy, as far as anyone can tell
+            sick = f"{what} could not be read ({type(exc).__name__})"
+        why = "; ".join(part for part in (why, sick) if part) or None
         rounds.append({"at_utc": evaluation.at_utc, "unwell": why})
         in_a_row = 0 if why else in_a_row + 1
         if in_a_row >= QUIET_IN_A_ROW:
@@ -432,12 +473,15 @@ def verify(
     observe: float = OBSERVE_SECONDS,
     within: float = HEALTHY_WITHIN_SECONDS,
     every: float = EVERY_SECONDS,
+    unwell: Callable[[Sequence[Mapping]], str | None] = containers_unwell,
+    what: str = "docker",
 ) -> Verification:
     """Verify an action that has just run: the money check right after it, health, then the money check again, no
-    sooner than `observe` seconds after the action. rules: one evaluation of the symptom rules, with fresh counts."""
+    sooner than `observe` seconds after the action. rules: one evaluation of the symptom rules, with fresh counts.
+    containers, unwell and what: how health reads and judges the stack (Compose's by default; kind's, week 6)."""
     acted = clock()
     at_action = read(check, SETTLE_SECONDS, now)
-    health = wait_healthy(rules, containers, sleep, clock, within, every)
+    health = wait_healthy(rules, containers, sleep, clock, within, every, unwell, what)
     left = observe - (clock() - acted)
     if left > 0:
         sleep(left)

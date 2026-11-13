@@ -463,7 +463,7 @@ def _timeline(saved: Mapping, start: Mapping, stop: Mapping, log: Sequence[Mappi
             rows.append(_row(line.get("at"), None, said, f"gate.jsonl: {line.get('event')}"))
     found = saved.get("verification")
     if found:
-        rows += _verification_rows(found, since("verify_ended_at"))
+        rows += _verification_rows(found, since("verify_ended_at"), saved.get("platform", "compose"))
     clearing = by_faults[1:] if fault_deploy is not None else by_faults
     cleared = saved.get("cleared")
     what = (
@@ -493,7 +493,11 @@ def _timeline(saved: Mapping, start: Mapping, stop: Mapping, log: Sequence[Mappi
     return rows
 
 
-def _verification_rows(found: Mapping, ended: str | None) -> list[dict]:
+# What health read besides the rules, by where the run ran (week 6, item 4): on kind, the cluster's rollouts and pods.
+HEALTH_READ = {"compose": "the containers", "kind": "the cluster's rollouts and pods"}
+
+
+def _verification_rows(found: Mapping, ended: str | None, platform: str = "compose") -> list[dict]:
     rows = []
     at_action = verify.Reading.from_dict(found["at_action"])
     rows.append(
@@ -511,8 +515,8 @@ def _verification_rows(found: Mapping, ended: str | None) -> list[dict]:
             _row(
                 rounds[-1]["at_utc"],
                 None,
-                f"Health, by code: {_n(len(rounds), 'round', 'rounds')} of the rules and the containers, from"
-                f" {rounds[0]['at_utc']} to {rounds[-1]['at_utc']}: {state}.",
+                f"Health, by code: {_n(len(rounds), 'round', 'rounds')} of the rules and {HEALTH_READ[platform]},"
+                f" from {rounds[0]['at_utc']} to {rounds[-1]['at_utc']}: {state}.",
                 "run.json: verification.health",
             )
         )

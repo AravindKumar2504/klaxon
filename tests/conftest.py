@@ -15,6 +15,7 @@ from klaxon.patient.provider import FakeProvider
 _SESSION_LOGS = tempfile.mkdtemp(prefix="klaxon-test-deploys-")
 atexit.register(shutil.rmtree, _SESSION_LOGS, ignore_errors=True)
 os.environ["KLAXON_DEPLOY_LOG"] = str(Path(_SESSION_LOGS) / "deploys.jsonl")
+os.environ["KLAXON_KIND_DEPLOY_LOG"] = str(Path(_SESSION_LOGS) / "deploys-kind.jsonl")  # kind's own (week 6)
 
 SECRET = b"test-secret-not-real"
 NO_CLAUDE = "/nonexistent/klaxon-offline-tests-never-call-claude"
@@ -36,8 +37,11 @@ def no_real_claude_code(monkeypatch):
 @pytest.fixture(autouse=True)
 def no_real_deploy_log(monkeypatch, tmp_path_factory):
     """No test reads or writes the real deploy log (~/.klaxon/deploys.jsonl, klaxon.patient.deploys): a rollback
-    goes back to what it says. Every test gets a log of its own, in a folder of its own, which starts empty."""
-    monkeypatch.setenv("KLAXON_DEPLOY_LOG", str(tmp_path_factory.mktemp("deploy-log") / "deploys.jsonl"))
+    goes back to what it says. Every test gets a log of its own, in a folder of its own, which starts empty. The same
+    for kind's own log (~/.klaxon/deploys-kind.jsonl, week 6), which Klaxon's rollback on the cluster reads."""
+    logs = tmp_path_factory.mktemp("deploy-log")
+    monkeypatch.setenv("KLAXON_DEPLOY_LOG", str(logs / "deploys.jsonl"))
+    monkeypatch.setenv("KLAXON_KIND_DEPLOY_LOG", str(logs / "deploys-kind.jsonl"))
 
 
 @pytest.fixture

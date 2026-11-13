@@ -53,7 +53,7 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
-		src/klaxon/patient/cluster.py tests/test_cluster.py
+		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
@@ -136,9 +136,9 @@ alerts: ## the alert rules (symptoms only) read the running stack once, and prin
 alerts-under-traffic: ## traffic and no fault: do the alert rules stay quiet? (MINUTES=5, RATE=3), saved to evidence/week4/
 	$(PY) -m klaxon.fault_runs quiet $${MINUTES:+--minutes "$$MINUTES"} $${RATE:+--rate "$$RATE"}
 
-investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only)
+investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only; PLATFORM=kind: on the kind cluster, saved to evidence/week6/kind/)
 	$(PY) -m klaxon.fault_runs run "$$FAULT" $${STEPS:+--steps "$$STEPS"} $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} \
-		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions}
+		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions} $${PLATFORM:+--platform "$$PLATFORM"}
 
 rehearse-fault: ## a fault under traffic and the alert rules, no model: what they see, saved to evidence/week4/ (his OK first; PLATFORM=kind: on the kind cluster, saved to evidence/week6/kind/)
 	$(PY) -m klaxon.fault_runs rehearse "$$FAULT" $${RATE:+--rate "$$RATE"} $${PLATFORM:+--platform "$$PLATFORM"}

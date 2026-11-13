@@ -250,10 +250,12 @@ def test_the_secret_holds_exactly_what_the_specs_read_and_no_spec_holds_one_itse
 
 
 def test_up_applies_each_manifest_once_in_compose_yamls_order_and_waits_for_each_workload():
-    staged = [cluster.NAMESPACE_FILE, cluster.ACCESS_FILE] + [file for files, _ in cluster.STAGES for file in files]
+    first = [cluster.NAMESPACE_FILE, cluster.ACCESS_FILE, cluster.ROLLBACK_FILE]  # week 6: the rollback's account too
+    staged = first + [file for files, _ in cluster.STAGES for file in files]
     assert sorted(staged) == FILES and len(set(staged)) == len(staged)
     assert {o["kind"] for o in DOCS[cluster.NAMESPACE_FILE]} == {"Namespace", "Secret"}
     assert [o["kind"] for o in DOCS[cluster.ACCESS_FILE]] == ["ServiceAccount", "Role", "RoleBinding"]
+    assert [o["kind"] for o in DOCS[cluster.ROLLBACK_FILE]] == ["ServiceAccount", "Role", "RoleBinding"]
     stage_of = {}
     for n, (files, waits) in enumerate(cluster.STAGES):
         inside = [
@@ -483,7 +485,7 @@ def test_up_creates_the_cluster_builds_and_loads_our_image_then_applies_in_order
         if args[8:10] != ["config", "view"]:
             assert i > 0 and calls[i - 1][8:10] == ["config", "view"], args
     first, configmaps, *staged = streams(fake)
-    assert first == cluster.manifests((cluster.NAMESPACE_FILE, cluster.ACCESS_FILE))
+    assert first == cluster.manifests((cluster.NAMESPACE_FILE, cluster.ACCESS_FILE, cluster.ROLLBACK_FILE))
     assert json.loads(configmaps) == cluster.configmaps()
     assert staged == [cluster.manifests(files, TAGGED[-1]) for files, _ in cluster.STAGES]
 

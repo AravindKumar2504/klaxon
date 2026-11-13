@@ -46,6 +46,8 @@ run on it; `grade` compares a saved run's diagnosis with its fault's cause again
 
 Run: python -m klaxon.fault_runs run FAULT [--steps N --tool-calls N --seconds S]   live, with Aravind's OK each time
          [--no-actions]                                                               diagnosis only, as in week 3
+         [--platform kind]       week 6: on the kind cluster; Klaxon's tools read it as klaxon-reader, and its
+                                 rollback, after a typed approval, goes through klaxon-rollback (kind_parts)
      python -m klaxon.fault_runs quiet [--minutes M]                                  traffic only: injects nothing
      python -m klaxon.fault_runs rehearse FAULT                                       the fault and the rules: no model
      python -m klaxon.fault_runs grade FOLDER                                         offline
@@ -55,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import signal
 import sys
@@ -74,7 +77,7 @@ from klaxon.agent.contract import Diagnosis
 from klaxon.agent.loop import Alert, Budgets, RunResult
 from klaxon.agent.mcp_client import McpClient, McpError
 from klaxon.agent.model import ModelError
-from klaxon.agent.tools import clean_text
+from klaxon.agent.tools import PLATFORM_VARIABLE, clean_text
 from klaxon.agent.trace import read_trace
 from klaxon.checks import live
 from klaxon.checks.money import format_cents
@@ -832,6 +835,34 @@ def klaxon_parts(folder: Path, deployer: Deployer) -> Gated:
     )
 
 
+def kind_parts(folder: Path) -> Gated:
+    """The gate, verification and undo of a gated run on the kind cluster (week 6, item 4), as klaxon_parts' on
+    Compose, but for two things. Klaxon's rollback, and any undo it proposes, go through klaxon-rollback
+    (cluster.klaxons_deployer: kind's own deploy log, the faults' too, and its lock), never the admin's access. And
+    health reads the cluster as klaxon-reader: every rollout done and every pod ready, with the rules quiet."""
+    deployer = cluster.klaxons_deployer()
+
+    def verify_action(rules: Callable[[], alerts.Evaluation]) -> verify.Verification:
+        return verify.verify(rules, containers=cluster.health_objects, unwell=verify.cluster_unwell, what="the cluster")
+
+    def propose_undo(outcome: gate.Outcome, found: verify.Verification) -> gate.Outcome:
+        return gate.propose_undo(folder, outcome, deployer, "the verification failed: " + " ".join(found.said))
+
+    return Gated(
+        read_money=lambda: verify.read(live.check_live, alerts.MONEY_SETTLE_SECONDS),
+        act=lambda alert, diagnosis, asking: gate.act(folder, diagnosis, deployer, asdict(alert), before_asking=asking),
+        decided=lambda: gate.decided(folder),
+        verify_action=verify_action,
+        propose_undo=propose_undo,
+        deploys=deployer.log.records,
+    )
+
+
+def kind_tools() -> McpClient:
+    """Klaxon's tool server for a run on kind: its two docker tools read the cluster, as klaxon-reader."""
+    return McpClient(env=os.environ | {PLATFORM_VARIABLE: "kind"})
+
+
 def save(folder: Path, record: Record, header: Mapping) -> None:
     """A run's evidence, written and printed, and a warning when its fault may still be in place."""
     (folder / RUN_FILE).write_text(json.dumps(evidence(record, header), indent=2, default=str) + "\n")
@@ -843,27 +874,47 @@ def save(folder: Path, record: Record, header: Mapping) -> None:
 
 def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     fault = faults.get(args.fault)
+    command = shlex.join(["python", "-m", "klaxon.fault_runs", *argv])
+    on_kind = args.platform == "kind"
+    tools: Callable[[], McpClient] | None = None  # Klaxon's tool server as it starts on Compose
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
         budgets = Budgets(steps=args.steps, tool_calls=args.tool_calls, seconds=args.seconds)
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
-        binary = preflight(args.model)
-        parts = Stack(faults.LocalStack(), alerts.Alerting())
-        header = {"fault_name": fault.name} | _provenance(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]))
-    except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError) as exc:
+        if on_kind:  # week 6, item 4: the fault as a rollout; Klaxon reads and acts on the cluster, never as its admin
+            cluster.ready()  # the cluster up, every pod ready, the Compose stack down, the ports the cluster's
+            cluster.make_reader_kubeconfig()  # the tools' and verification's reads: an hour
+            cluster.make_rollback_kubeconfig()  # the gate's rollback, after a typed approval: an hour
+            tools = kind_tools
+            binary = preflight(args.model, client=tools)
+            parts = Stack(faults.LocalStack(deployer=cluster.ClusterDeployer()), alerts.Alerting())
+            header = {"fault_name": fault.name} | cluster.provenance(
+                command, datetime.now(timezone.utc), cluster.describe()
+            )
+        else:
+            binary = preflight(args.model)
+            parts = Stack(faults.LocalStack(), alerts.Alerting())
+            header = {"fault_name": fault.name} | _provenance(command)
+    except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError, cluster.ClusterError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
     gated_run = not args.no_actions
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-    folder = loop._new_folder(args.evidence_dir, f"{stamp}_{'gated-run' if gated_run else 'fault-run'}_{fault.name}")
-    record = Record(fault.describe(), asdict(settings), asdict(budgets))
+    evidence_dir = args.evidence_dir or (KIND_EVIDENCE if on_kind else REPO / "evidence" / "week4")
+    folder = loop._new_folder(evidence_dir, f"{stamp}_{'gated-run' if gated_run else 'fault-run'}_{fault.name}")
+    record = Record(fault.describe(), asdict(settings), asdict(budgets), platform=args.platform)
     offered = OFFERED if gated_run else ()
-    gated = klaxon_parts(folder, parts.local.deployer) if gated_run else None
+    gated = None
+    if gated_run:
+        gated = kind_parts(folder) if on_kind else klaxon_parts(folder, parts.local.deployer)
     print(f"The run's folder: {clean_text(str(folder))}", flush=True)  # make approve needs it, while the run waits
 
     def investigate(alert: Alert) -> RunResult:
         what = GATED_WHAT if gated_run else WHAT
         run_header = header | {"what": what, "alert": asdict(alert), "budgets": asdict(budgets)}
-        return loop.investigate_live(alert, budgets, folder, run_header, args.model, binary, actions=offered)
+        client = None if tools is None else tools()
+        return loop.investigate_live(
+            alert, budgets, folder, run_header, args.model, binary, actions=offered, tool_client=client
+        )
 
     code = 0
     try:
@@ -978,6 +1029,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     live.add_argument(
         "--no-actions", action="store_true", help="offer no write action: the loop only diagnoses, as in week 3"
     )
+    live.add_argument("--platform", choices=PLATFORMS, default="compose", help="where: Compose, or kind (week 6)")
     calm = actions.add_parser("quiet", help="traffic and no fault: do the alert rules stay quiet?")
     calm.add_argument("--minutes", type=float, default=5.0)
     rehearsal = actions.add_parser(
@@ -988,8 +1040,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     for sub in (live, calm, rehearsal):
         sub.add_argument("--rate", type=float, default=3.0, help="new payments per second, on average")
         sub.add_argument("--seed", type=int, default=7)
-        # A rehearsal's folder follows its platform: evidence/week4, or evidence/week6/kind on the cluster.
-        default = None if sub is rehearsal else REPO / "evidence" / "week4"
+        # A run's or a rehearsal's folder follows its platform: evidence/week4, or evidence/week6/kind on the cluster.
+        default = None if sub in (live, rehearsal) else REPO / "evidence" / "week4"
         sub.add_argument("--evidence-dir", type=Path, default=default)
     again = actions.add_parser("grade", help="compare a saved run's diagnosis with its fault's cause; offline")
     again.add_argument("folder", type=Path)
