@@ -997,3 +997,30 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - *Why start early.* Week 5 was accepted a day early. Two more days make room for what the runs show.
 
 **One idea to own before item 3: a Deployment keeps its history.** Each rollout makes a new revision, and Kubernetes keeps the ones before. Undoing a bad rollout means putting back the revision before it. Klaxon's rule stays the one from week 4: code plans it from the deploy log, checks that nothing changed since, and runs it only after your typed yes.
+
+## Week 6, item 4 (built 2026-11-13, run on kind 2026-11-15): Klaxon undoes a bad rollout on kind
+
+**What it is.** Week 4's rollback, on Kubernetes. Klaxon still diagnoses with read-only tools and asks before it acts. After your typed yes, it puts back the bad Deployment's settings, through an account that can do almost nothing else. Then code checks the cluster and the money, as on Compose.
+
+**The account.** `klaxon-rollback` may get, list, watch and patch our four Deployments, by name, and read ReplicaSets. Nothing else: no create, no delete, no pod, no Secret. Kubernetes enforces that, not Klaxon. Only the gate uses it, after your approval. The loop's tools still read as `klaxon-reader`, and the harness keeps the admin access. Each gated run gets a token of each account that lasts an hour.
+
+**The rollback.** Planned from kind's deploy log, as on Compose: the log says which deploy was bad and what ran before it. One JSON patch puts those settings back. Its first step tests the Deployment's version, so Kubernetes refuses the whole patch if anything changed since Klaxon read it. Then Klaxon waits for the rollout to finish and logs the deploy.
+
+**Verification on kind.** Every Deployment rolled out, every StatefulSet ready, every pod ready (a pod a rollout is deleting does not count). The rules quiet at 2 evaluations in a row. Then the money, twice, as on Compose: is the cause removed, and is the money right.
+
+**What ran** (your OK, 2026-11-15 UTC; a fresh cluster each run; Opus 5.5).
+- *Fault 1, the ledger consumer:* the first request was denied, as what was typed was not its id. You approved the second 206 s after it was made. The rollback put the dedupe back. Verification passed: the cause removed, the money not right (41 events counted more than once; our books $2,067.33 ahead).
+- *Fault 4, the payments API:* the first request expired unanswered. You approved the second in 37 s. The rollback put the amounts back in cents. Verification passed: the cause removed, the money not right (239 payments charged the wrong amount).
+- Every diagnosis named its cause by the rule. Both postmortems passed their number check after one call. Each run and each draft replays exactly.
+- The damage grew while a request waited: fault 1's from 9 events at the request to 41 at the action, fault 4's from 112 payments to 239.
+
+**What it does not show.** One approved run per fault: the rollback works on kind, but not how often. A rollback stops new damage and repairs none. Verification's line still says "every container is healthy", Compose's words; on kind it read rollouts and pods (known gap 14).
+
+**What to read in the code.** `deploy/kind/02-klaxon-rollback.yaml`. In `src/klaxon/patient/cluster.py`: `make_rollback_kubeconfig`, `klaxons_deployer` and `ClusterDeployer.deploy`. In `src/klaxon/agent/verify.py`: `cluster_unwell`. In `src/klaxon/fault_runs.py`: `kind_parts`.
+
+**Likely questions.**
+- *Why a second account?* The reader cannot write, and the admin can do anything. A rollback needs one write: a patch of our four Deployments. An account with only that makes Kubernetes hold the line, so a bug in Klaxon cannot touch Postgres, a Secret or another workload.
+- *Is it `kubectl rollout undo`?* Not the command, but the same effect. Putting back the old settings makes the same pod template as the revision before, so Kubernetes brings that revision back.
+- *What if someone changed the Deployment after Klaxon planned the rollback?* Kubernetes refuses the patch, and nothing changes. The plan is also refused if the deploy log's latest deploy of that service is not the one it undoes.
+- *Why did a typo deny the first request?* The gate takes only the request's exact id as a yes. Anything else is a no, and each request gets one decision, saved once. A slip fails safe: nothing runs.
+- *Why do the diagnosis's deploy time and the log's differ by 2 s?* The cluster dates a revision when Kubernetes makes it. The log dates the deploy when its rollout is done. Both postmortems point out the difference.

@@ -879,3 +879,14 @@ Planned in a session of its own, started by week 5's session, on the branch `cla
   - *The week.* Items 1 and 3 in parallel sessions (other files); items 2 and 4 after them. One stack at a time on this Mac. Docker on only when needed, and stopped after. If the week runs long, the LangGraph pilot's 8 runs move to week 8's comparison runs; nothing else moves without his word.
 - **Where week 5's inputs go** (Claude). Known gap 11 (a) to (c): item 1. Gap 11 (d): his labels on the new runs where the graders disagree. Gap 13: items 3 and 4. Gap 12 stays as recorded.
 - **PLAN.md** (Claude): the week 6 row names what this plan decided, and the schedule's week 6 row starts on Mon Nov 9.
+
+## 2026-11-13 to 15 (week 6 session: item 4, rollback on kind)
+
+Built in item 2's session, in its worktree (`.claude/worktrees/intelligent-darwin-61fea6`), on the branch `claude/week-6-rollback-on-kind`, cut from item 3's `6280631` with item 1 merged in (`72489ff`). Run live there on 2026-11-15, and finished the same day in a session of its own, which wrote these notes at his word.
+
+- **His choices** (2026-11-13, one batch, all recommended, as `1040f19` records; his words there are not in the repo): build on items 3 and 1, merged; keep Claude's four defaults. (1) A second account, `klaxon-rollback`: get, list, watch and patch on our four Deployments, by name, and get and list on ReplicaSets; the admin access stays with `make kind-*` and the faults. (2) The rollback planned from kind's deploy log, as on Compose: one JSON patch that Kubernetes refuses whole if the Deployment changed since it was read, then a wait for the rollout. (3) Verification on kind: every rollout done and every pod ready, the rules quiet twice, then the money twice, as on Compose. (4) The live runs: a fresh cluster before each; faults 1 and 4 on Opus 5.5 with week 4's budgets (10 steps, 8 tool calls); each request answered by him at his terminal; a postmortem for each approved run.
+- **The live runs: his OK** (2026-11-15, "1 done, lets start 2", in item 2's session, where step 2 was item 4's live runs). For fault 4's second run, his "go", in the next session.
+- **Fault 4 run a second time** (Claude): its first request expired unanswered, so the done-when's approved run needed one more. Both runs stay in the evidence, as does fault 1's denied run.
+- **The postmortems: his OK** ("ok", 2026-11-15): one recorded call each, at most 3.
+- **Docker stopped before the postmortems** (Claude): drafting and the replays read only the saved runs.
+- **The evidence committed, and the wording gap recorded** (his call, "ok, record it", 2026-11-15; `80886e1`): "every container is healthy" in verification's line on kind goes to known gap 14, to be fixed with the week's review fixes (item 5), as Claude recommended.
