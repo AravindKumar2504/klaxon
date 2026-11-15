@@ -1,0 +1,8 @@
+{
+  "label": "A decision on one approval request.",
+  "request_id": "r-4295",
+  "request_sha256": "34f64c85b2876da5ed00f4ebd4c76807a92200351293ba1afcfb0b9fed35e6d7",
+  "decision": "denied",
+  "at": "2026-11-15T21:41:22Z",
+  "how": "not the request's id, typed at a terminal"
+}

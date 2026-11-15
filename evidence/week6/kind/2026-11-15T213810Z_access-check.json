@@ -1,0 +1,155 @@
+{
+  "label": "Kubernetes' own answers to `kubectl auth can-i`, asked as each of Klaxon's two accounts on this Mac's kind cluster (week 6, item 4), each through its own kubeconfig with an hour's token, made by klaxon.patient.cluster. Asks only: no write was made. Then `kubectl rollout status` as klaxon-rollback, the one watch its rollback needs. Run by a script in Claude's scratch folder, not in the repo.",
+  "at_utc": "2026-11-15T21:38:10Z",
+  "answers": [
+    {
+      "account": "klaxon-rollback",
+      "question": "get deployment/payments-api",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i get deployment/payments-api"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "watch deployment/payments-api",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i watch deployment/payments-api"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "patch deployment/payments-api",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i patch deployment/payments-api"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "patch deployment/ledger-consumer",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i patch deployment/ledger-consumer"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "patch deployment/payment-confirmer",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i patch deployment/payment-confirmer"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "patch deployment/webhook-receiver",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i patch deployment/webhook-receiver"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "list replicasets",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i list replicasets"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "patch deployment/redis",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i patch deployment/redis"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "update deployment/payments-api",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i update deployment/payments-api"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "delete deployment/payments-api",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i delete deployment/payments-api"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "create deployments",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i create deployments"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "patch statefulset/postgres",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i patch statefulset/postgres"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "delete replicasets",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i delete replicasets"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "get pods",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i get pods"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "create pods",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i create pods"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "get secrets",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i get secrets"
+    },
+    {
+      "account": "klaxon-rollback",
+      "question": "get configmaps",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/rollback.kubeconfig --context kind-klaxon-rollback --namespace klaxon auth can-i get configmaps"
+    },
+    {
+      "account": "klaxon-reader",
+      "question": "list pods",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/reader.kubeconfig --context kind-klaxon-reader --namespace klaxon auth can-i list pods"
+    },
+    {
+      "account": "klaxon-reader",
+      "question": "list deployments",
+      "answer": "yes",
+      "expected": "yes",
+      "command": "kubectl --kubeconfig .kind/reader.kubeconfig --context kind-klaxon-reader --namespace klaxon auth can-i list deployments"
+    },
+    {
+      "account": "klaxon-reader",
+      "question": "patch deployment/payments-api",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/reader.kubeconfig --context kind-klaxon-reader --namespace klaxon auth can-i patch deployment/payments-api"
+    },
+    {
+      "account": "klaxon-reader",
+      "question": "get secrets",
+      "answer": "no",
+      "expected": "no",
+      "command": "kubectl --kubeconfig .kind/reader.kubeconfig --context kind-klaxon-reader --namespace klaxon auth can-i get secrets"
+    }
+  ],
+  "all_as_expected": true,
+  "rollout_status_as_klaxon_rollback": "deployment \"payments-api\" successfully rolled out"
+}

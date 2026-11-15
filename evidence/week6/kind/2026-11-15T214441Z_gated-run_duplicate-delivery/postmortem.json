@@ -1,0 +1,431 @@
+{
+  "label": "A postmortem draft of one gated run: the facts, filled in by code from the run's saved evidence, and the narrative Claude drafted from them (recorded responses, in postmortem-recording.jsonl, with hidden characters dropped here), with what the check of its numbers found.",
+  "facts": {
+    "format": 1,
+    "label": "The facts of one incident, filled in by code (klaxon.agent.postmortem) from a gated run's saved evidence: its run.json, the gate's request, decision and log, and the loop's trace. Each fact says where it comes from. The incident: a fault injected on purpose into a payments system on one machine, with synthetic data and a simulated provider, so no real money.",
+    "run": {
+      "folder": "2026-11-15T214441Z_gated-run_duplicate-delivery",
+      "fault": "duplicate-delivery",
+      "title": "Payments counted twice in the books",
+      "what_it_was": "Real run on this Mac's kind cluster (Kubernetes in Docker, from our own manifests in deploy/kind), with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, duplicate-delivery, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, offered one write action (rollback_deploy), which runs only if a person approves it at the gate, and stopped on diagnosed after 6 steps; any reply it got is a recorded response, not a simulation. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Klaxon asked at the approval gate to act on its diagnosis; the request was approved with make approve (the request's id typed at a terminal), and the action ran: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged). Code, not the model, then verified it (klaxon.agent.verify): passed; the cause is removed, and the money is not right. The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-65be) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "ran_at_utc": "2026-11-15T21:44:41+00:00",
+      "git_commit": "1040f19",
+      "from": "run.json"
+    },
+    "timeline": [
+      {
+        "at_utc": "2026-11-15T21:45:57Z",
+        "since_the_fault": null,
+        "what": "The alert rules were quiet at 2 evaluations in a row, and the money check passed: the stack was ready for the fault.",
+        "from": "run.json: evaluations (before)"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "0 s",
+        "what": "The fault's injection began, on purpose (klaxon.faults): a deploy of ledger-consumer with LEDGER_HANDLER=naive. It took 3.4 s. The deploy log has it as deploy 13, by klaxon.faults, at 2026-11-15T21:46:01Z.",
+        "from": "run.json: injected, timings, deploys"
+      },
+      {
+        "at_utc": "2026-11-15T21:46:16Z",
+        "since_the_fault": "18.4 s",
+        "what": "The alert MoneyCheckFailed fired, raised by klaxon.alerts from what the stack showed: The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $461.00 ahead of the provider's balance.",
+        "from": "run.json: alert"
+      },
+      {
+        "at_utc": "2026-11-15T21:46:17Z",
+        "since_the_fault": "19 s",
+        "what": "Klaxon's loop began to investigate the alert: claude-opus-5-5 through Claude Code on Aravind's seat, with read-only tools, offered one write action (rollback_deploy) that runs only if a person approves it.",
+        "from": "trace.jsonl: start"
+      },
+      {
+        "at_utc": "2026-11-15T21:46:44Z",
+        "since_the_fault": "46.4 s",
+        "what": "The loop stopped: diagnosed (confidence 0.8), after 6 steps and 4 tool calls, in 27.4 s.",
+        "from": "trace.jsonl: stop; run.json: loop"
+      },
+      {
+        "at_utc": "2026-11-15T21:46:44Z",
+        "since_the_fault": "46.6 s",
+        "what": "The money check right before the request: 9 events counted more than once, 9 payments whose books differ from the provider's; our books $559.21 ahead of the provider's balance.",
+        "from": "run.json: damage.at_request"
+      },
+      {
+        "at_utc": "2026-11-15T21:46:45Z",
+        "since_the_fault": null,
+        "what": "Klaxon asked to act, at the approval gate: request r-65be, redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged). It was open until 2026-11-15T21:56:45Z. Its undo: going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand.",
+        "from": "gate.jsonl: requested"
+      },
+      {
+        "at_utc": "2026-11-15T21:50:11Z",
+        "since_the_fault": null,
+        "what": "Request r-65be was approved with make approve: typed at a terminal.",
+        "from": "gate.jsonl: approved"
+      },
+      {
+        "at_utc": "2026-11-15T21:50:14Z",
+        "since_the_fault": null,
+        "what": "The action ran: deploy 14 of ledger-consumer in the deploy log, by Klaxon, approved request r-65be, with LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter.",
+        "from": "gate.jsonl: done"
+      },
+      {
+        "at_utc": "2026-11-15T21:50:14Z",
+        "since_the_fault": null,
+        "what": "The money check right after the action: 41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance.",
+        "from": "run.json: verification.at_action"
+      },
+      {
+        "at_utc": "2026-11-15T21:50:31Z",
+        "since_the_fault": null,
+        "what": "Health, by code: 2 rounds of the rules and the cluster's rollouts and pods, from 2026-11-15T21:50:15Z to 2026-11-15T21:50:31Z: healthy.",
+        "from": "run.json: verification.health"
+      },
+      {
+        "at_utc": "2026-11-15T21:51:14Z",
+        "since_the_fault": null,
+        "what": "The later money check, at least a minute after the action: 41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance.",
+        "from": "run.json: verification.after"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "317.1 s",
+        "what": "Verification, by code and not by the model: passed.",
+        "from": "run.json: verification"
+      },
+      {
+        "at_utc": null,
+        "since_the_fault": "317.3 s",
+        "what": "The harness's clearing, its safety net, asked for the good settings of ledger-consumer (LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter). The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-65be) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+        "from": "run.json: cleared, removed_by, deploys"
+      },
+      {
+        "at_utc": "2026-11-15T21:52:45Z",
+        "since_the_fault": "407.3 s",
+        "what": "The rules read the stack again after the clearing: the alert MoneyCheckFailed fired; the money check failed: posted_exactly_once 41, matches_provider 42; our books $2,067.33 ahead of the provider's.",
+        "from": "run.json: evaluations (after)"
+      }
+    ],
+    "durations": [
+      {
+        "what": "from the fault to the alert",
+        "said": "18.4 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "Klaxon's investigation",
+        "said": "27.4 s",
+        "from": "run.json: loop"
+      },
+      {
+        "what": "from the alert to the diagnosis",
+        "said": "28 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "the request's window: open until it expires",
+        "said": "600 s (10 min)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "the request was open until it was approved",
+        "said": "206 s (3 min 26 s)",
+        "from": "gate.jsonl"
+      },
+      {
+        "what": "from the alert to the action",
+        "said": "238 s (3 min 58 s)",
+        "from": "run.json; gate.jsonl"
+      },
+      {
+        "what": "from the fault's deploy to Klaxon's rollback",
+        "said": "253 s (4 min 13 s)",
+        "from": "run.json: deploys; gate.jsonl"
+      },
+      {
+        "what": "the verification",
+        "said": "60.8 s",
+        "from": "run.json: timings"
+      },
+      {
+        "what": "from the fault to the harness's clearing",
+        "said": "317.3 s",
+        "from": "run.json: timings"
+      }
+    ],
+    "impact": {
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "fired_at": "2026-11-15T21:46:16Z",
+        "said": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $461.00 ahead of the provider's balance.",
+        "from": "run.json: alert (raised by klaxon.alerts from what the stack showed)"
+      },
+      "money": [
+        {
+          "when": "at the alert",
+          "at_utc": "2026-11-15T21:46:16Z",
+          "outcome": "failed",
+          "said": "the money check failed: posted_exactly_once 7, matches_provider 8; our books $461.00 ahead of the provider's",
+          "by_invariant": {
+            "posted_exactly_once": 7,
+            "matches_provider": 8
+          },
+          "lag": "ledger 0, payment-confirmer 0",
+          "from": "run.json: damage.at_alert (the alert's own evaluation of the rules)"
+        },
+        {
+          "when": "right before the request",
+          "at_utc": "2026-11-15T21:46:44Z",
+          "outcome": "failed",
+          "said": "9 events counted more than once, 9 payments whose books differ from the provider's; our books $559.21 ahead of the provider's balance",
+          "findings": 19,
+          "by_kind": {
+            "counted more than once": 9,
+            "total differs": 1,
+            "books differ": 9
+          },
+          "money_off": "$559.21 ahead of the provider's balance",
+          "from": "run.json: damage.at_request"
+        },
+        {
+          "when": "right after the action",
+          "at_utc": "2026-11-15T21:50:14Z",
+          "outcome": "failed",
+          "said": "41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance",
+          "findings": 83,
+          "by_kind": {
+            "counted more than once": 41,
+            "total differs": 1,
+            "books differ": 41
+          },
+          "money_off": "$2,067.33 ahead of the provider's balance",
+          "from": "run.json: damage.at_action"
+        },
+        {
+          "when": "later, at least a minute after the action",
+          "at_utc": "2026-11-15T21:51:14Z",
+          "outcome": "failed",
+          "said": "41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance",
+          "findings": 83,
+          "by_kind": {
+            "counted more than once": 41,
+            "total differs": 1,
+            "books differ": 41
+          },
+          "money_off": "$2,067.33 ahead of the provider's balance",
+          "from": "run.json: damage.after_action"
+        },
+        {
+          "when": "after the harness's clearing",
+          "at_utc": "2026-11-15T21:52:45Z",
+          "outcome": "failed",
+          "said": "the money check failed: posted_exactly_once 41, matches_provider 42; our books $2,067.33 ahead of the provider's",
+          "by_invariant": {
+            "posted_exactly_once": 41,
+            "matches_provider": 42
+          },
+          "from": "run.json: evaluations (after)"
+        }
+      ],
+      "clients": {
+        "from": "run.json: traffic and traffic_settings (klaxon.traffic, the synthetic clients' own counts)",
+        "payments": {
+          "arrived": 1398,
+          "succeeded": 1398,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 0,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 0,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 0,
+          "answered": 1398,
+          "never answered": 0
+        },
+        "refunds": {
+          "succeeded": 132,
+          "refused": 0,
+          "unexpected answers": 0,
+          "outcome unknown": 0,
+          "outcome unknown, then confirmed later": 0,
+          "outcome unknown, still pending at the client's last status check": 0,
+          "outcome unknown, neither succeeded nor pending at the client's status check": 0,
+          "outcome unknown, no answer to the client's status check": 0,
+          "outcome unknown, with no status check of the clients on record": 0
+        },
+        "shed": 0,
+        "retries": 46,
+        "said": [
+          "The synthetic clients sent 3 new payments per second, on average.",
+          "1398 payments arrived, and 1398 got an answer: 1398 succeeded, 0 were refused, 0 got an answer the clients did not expect, and 0 were left with their outcome unknown.",
+          "Refunds: 132 succeeded, 0 were refused, and 0 were left with their outcome unknown.",
+          "The clients retried 46 times."
+        ]
+      }
+    },
+    "cause": {
+      "recorded": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+      "recorded_from": "run.json: fault (klaxon.faults): the fault was injected on purpose, so this is its cause",
+      "diagnosis": {
+        "by": "its loop, live: claude-opus-5-5 through Claude Code on Aravind's seat",
+        "stopped": "diagnosed (confidence 0.8), after 6 steps and 4 tool calls, in 27.4 s",
+        "confidence": 0.8,
+        "fix_kind": "rollback",
+        "named_action": {
+          "name": "rollback_deploy",
+          "arguments": {
+            "service": "ledger-consumer"
+          }
+        },
+        "cited_calls": [
+          "c1 money_check",
+          "c2 recent_deploys",
+          "c4 search_logs"
+        ],
+        "model_words": {
+          "note": "the loop's own words, from a model: data, not checked by code",
+          "hypothesis": "ledger-consumer was redeployed at 21:45:59 (revision 2) with LEDGER_HANDLER=naive. That handler does not deduplicate by provider event_id. The provider resends webhooks until they are acknowledged, so the same event can reach provider-events more than once. Each copy lands at its own Kafka offset, and the naive handler posts a new ledger transaction for every copy. Example: evt_000308 arrived at offsets 100, 101 and 103 and was posted 3 times. Because each duplicate is a balanced double entry, ledger_balanced still passes. posted_exactly_once fails, though, and the provider_clearing balance runs $461.00 ahead of the provider. Duplicated payment.succeeded events inflate it. A duplicated refund (evt_000288, pay_000217) pushes that payment's balance below the provider's. Still open: I did not check whether duplicates occurred before 21:45:59, or why the provider's figure for pay_000240 shows $0. That charge may be newer than the provider's cutoff.",
+          "fix_target": "ledger-consumer",
+          "fix_summary": "Roll ledger-consumer back to its previous revision so it again posts each event_id at most once. Then repair the data separately: reverse the extra ledger transactions listed by the money check (e.g. 255, 265, 272, 273, 297 and the other duplicates) and re-run the money check.",
+          "blast_radius": "ledger-consumer pauses while its container is recreated, so ledger posting lags briefly. Events queue in Kafka and are consumed on restart. payment-confirmer and the payment flow are unaffected. The rollback does not remove the duplicates already booked, which need a data repair.",
+          "rollback_plan": "Redeploy ledger-consumer with the current revision-2 settings (LEDGER_HANDLER=naive). This is not advisable, though: watch the money check and consumer lag after the rollback instead."
+        },
+        "from": "run.json: loop.diagnosis; trace.jsonl"
+      },
+      "graded": {
+        "by": "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+        "verdict": "names the cause",
+        "elements": [
+          {
+            "element": "where: the ledger consumer",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "what: its dedupe is gone",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "how: the provider sends some webhooks again",
+            "named": true,
+            "required": true
+          },
+          {
+            "element": "the deploy that brought it",
+            "named": true,
+            "required": false
+          }
+        ],
+        "fix_fits_the_remedy": true,
+        "from": "run.json: comparison (klaxon.grading)"
+      }
+    },
+    "action": {
+      "result": "done",
+      "detail": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+      "request": {
+        "id": "r-65be",
+        "made_at": "2026-11-15T21:46:45Z",
+        "open_until": "2026-11-15T21:56:45Z",
+        "change": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+        "undoes": "deploy 13 of ledger-consumer, at 2026-11-15T21:46:01Z, by klaxon.faults",
+        "undo": "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand",
+        "from": "approval-request.json (sealed with its own SHA-256, checked)"
+      },
+      "decision": {
+        "decision": "approved",
+        "at_utc": "2026-11-15T21:50:11Z",
+        "by": "make approve: typed at a terminal",
+        "rule": "Only Aravind approves Klaxon's actions, and Claude never does (DECISIONS.md, the week's plan). The gate's log records how a decision was made, not who made it.",
+        "from": "approval-decision.json (the file the run read, by its SHA-256 in gate.jsonl); gate.jsonl"
+      },
+      "ran": {
+        "deploy": 14,
+        "at_utc": "2026-11-15T21:50:14Z",
+        "service": "ledger-consumer",
+        "by": "Klaxon, approved request r-65be",
+        "settings": "LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter",
+        "replaced": "LEDGER_HANDLER=naive, LEDGER_BAD_EVENTS=dead_letter",
+        "from": "run.json: gate.deploy (the deploy log's line)"
+      },
+      "cause_removed": "The fault's cause was removed by Klaxon: its rollback (Klaxon, approved request r-65be) removed the cause, and the harness's clearing then found the good settings running, and changed nothing.",
+      "from": "run.json: gate, undo, removed_by"
+    },
+    "verification": {
+      "verdict": "passed",
+      "said": [
+        "Healthy: every container is healthy, and the metric rules and the books rule were quiet at 2 evaluations in a row.",
+        "The cause is removed: nothing the provider made between the action and the last money check was booked wrong.",
+        "The money is not right: 41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance. A rollback repairs nothing: this damage stays until a person repairs it."
+      ],
+      "health": {
+        "healthy": true,
+        "rounds": 2,
+        "not_quiet": []
+      },
+      "cause_removed": true,
+      "money_right": false,
+      "from": "run.json: verification (klaxon.agent.verify)"
+    },
+    "repairs": {
+      "last_money_check": {
+        "when": "later, at least a minute after the action",
+        "at_utc": "2026-11-15T21:51:14Z",
+        "outcome": "failed",
+        "said": "41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance",
+        "findings": 83,
+        "by_kind": {
+          "counted more than once": 41,
+          "total differs": 1,
+          "books differ": 41
+        },
+        "money_off": "$2,067.33 ahead of the provider's balance",
+        "examples": [
+          "event evt_000251 posted 2 times",
+          "event evt_000261 posted 2 times",
+          "event evt_000267 posted 2 times",
+          "event evt_000268 posted 2 times",
+          "event evt_000288 posted 2 times",
+          "event evt_000298 posted 2 times",
+          "event evt_000308 posted 3 times",
+          "event evt_000352 posted 2 times",
+          "event evt_000373 posted 2 times",
+          "event evt_000437 posted 2 times"
+        ],
+        "examples_are": "the first 10 of 83",
+        "from": "run.json: damage.after_action"
+      },
+      "owed": [
+        "The last money check (later, at least a minute after the action) still found damage: 41 events counted more than once, 41 payments whose books differ from the provider's; our books $2,067.33 ahead of the provider's balance. A rollback repairs nothing: the damage stays until a person repairs it. Repairs that move money are not among Klaxon's actions: a person makes them (DECISIONS.md)."
+      ],
+      "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)",
+      "remedy_from": "run.json: fault (the remedy this fault records, klaxon.faults)"
+    }
+  },
+  "draft": {
+    "outcome": "passed",
+    "narrative": {
+      "summary": "On 2026-11-15, a fault was injected on purpose into the payments system on one machine, using synthetic data and no real money. A deploy of ledger-consumer switched off its dedupe, so webhooks that the provider sent again were booked a second time. The alert MoneyCheckFailed fired 18.4 s after the fault. Klaxon's loop diagnosed the cause with confidence 0.8, and a rule graded its diagnosis as naming the cause. Klaxon asked at the approval gate to redeploy ledger-consumer with the idempotent handler. The request was approved and the action ran. Code verified the result and it passed: the cause was removed and the stack was healthy. The money was not right. At the last money check, 41 events had been counted more than once, and our books were $2,067.33 ahead of the provider's balance. That damage stays until a person repairs it.",
+      "timeline": "At 21:45:57 UTC, the alert rules were quiet and the money check passed. The fault's injection began at deploy 13 of ledger-consumer, which the deploy log puts at 21:46:01 UTC, with LEDGER_HANDLER=naive. It took 3.4 s. MoneyCheckFailed fired at 21:46:16 UTC, 18.4 s after the fault. Klaxon's loop began at 21:46:17 UTC. It stopped diagnosed at 21:46:44 UTC, after 6 steps and 4 tool calls, in 27.4 s. Klaxon made request r-65be at 21:46:45 UTC, and it was open until 21:56:45 UTC. It was approved at 21:50:11 UTC, after 206 s. Deploy 14 ran at 21:50:14 UTC. That was 238 s after the alert and 253 s after the fault's deploy. Health checks from 21:50:15 UTC to 21:50:31 UTC found the stack healthy. A later money check ran at 21:51:14 UTC. Verification passed at 317.1 s after the fault. The harness's clearing followed at 317.3 s and changed nothing. At 21:52:45 UTC, MoneyCheckFailed fired again.",
+      "impact": "At the alert, the money check failed 2 of its 5 invariants. It found 7 findings for posted_exactly_once and 8 for matches_provider, and our ledger was $461.00 ahead of the provider's balance. Right before the request, 9 events had been counted more than once and the books were $559.21 ahead. Right after the action, 41 events had been counted more than once, 41 payments differed from the provider, and the books were $2,067.33 ahead. The damage grew while the request waited at the gate. The later check at 21:51:14 UTC found the same figures, so it did not grow after the action. After the clearing, matches_provider showed 42 against 41 for posted_exactly_once. The evidence does not explain that difference beyond one finding that a total differs. The synthetic clients saw no failures. 1398 payments arrived and 1398 succeeded. 132 refunds succeeded, none were refused, and the clients retried 46 times.",
+      "cause": "The recorded cause was a deploy of the ledger consumer without its dedupe, LEDGER_HANDLER=naive. The provider sends a webhook again when it never got an acknowledgement, and the consumer booked every resent webhook a second time. Those double bookings broke the posted_exactly_once and matches_provider invariants, and that raised MoneyCheckFailed. Klaxon's diagnosis named the ledger consumer, the missing dedupe, the provider's resent webhooks and the deploy that brought it. A keyword rule, not a person, graded it as naming the cause, and graded its fix as fitting the remedy. The diagnosis gave the deploy a different time than the deploy log does. It also left open whether duplicates occurred before the fault, and why the provider showed no amount for one payment. The evidence does not settle either point.",
+      "response": "Klaxon ran with read-only tools and one write action, rollback_deploy. That action could run only if a person approved it. Klaxon asked through request r-65be to redeploy ledger-consumer with LEDGER_HANDLER changed from naive to idempotent, and LEDGER_BAD_EVENTS left at dead_letter. The request said Klaxon would not undo it, because the undo would deploy a known-bad setting. The request was approved by make approve, typed at a terminal. The gate's log records how the decision was made, not who made it. The plan says only Aravind approves. Deploy 14 then ran. Code, not the model, verified the result over 60.8 s. Every container was healthy, and nothing the provider made after the action was booked wrong. The money was still not right. The harness's clearing found the good settings running.",
+      "repairs": "The books still hold the damage from the last money check. 41 events were counted more than once, 41 payments differ from the provider, and our books are $2,067.33 ahead of the provider's balance. The examples include evt_000308, which was posted 3 times. The recorded remedy is to repair each double posting with a reversal. That reversal is a write that moves money, so it is not among Klaxon's actions. A person must make it, with approval, and then run the money check again until MoneyCheckFailed is quiet. A person should also check whether any duplicates came before the fault, and why matches_provider showed one more finding than posted_exactly_once after the clearing."
+    },
+    "problems": [],
+    "flagged": [],
+    "numbers": 56,
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-15T22:31:25.685Z",
+      "sha256": "cc67b976a886ad0343c123bb4390fbae72714707a7c75ea63ece43a8928067e9"
+    },
+    "calls": [
+      {
+        "call": 1,
+        "reply_sha256": "cc67b976a886ad0343c123bb4390fbae72714707a7c75ea63ece43a8928067e9",
+        "problems": []
+      }
+    ]
+  }
+}

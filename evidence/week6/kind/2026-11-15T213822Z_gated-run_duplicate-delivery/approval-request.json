@@ -1,0 +1,71 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-4295",
+  "created_at": "2026-11-15T21:40:32Z",
+  "expires_at": "2026-11-15T21:50:32Z",
+  "run": "2026-11-15T213822Z_gated-run_duplicate-delivery",
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $461.00 ahead of the provider's balance.",
+    "fired_at": "2026-11-15T21:39:56Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    },
+    "service": "ledger-consumer",
+    "container": "009af6d4fa6ac6702117df964aed4b1f1546299f910ddf75edb67d91c5106ffa",
+    "from_settings": {
+      "LEDGER_HANDLER": "naive",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "to_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "undoes": {
+      "seq": 11,
+      "at": "2026-11-15T21:39:41Z",
+      "by": "klaxon.faults",
+      "container": "009af6d4fa6a"
+    },
+    "change": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "undo": "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "ledger-consumer was redeployed at 21:39:39Z (revision 2) with LEDGER_HANDLER=naive. That handler books every Kafka message it reads without checking whether the event_id is already in the ledger. Webhooks are resent until acknowledged and Kafka delivers at least once, so one provider event can appear on provider-events more than once (evt_000308 sat at offsets 100, 101 and 103). Each copy was posted as its own balanced transaction. So ledger_balanced passes, but provider_clearing is inflated: posted_exactly_once fails for 7 events and matches_provider is off by +$461.00. Payments and refunds still match the provider, so only the ledger is wrong. Still open: whether every duplicate came after 21:39:39 (the alert fired 17 s after the deploy, but earlier postings were not checked), and whether the duplicates came from provider retries or from the receiver.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "money_check",
+        "shows": "Confirms the alert. 7 events were posted 2 or 3 times (evt_000308 three times), and the ledger is +$461.00 against the provider. The ledger is balanced, and payments and refunds agree with the provider, so the error is confined to the ledger's double bookings."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "ledger-consumer was redeployed at 21:39:39Z (revision 2) with LEDGER_HANDLER=naive, 17 s before the alert fired. No other service changed since the initial rollout at 21:37:29."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "ledger-consumer logged 'posted' for evt_000308 ($131.93) three times, from offsets provider-events/0＠100, ＠101 and ＠103 (21:39:53–55). Each redelivered copy was booked again, with no dedup by event_id."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer",
+      "summary": "Roll ledger-consumer back to its previous revision, so that its earlier handler returns and new duplicate postings stop. Then do a separate data repair: reverse the extra ledger transactions the money check names (for example 255, 266, 272, 273, 297, plus the extras for evt_000298 and evt_000308), keeping one posting per event. Re-run money_check to confirm that all invariants pass."
+    },
+    "blast_radius": "ledger-consumer pauses while its container is recreated. Events queue in Kafka under its consumer group and are processed when it returns, so ledger postings are delayed briefly but nothing is lost. Payments, refunds, payment-confirmer and webhook-receiver are not affected. The rollback does not remove the bad postings already made; those need the manual repair. Reversing the wrong transaction ids in that repair could create new mismatches.",
+    "rollback_plan": "If the rolled-back revision misbehaves, redeploy ledger-consumer with revision 2's settings or the last known-good settings. Watch klaxon_consumer_events_total, the Kafka consumer lag and money_check. For the data repair, record every reversing entry so that it can itself be reversed."
+  },
+  "sha256": "34f64c85b2876da5ed00f4ebd4c76807a92200351293ba1afcfb0b9fed35e6d7"
+}

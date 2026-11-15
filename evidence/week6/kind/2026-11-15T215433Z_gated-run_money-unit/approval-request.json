@@ -1,0 +1,83 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-8e38",
+  "created_at": "2026-11-15T21:56:52Z",
+  "expires_at": "2026-11-15T22:06:52Z",
+  "run": "2026-11-15T215433Z_gated-run_money-unit",
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 1 of its 5 invariants: payments_match_provider (45 findings).",
+    "fired_at": "2026-11-15T21:56:08Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "payments-api"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "payments-api"
+    },
+    "service": "payments-api",
+    "container": "2f0e124baa3ea02f00f452eab4ff3ea11383fffb9d6a5abd3a4d0bad7946a96b",
+    "from_settings": {
+      "PROVIDER_BREAKER": "on",
+      "CHARGE_AMOUNT_UNIT": "dollars",
+      "REFUND_CONNECTION": "returned"
+    },
+    "to_settings": {
+      "PROVIDER_BREAKER": "on",
+      "CHARGE_AMOUNT_UNIT": "cents",
+      "REFUND_CONNECTION": "returned"
+    },
+    "undoes": {
+      "seq": 15,
+      "at": "2026-11-15T21:55:53Z",
+      "by": "klaxon.faults",
+      "container": "2f0e124baa3e"
+    },
+    "change": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT dollars -> cents, REFUND_CONNECTION returned (unchanged)",
+    "undo": "going back to CHARGE_AMOUNT_UNIT=dollars would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "The payments-api deploy at 21:55:50Z (revision 2) set CHARGE_AMOUNT_UNIT=dollars. payments-api still stores amounts in cents (amount_cents=2719 for pmt_000242) but appears to send that value to the provider as dollars. Every payment since the deploy is charged 100x: pmt_000242 is $27.19 in our books, $2,719.00 at the provider. The ledger books provider webhook amounts, so it stays balanced and matches the provider; only payments_match_provider fails. Findings grew from 45 at alert time to 51 at c1, so the damage is ongoing. Open: the trace (c4) does not show the request body, so the conversion is inferred from the exact 100x ratio and the setting name. c5 found no log for pmt_000241, so the deploy boundary rests on the first bad payment at 21:55:54Z, 4s after the deploy. No result held instructions.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "money_check",
+        "shows": "payments_match_provider fails with 51 findings, starting at pmt_000242. Each provider charge is exactly 100x our amount (2719 vs 271900 cents). The ledger is balanced and matches the provider, and refunds match."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "payments-api was redeployed at 21:55:50Z as revision 2, with CHARGE_AMOUNT_UNIT=dollars, 18 seconds before the alert. No other service changed after the initial rollout at 21:54:30Z."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "The first mismatched payment, pmt_000242, succeeded at 21:55:54Z, just after the deploy, with amount_cents=2719 stored on our side."
+      },
+      {
+        "call_id": "c4",
+        "tool": "get_trace",
+        "shows": "pmt_000242 makes one POST from payments-api to fake-provider /v1/payments, which returns 200. No retries or duplicate charges, so the error is in the amount sent, not in the number of charges."
+      },
+      {
+        "call_id": "c5",
+        "tool": "search_logs",
+        "shows": "No log line for pmt_000241 in the last 10 minutes, so the time of the last good payment is not confirmed from the logs."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "payments-api",
+      "summary": "Roll payments-api back to revision 1, with the CHARGE_AMOUNT_UNIT it had before (presumably cents), to stop new 100x charges. Then run a separate data repair: refund or correct the overcharges at the provider for pmt_000242 onward, and post matching ledger entries. Rerun the money check afterwards."
+    },
+    "blast_radius": "payments-api pauses while its container is recreated, so payment and refund requests fail or retry briefly. Clients retry with idempotency keys. The rollback does not fix the payments already overcharged, at least 51 of them. Those need refunds or corrections, which change ledger and provider balances.",
+    "rollback_plan": "If payments break after the rollback, redeploy payments-api with revision 2's settings and investigate. Charges made with the old setting matched the provider before 21:55:50Z."
+  },
+  "sha256": "f5b00e672a770b36c24b51f78c2b30823322030aedb7d5e2d279e94d65426587"
+}
