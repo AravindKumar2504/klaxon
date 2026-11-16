@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "8b00e07ae5d1c6b15a26d479c4a0b98ae9ab66d4eb34a33721d33dde29e62f1e",
+  "verdict": "partly",
+  "fix_fits": false,
+  "why": "Because it recommends reversing the duplicate transaction but incorrectly rejects rolling back the ledger consumer to restore its idempotent handler.",
+  "at": "2026-11-15T21:33:09Z",
+  "how": "typed at a terminal"
+}

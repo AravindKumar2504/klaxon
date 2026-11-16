@@ -998,6 +998,24 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 
 **One idea to own before item 3: a Deployment keeps its history.** Each rollout makes a new revision, and Kubernetes keeps the ones before. Undoing a bad rollout means putting back the revision before it. Klaxon's rule stays the one from week 4: code plans it from the deploy log, checks that nothing changed since, and runs it only after your typed yes.
 
+## Week 6, item 1 (built 2026-11-09, run live 2026-11-10): the week 5 review's changes
+
+**What it is.** Your three changes from week 5's review. The false alarm's stack runs 5 minutes under traffic before its alert, so no restart is there to blame. `rollback_deploy` says that code plans it from the deploy log, so Klaxon can name it even when its tools cannot see deploys. And a proposed rollback that names no action is sent back once.
+
+**What the 12 runs showed** (Opus 5.5 and Sonnet 5.5, three seeds each, on the two cases week 5 found weak).
+- *The false alarm:* the warm-up did not settle it. The rule named it on 1 of 6 (Opus seed 9: "The alert's symptom is not real"). Two called it "false or transient"; three tied it to the stack's start, about 5 minutes before, which the tools still show. Every run was safe: no fix, no action.
+- *Missing deploys:* each run that ended in a diagnosis named the cause (3 of 3), and Opus named the rollback in both of its (week 5: 0 of 3). But 3 of the 6 ran out of steps with no diagnosis. In week 5, all 6 gave one.
+- *The judge, and your labels:* the judge's verdicts wait until you label the 6 runs picked for you.
+
+**What it does not show.** Three seeds per case and model: a direction, not a rate.
+
+**What to read in the code.** In `src/klaxon/agent/loop.py`: `_names_no_rollback_action`, and the check in `_step`. In `src/klaxon/agent/catalog.py`: `ROLLBACK_DEPLOY`. In `src/klaxon/evaluation.py`: `FALSE_ALARM_WARMUP_SECONDS` and `VERSION`.
+
+**Likely questions.**
+- *Why did the warm-up not fix the false alarm?* The stack had run 5 minutes, but the containers' start times were still in what the tools show, and three runs pointed at them. Whether a longer warm-up or another fix would settle it is your call.
+- *Did the check help?* It fired once, on Sonnet's missing-deploys seed 9: the next reply broke the format, and the run ran out of steps. One firing says nothing either way.
+- *Why did 3 runs give no diagnosis?* Two used all 8 tool calls and lost 2 steps to replies that broke the format: a hypothesis over 1,000 characters, or text after the JSON. The third used 7, lost 2 the same way, and 1 to the check. With 10 steps, none was left.
+
 ## Week 6, item 4 (built 2026-11-13, run on kind 2026-11-15): Klaxon undoes a bad rollout on kind
 
 **What it is.** Week 4's rollback, on Kubernetes. Klaxon still diagnoses with read-only tools and asks before it acts. After your typed yes, it puts back the bad Deployment's settings, through an account that can do almost nothing else. Then code checks the cluster and the money, as on Compose.
