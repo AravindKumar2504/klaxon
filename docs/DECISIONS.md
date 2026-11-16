@@ -924,3 +924,17 @@ Built in item 2's session, in its worktree (`.claude/worktrees/intelligent-darwi
 - **The postmortems: his OK** ("ok", 2026-11-15): one recorded call each, at most 3.
 - **Docker stopped before the postmortems** (Claude): drafting and the replays read only the saved runs.
 - **The evidence committed, and the wording gap recorded** (his call, "ok, record it", 2026-11-15; `80886e1`): "every container is healthy" in verification's line on kind goes to known gap 14, to be fixed with the week's review fixes (item 5), as Claude recommended.
+
+## 2026-11-15 and 16 (week 6 session: item 5, the week's review)
+
+In item 4's session and worktree (`.claude/worktrees/intelligent-darwin-61fea6`), on a new branch, `claude/week-6-review`, cut from item 4's `6d34704`. Written at his word.
+
+- **His choices** (multiple choice, each the recommended one): combine the four branches on one review branch, not `main` ("Yes, one review branch"); item 1's three lines on that branch ("On the review branch"); item 5 in this session ("Do it here") and worktree ("New branch here"); the runner fix ("Yes, write it"); the full mutation list that night ("Tonight, now"; his Mac plugged in, his word).
+- **The merges** (Claude): where items 2 and 4 both changed how a fault run starts, both kept. The loop is chosen before anything touches the cluster, then kind's parts or Compose's; the run's header takes the loop's fields on both.
+- **The runner's guard** (Claude, at his OK): left out of mutant runs, kept in `make test`.
+- **The separate review** (Claude): read-only and offline, on `3a0ab37`, told only what was already known. Each finding was checked against the code first. Ten fixed, each with a test and its mutants.
+- **A rollback on kind needs one revision, not a ready one** (Claude; finding 2): as on Compose, a bad revision whose pod is not ready can be rolled back. A rollout still in progress is refused.
+- **A failed kubectl call is a DeployError** (Claude; finding 4): the gate logs it as it logs a failed docker call. A deploy whose wait fails stays unlogged, as on Compose (gap 14 (h)).
+- **Known gap 14 (a) fixed** (his call of 2026-11-15).
+- **For his call** (Claude's recommendations): the rollback account's field limits, gap 14 (e): week 9's safety pass, with a live check on kind. The prompt's line on kind, gap 14 (g): leave it until week 9; only kind runs see it, and none is planned before then.
+- **Recorded, not fixed** (Claude): `recent_deploys`' dating of a reused ReplicaSet (gap 14 (f)): each run starts on a fresh cluster.

@@ -1115,7 +1115,7 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 **What it is.** Week 4's rollback, on Kubernetes. Klaxon still diagnoses with read-only tools and asks before it acts. After your typed yes, it puts back the bad Deployment's settings, through an account that can do almost nothing else. Then code checks the cluster and the money, as on Compose.
 
-**The account.** `klaxon-rollback` may get, list, watch and patch our four Deployments, by name, and read ReplicaSets. Nothing else: no create, no delete, no pod, no Secret. Kubernetes enforces that, not Klaxon. Only the gate uses it, after your approval. The loop's tools still read as `klaxon-reader`, and the harness keeps the admin access. Each gated run gets a token of each account that lasts an hour.
+**The account.** `klaxon-rollback` may get, list, watch and patch our four Deployments, by name, and read ReplicaSets. Nothing else: no create, no delete, no direct access to a pod or a Secret. Kubernetes enforces which objects, not which fields: a patch could change any part of those Deployments' pod template, so what a rollback changes is held by Klaxon's code alone (known gap 14 (e)). Only the gate uses it, after your approval. The loop's tools still read as `klaxon-reader`, and the harness keeps the admin access. Each gated run gets a token of each account that lasts an hour.
 
 **The rollback.** Planned from kind's deploy log, as on Compose: the log says which deploy was bad and what ran before it. One JSON patch puts those settings back. Its first step tests the Deployment's version, so Kubernetes refuses the whole patch if anything changed since Klaxon read it. Then Klaxon waits for the rollout to finish and logs the deploy.
 
@@ -1132,8 +1132,51 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 **What to read in the code.** `deploy/kind/02-klaxon-rollback.yaml`. In `src/klaxon/patient/cluster.py`: `make_rollback_kubeconfig`, `klaxons_deployer` and `ClusterDeployer.deploy`. In `src/klaxon/agent/verify.py`: `cluster_unwell`. In `src/klaxon/fault_runs.py`: `kind_parts`.
 
 **Likely questions.**
-- *Why a second account?* The reader cannot write, and the admin can do anything. A rollback needs one write: a patch of our four Deployments. An account with only that makes Kubernetes hold the line, so a bug in Klaxon cannot touch Postgres, a Secret or another workload.
+- *Why a second account?* The reader cannot write, and the admin can do anything. A rollback needs one write: a patch of our four Deployments. An account with only that makes Kubernetes hold the line, so a bug in Klaxon cannot touch Postgres or another workload. Inside our four Deployments, Klaxon's code holds the line, not Kubernetes (known gap 14 (e)).
 - *Is it `kubectl rollout undo`?* Not the command, but the same effect. Putting back the old settings makes the same pod template as the revision before, so Kubernetes brings that revision back.
 - *What if someone changed the Deployment after Klaxon planned the rollback?* Kubernetes refuses the patch, and nothing changes. The plan is also refused if the deploy log's latest deploy of that service is not the one it undoes.
 - *Why did a typo deny the first request?* The gate takes only the request's exact id as a yes. Anything else is a no, and each request gets one decision, saved once. A slip fails safe: nothing runs.
 - *Why do the diagnosis's deploy time and the log's differ by 2 s?* The cluster dates a revision when Kubernetes makes it. The log dates the deploy when its rollout is done. Both postmortems point out the difference.
+
+## Week 6, item 5 (2026-11-15 and 16): the week's review
+
+**What it is.** The four items on one branch, a separate Claude's review and its fixes, and the full mutation list.
+
+**One branch.** `claude/week-6-review` holds items 1 to 4. Items 2 and 4 had both changed how a fault run starts. Both stay: a run picks its loop first, then kind's parts or Compose's.
+
+**A flaw in the mutation runner, found and fixed.** A mutant is a deliberate break, and some test should fail on it. The runner applies one, runs the tests, and stops at the first failure. On 2026-11-09 a guard test was added: every mutant's text must be in its file. In the runner's copy one mutant is always applied, so its text is gone and the guard failed every time. The tests that sort after it never ran, yet the mutant counted as caught. Item 4's 39 mutants counted that way were run again without the guard: all 39 caught, by item 4's own tests. The runner now leaves the guard out; `make test` still runs it.
+
+**The review.** A separate Claude read the week's code at `3a0ab37`, read-only and offline. No high-severity defect: 2 medium, 6 low, 4 nits. Ten were fixed, each with a test. The two medium ones:
+- *A rollback on kind needed a ready pod.* Klaxon named the running revision only when its pod was ready. A bad revision whose pod fails its readiness check, as faults 2 and 6 can make, could not be rolled back, though that is when a rollback is needed. Now one revision is enough, as on Compose.
+- *The rollback account guards objects, not fields.* Kubernetes stops klaxon-rollback from touching anything but our four Deployments. It does not stop a patch from changing more than our settings inside them: only Klaxon's code does. Open, for your call.
+
+**What the full mutation list showed.** All 1,299 caught.
+
+**What to read in the code.** `scripts/mutation_check.py`: `LIST_GUARD` and `run_tests`. `src/klaxon/patient/cluster.py`: `ClusterDeployer._current` and `deploy`. `src/klaxon/agent/verify.py`: `Health.what` and `say`.
+
+**Likely questions.**
+- *Can a mutation score be trusted after this?* Before the fix, a score could only overstate. The runner's own test now checks the guard is left out, and the full list ran again with the fix: all 1,299 caught.
+- *Why not fix the rollback account now?* The fix is an admission policy on the cluster, and it needs a live check on kind. Today the guard is Klaxon's own code, which holds against Klaxon's own mistakes.
+
+## Week 6 in one page (2026-11-09 to 16)
+
+**What it built.** Four items, each in a session and on a branch of its own, then a review.
+1. *The week 5 review's changes:* a 5-minute warm-up before the false alarm, one true line on how a rollback is planned, and a check that sends back a rollback with no action named.
+2. *A LangGraph loop:* the same loop as a graph, with the same prompt, tools, budgets, trace and model. All 85 saved live runs replay on both loops: 84 exactly, and week 3's first fails the same way on both.
+3. *The patient on kind:* Kubernetes on this Mac, fit for faults. Klaxon's two docker tools read the cluster through an account that can only read.
+4. *Undoing a bad rollout on kind:* after your typed yes, through an account of its own, then code checks the cluster and the money.
+5. *The review:* one branch, a separate Claude's review and its fixes, the mutation runner fixed, and the full mutation list.
+
+**What the live runs showed** (your OK each time).
+- *The false alarm* is still hard: the rule named it on 1 of 6 runs (Opus and Sonnet, 3 seeds each), even after the warm-up. Every run was safe: no fix, no action.
+- *Missing deploys:* every run that ended in a diagnosis named the cause, and Opus named the rollback (in week 5, never). But 3 of 6 ran out of steps.
+- *The LangGraph pilot:* each case once, Opus 5.5: 8 of 8 diagnosed, and the judge said "names the cause" on all 8.
+- *On kind:* each of the six faults raised an alert, five the same as on Compose. You approved the rollbacks of faults 1 and 4, and verification passed both: the cause removed, the money still wrong, since a rollback repairs nothing.
+- *Your labels:* on the 10 runs you labeled, the graders agree with you less than in week 5. On item 1's 6, the rule on 1 and the judge on 2.
+- *Cost:* 213 model calls, $8.83 at API prices by Claude Code's estimate, besides the sign-in checks (the plan: about 200 and $8.50). The seat is not billed per call.
+
+**What the review found.** No high-severity defect. The two medium ones: a rollback on kind needed a ready pod (fixed), and the rollback account limits objects, not fields (your call).
+
+**What it does not show.** How the two loops compare: one run per case. How the rollback on kind does over many runs: one approved run per fault. Anything about real systems: synthetic data, a simulated provider, one node.
+
+**Your review.** The list under Needs Aravind in STATUS: what to run, and four decisions.
