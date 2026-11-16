@@ -887,7 +887,7 @@ Built in the plan's worktree (`.claude/worktrees/week-6-plan`), on the branch `c
 - **Claude's defaults, confirmed by Aravind in that session** (2026-11-09, as `07c6d0b` records; his words there are not in the repo): 5 minutes of traffic before the false alarm's quiet readings, the faults keeping 60 s; the line in `rollback_deploy`'s description, each run recording the actions it offered; the check reading two fields (a fix of kind rollback, no `fix_action`), sent back once as a step of its own; each run recording its checks; evaluation version 2, whose runs never share a row with week 5's.
 - **The live runs** (his OK, in that session): the false alarm and missing deploys, seeds 7 to 9, on Opus 5.5 and Sonnet 5.5, 12 runs; the judge on the 9 that ended in a diagnosis.
 - **Their evidence, committed in item 2's session** (Claude, at his word, `50417ce`): the runs had stayed uncommitted in item 1's worktree. Each replays exactly.
-- **His labels:** 6 runs picked on 2026-11-13 (every run where the graders disagree, and 3 drawn at random), not labeled yet.
+- **His labels:** 6 runs picked on 2026-11-13 (every run where the graders disagree, and 3 drawn at random), labeled blind at his terminal on 2026-11-15 UTC (`4cc13ba`).
 
 ## 2026-11-10 (week 6 session: item 2, the LangGraph loop)
 

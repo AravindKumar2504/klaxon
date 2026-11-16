@@ -1005,7 +1005,7 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 **What the 12 runs showed** (Opus 5.5 and Sonnet 5.5, three seeds each, on the two cases week 5 found weak).
 - *The false alarm:* the warm-up did not settle it. The rule named it on 1 of 6 (Opus seed 9: "The alert's symptom is not real"). Two called it "false or transient"; three tied it to the stack's start, about 5 minutes before, which the tools still show. Every run was safe: no fix, no action.
 - *Missing deploys:* each run that ended in a diagnosis named the cause (3 of 3), and Opus named the rollback in both of its (week 5: 0 of 3). But 3 of the 6 ran out of steps with no diagnosis. In week 5, all 6 gave one.
-- *The judge, and your labels:* the judge's verdicts wait until you label the 6 runs picked for you.
+- *The judge, and your labels:* the judge named the cause on 1 of the 9 diagnosed runs, the rule on 4. You labeled 6: Opus's three false alarms "names the cause", the three missing-deploys runs "partly". The rule agrees with you on 1 of the 6, the judge on 2. On the three drawn at random, the two graders agreed with each other, and both differed from you.
 
 **What it does not show.** Three seeds per case and model: a direction, not a rate.
 
