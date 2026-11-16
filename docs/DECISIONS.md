@@ -906,6 +906,14 @@ In a session of its own, started by the week 6 planning session, on the branch `
   - *A loop that cannot run here is refused before anything:* no trace, no folder, no stack command.
   - *To keep clear of item 3's branch,* the harness tests are in a file of their own (`tests/test_loop_choice.py`) and the new mutants sit beside item 1's. Two places will still meet at the merge: the mutation runner's copy list (both branches add `requirements/`, with different comments), and the `investigate-fault` recipe in the Makefile, where item 4 will add `PLATFORM=`.
 
+## 2026-11-09 and 10 (week 6 session: item 3, the patient on kind)
+
+In a session of its own, on the branch `claude/week-6-kind-faults`, cut from the plan's `f6a7226`, in a worktree of its own (`.claude/worktrees/week-6-kind`). Written on 2026-11-13 in item 2's session, at his word ("Yes, here, first"), from the branch's commits and evidence.
+
+- **Claude's defaults, confirmed by Aravind in that session** (2026-11-09, as `986af1a` records; his words there are not in the repo): our image tagged by its content; the two consumers on `Recreate`, the payments API and the receiver on Kubernetes' rolling update; server-side apply as one manager at each `make kind-up`; the topics Job made again each time, its failure caught at once; readiness as Kubernetes does it, each fault rehearsed on kind first; the two tools reading the cluster in Compose's answer shape, through `klaxon-reader` (get, list and watch on pods, events, Deployments, ReplicaSets and StatefulSets in the namespace; never Secrets), with an hour's token in `.kind/`; kind's deploys in a log of their own; `PLATFORM=kind`, with Compose the default.
+- **The live steps: "Yes, right after item 1's"** (Aravind, as `53d392a` records): at `3a03d43`, no model.
+- **Found live, and fixed** (Claude, `e33bf26`): Docker gave six builds of the same files six image ids, so each `make kind-up` rolled every workload of ours. The tag is now the SHA-256 of the files the image is built from: the Dockerfile, `pyproject.toml`, the lock file and the Python source. The mutation runner's copy now holds `requirements/`, as the tag reads the lock file.
+
 ## 2026-11-13 to 15 (week 6 session: item 4, rollback on kind)
 
 Built in item 2's session, in its worktree (`.claude/worktrees/intelligent-darwin-61fea6`), on the branch `claude/week-6-rollback-on-kind`, cut from item 3's `6280631` with item 1 merged in (`72489ff`). Run live there on 2026-11-15, and finished the same day in a session of its own, which wrote these notes at his word.
