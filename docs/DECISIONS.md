@@ -938,3 +938,13 @@ In item 4's session and worktree (`.claude/worktrees/intelligent-darwin-61fea6`)
 - **Known gap 14 (a) fixed** (his call of 2026-11-15).
 - **For his call** (Claude's recommendations): the rollback account's field limits, gap 14 (e): week 9's safety pass, with a live check on kind. The prompt's line on kind, gap 14 (g): leave it until week 9; only kind runs see it, and none is planned before then.
 - **Recorded, not fixed** (Claude): `recent_deploys`' dating of a reused ReplicaSet (gap 14 (f)): each run starts on a fresh cluster.
+
+## 2026-11-16 (week 6: Aravind's review)
+
+In item 5's session, at his request ("lets review week 6 now"), after the review list's four commands, each matching Claude's run. His answers, in one multiple-choice batch:
+
+- **The rollback account (known gap 14 (e)): "Week 9's safety pass"** (Claude's recommendation, over now, before accepting, or after December with PLAN's other Kubernetes hardening). Until then, the guard is Klaxon's code, which builds each patch from the deploy log: the model only names the service. Week 9 will add an admission policy that lets klaxon-rollback change only the known settings' values, and a Pod Security level on the namespace, each checked live on kind.
+- **The prompt's line on kind (known gap 14 (g)): "Leave it until week 9"** (Claude's recommendation, over changing it now, offline, or keeping it as a known gap). It errs on the safe side: it warns of a pause that does not come. Week 9's safety pass will test the prompt against injection, so the change can go in with it. Saved runs keep the words they had either way.
+- **Week 6: "Accept"** (Claude's recommendation).
+- **Merging and pushing: "Merge and push"** (over merging only, or not yet). After this record, `main` is fast-forwarded from `32ab94d` to this branch and pushed, `main` only. The six week 6 branches stay as they are.
+- **PLAN.md** (Claude): week 9's row names the two items it now holds.

@@ -1156,7 +1156,10 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 **Likely questions.**
 - *Can a mutation score be trusted after this?* Before the fix, a score could only overstate. The runner's own test now checks the guard is left out, and the full list ran again with the fix: all 1,299 caught.
-- *Why not fix the rollback account now?* The fix is an admission policy on the cluster, and it needs a live check on kind. Today the guard is Klaxon's own code, which holds against Klaxon's own mistakes.
+- *Why not fix the rollback account now?* The fix is an admission policy on the cluster, and it needs a live check on kind. Today the guard is Klaxon's own code, which holds against Klaxon's own mistakes. You chose week 9's safety pass (2026-11-16).
+- *Why does the blast radius you approved on fault 4 say the container is recreated?* The rollback tool's description says so (`src/klaxon/agent/catalog.py:28`), and Claude repeated it. On kind, the payments API and the receiver roll over with no pause. It errs on the safe side. You left it for week 9 (known gap 14 (g)).
+- *What does "Proposed fix (not applied)" mean in a replay of an approved run?* The loop prints it for every run: the loop itself never applies a fix. Your approval and the rollback came after the loop. The gate's files record them (`approval-request.json`, `approval-decision.json`, `gate.jsonl`), and `run.json` the verification. A replay does not run them again.
+- *Why do the kind runs have no judge's verdict?* The plan ran the judge on items 1 and 2's runs only. On kind only the rule graded, and it found the cause named on all 4.
 
 ## Week 6 in one page (2026-11-09 to 16)
 
@@ -1179,4 +1182,4 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 **What it does not show.** How the two loops compare: one run per case. How the rollback on kind does over many runs: one approved run per fault. Anything about real systems: synthetic data, a simulated provider, one node.
 
-**Your review.** The list under Needs Aravind in STATUS: what to run, and four decisions.
+**Your review (2026-11-16).** You ran the four commands, and each printed what Claude's run had. You accepted the week. The rollback account's hardening and the prompt's line on kind wait for week 9's safety pass.
