@@ -73,6 +73,25 @@ def test_each_mutants_text_is_in_its_file_exactly_once():
     assert stale == []
 
 
+def test_a_mutants_run_leaves_out_the_guard_on_the_list_itself(monkeypatch, tmp_path):
+    # Week 6, item 5: the guard above reads the runner's copy, where a mutant is applied, so under nearly every mutant
+    # it failed first, and pytest -x stopped before the test files that sort after it (item 4's 39 mutants of 137).
+    runner = load_runner()
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    for integration in (False, True):
+        runner.run_tests(tmp_path, "python", integration)
+    assert len(calls) == 2
+    assert all(args[args.index("--deselect") + 1] == runner.LIST_GUARD for args in calls)
+    file, name = runner.LIST_GUARD.split("::")
+    assert f"\ndef {name}(" in (SCRIPT.parents[1] / file).read_text()  # the guard it names is still there
+
+
 def test_the_runners_copy_holds_every_folder_kind_ups_image_tag_reads():
     # Week 6, item 3: the tag reads requirements/, which the copy once left out, so its baseline would have failed.
     import re

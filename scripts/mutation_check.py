@@ -3706,8 +3706,14 @@ def select(with_stack: bool, stack_only: bool, only: list[str]) -> list[tuple]:
     return [m for m in MUTANTS if (with_stack or not m[4]) and (m[4] or not stack_only) and (not only or m[1] in only)]
 
 
+# Week 6, item 5: tests/test_mutation_check.py's guard reads this runner's copy, where one mutant is always applied, so
+# it failed under nearly every mutant and, with -x, stopped the suite before the test files that sort after it: a mutant
+# was counted caught without its own tests running. It belongs to make test, not to a mutant's run.
+LIST_GUARD = "tests/test_mutation_check.py::test_each_mutants_text_is_in_its_file_exactly_once"
+
+
 def run_tests(work: Path, python: str, integration: bool) -> subprocess.CompletedProcess:
-    args = [python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider"]
+    args = [python, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "--deselect", LIST_GUARD]
     if integration:
         args += ["-m", "integration"]
     # No .pyc written: two mutants of one file, of the same size, written within a second, could share a stale one.
