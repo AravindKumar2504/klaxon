@@ -1016,6 +1016,77 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - *Did the check help?* It fired once, on Sonnet's missing-deploys seed 9: the next reply broke the format, and the run ran out of steps. One firing says nothing either way.
 - *Why did 3 runs give no diagnosis?* Two used all 8 tool calls and lost 2 steps to replies that broke the format: a hypothesis over 1,000 characters, or text after the JSON. The third used 7, lost 2 the same way, and 1 to the check. With 10 steps, none was left.
 
+## Week 6, item 2 (built 2026-11-10, piloted live the same day): the LangGraph loop
+
+**What it is.** A second version of Klaxon's loop, written with LangGraph, a library that builds agents as graphs. It is the same loop: the same prompt, reply format, tools, budgets, rollback check, trace, recordings and model (Claude Code on your seat). Only the control flow moved: which part of a run comes next, and when the run stops. `LOOP=langgraph` picks it in `make investigate-fault`, `make eval` and `make replay-run`. The plain loop stays the default.
+
+**The graph** (`make loop-graph` prints LangGraph's own drawing of it):
+
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	open_tools(open_tools)
+	budgets(budgets)
+	ask_model(ask_model)
+	read_reply(read_reply)
+	rollback_check(rollback_check)
+	call_tool(call_tool)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> open_tools;
+	ask_model -. &nbsp;no reply: stop&nbsp; .-> __end__;
+	ask_model -. &nbsp;no reply: again&nbsp; .-> budgets;
+	ask_model -. &nbsp;a reply&nbsp; .-> read_reply;
+	budgets -. &nbsp;budget used&nbsp; .-> __end__;
+	budgets -. &nbsp;a step left&nbsp; .-> ask_model;
+	call_tool -. &nbsp;refused or failed&nbsp; .-> __end__;
+	call_tool -. &nbsp;a result&nbsp; .-> budgets;
+	open_tools -. &nbsp;tools refused&nbsp; .-> __end__;
+	open_tools -. &nbsp;first step&nbsp; .-> budgets;
+	read_reply -. &nbsp;invalid: stop&nbsp; .-> __end__;
+	read_reply -. &nbsp;invalid: again&nbsp; .-> budgets;
+	read_reply -. &nbsp;a tool call&nbsp; .-> call_tool;
+	read_reply -. &nbsp;a diagnosis&nbsp; .-> rollback_check;
+	rollback_check -. &nbsp;diagnosed&nbsp; .-> __end__;
+	rollback_check -. &nbsp;sent back&nbsp; .-> budgets;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+Each box is a node, one part of a run. Each arrow is a decision. Every stop rule is an arrow to the end, from the node whose part stopped the run.
+
+**One step through it.** `budgets` checks the time and the steps left. `ask_model` asks Claude; a failed call goes back to `budgets`, to be asked again, or stops the run. `read_reply` reads the reply: a tool call goes to `call_tool`, a diagnosis to `rollback_check`, and a reply it cannot use goes back with what was wrong. `call_tool` runs one read-only tool, and its result is the next turn. `rollback_check` sends a rollback that names no action back once, or takes the diagnosis and ends the run.
+
+**Shared code, not a copy.** Each node calls a method of the plain loop's `Investigation`. The plain loop calls the same methods from a `while` loop, so the two cannot do a step differently. The graph's own state is only the step in hand: what the model saw, its reply, what the loop read, and the result once the run stops. The run's state (the conversation, the counts, the calls) stays the plain loop's.
+
+**The proof.** All 61 saved live runs of weeks 3 to 5, replayed on both loops, offline. On 60, both reproduced exactly: the same prompts, replies, decisions, tool results and stop. Their two replay traces match record by record, but for the clock and the loop's name. The 61st, week 3's first live run, failed the same way on both: its prompt changed after it. All 152 behavior tests of the loop pass on both loops.
+
+**Its guards.**
+- *A step limit from the budgets.* LangGraph stops a graph after a set number of node runs. Here it is the most a run can take: 4 nodes a step, so 202 for a 50-step run. A bug that looped without using a step would end as a crash.
+- *No LangSmith.* LangGraph's libraries can send traces to LangSmith, a hosted service. The loop refuses to run while any of its tracing switches is on. A test refuses every network connection, then replays a run on the loop.
+- *The caller's thread.* LangGraph runs a lone node in the thread that called it, so Ctrl-C stops the step it is in, as in the plain loop.
+- *Pinned.* LangGraph 1.2.18, from Oct 26, and the 37 libraries it needs, each released at least two weeks before. The plain loop imports none of them.
+
+**Which loop ran a run.** Each new run's trace and run.json say it, with LangGraph's version. Runs saved before say nothing, and count as the plain loop's. A replay uses the loop its run recorded; `LOOP=` replays it on the other. The report never counts two loops in one row.
+
+**The pilot** (live, your OK, 2026-11-10 UTC). 8 runs on your seat, Opus 5.5, seed 7, in 39 minutes: all 8 diagnosed, 65 model calls, $3.51 at API prices by Claude Code's estimate. Each replays exactly on both loops. The judge said "names the cause" on all 8, the rule on 7: on the false alarm, its words for a false alert did not match "a false or transient alert", so it said "partly". You labeled 4, blind: "names" on 3, "partly" on the provider outage, where both graders said "names". Missing deploys named the rollback this time, which no Opus run did in week 5. The false alarm came after the new 5-minute warm-up, and the run still offered a startup backlog as one possible cause.
+
+**What it does not show.** How the two loops compare. They make the same decisions on the same replies, so live runs differ only by what the model replies. One seed per case is too few to say more.
+
+**What to read in the code.** In `src/klaxon/agent/graph.py`: `EDGES`, `build`, `recursion_limit`, `check_ready` and `GraphInvestigation`. In `src/klaxon/agent/loop.py`: `run`, `_open`, `_out_of_budget`, `_step`, `_read`, `_diagnosed`, `runner` and `replay`.
+
+**Likely questions.**
+- *What does LangGraph add, if the steps are shared?* The control flow as data: a graph you can draw, check and change without touching the steps. The plain loop keeps it in an `if` and a `while`. Week 8 compares the two on equal terms.
+- *Why not LangGraph's own pause for your approval?* Your choice: the gate's safety rests on checks week 4 proved (a sealed request, an expiry, your typed yes). An interrupt would need them proven again.
+- *Why not a LangChain model class?* It needs an API key, and you have none. Klaxon's own adapter calls Claude Code on your seat, so Claude stays the only model.
+- *How do you know the two loops are the same?* Every saved run replays the same on both, and every behavior test passes on both.
+- *Does LangGraph send anything anywhere?* Not here. Its tracing is the only path, and the loop refuses to run while it is on.
+
 ## Week 6, item 4 (built 2026-11-13, run on kind 2026-11-15): Klaxon undoes a bad rollout on kind
 
 **What it is.** Week 4's rollback, on Kubernetes. Klaxon still diagnoses with read-only tools and asks before it acts. After your typed yes, it puts back the bad Deployment's settings, through an account that can do almost nothing else. Then code checks the cluster and the money, as on Compose.

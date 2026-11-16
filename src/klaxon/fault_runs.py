@@ -46,6 +46,7 @@ run on it; `grade` compares a saved run's diagnosis with its fault's cause again
 
 Run: python -m klaxon.fault_runs run FAULT [--steps N --tool-calls N --seconds S]   live, with Aravind's OK each time
          [--no-actions]                                                               diagnosis only, as in week 3
+         [--loop langgraph]                                     week 6: the LangGraph loop (default: the plain one)
          [--platform kind]       week 6: on the kind cluster; Klaxon's tools read it as klaxon-reader, and its
                                  rollback, after a typed approval, goes through klaxon-rollback (kind_parts)
      python -m klaxon.fault_runs quiet [--minutes M]                                  traffic only: injects nothing
@@ -880,6 +881,7 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
         budgets = Budgets(steps=args.steps, tool_calls=args.tool_calls, seconds=args.seconds)
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
+        ran_by = loop.loop_header(args.loop)  # week 6: the loop that will run it, refused here if it cannot
         if on_kind:  # week 6, item 4: the fault as a rollout; Klaxon reads and acts on the cluster, never as its admin
             cluster.ready()  # the cluster up, every pod ready, the Compose stack down, the ports the cluster's
             cluster.make_reader_kubeconfig()  # the tools' and verification's reads: an hour
@@ -887,13 +889,12 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
             tools = kind_tools
             binary = preflight(args.model, client=tools)
             parts = Stack(faults.LocalStack(deployer=cluster.ClusterDeployer()), alerts.Alerting())
-            header = {"fault_name": fault.name} | cluster.provenance(
-                command, datetime.now(timezone.utc), cluster.describe()
-            )
+            header = cluster.provenance(command, datetime.now(timezone.utc), cluster.describe())
         else:
             binary = preflight(args.model)
             parts = Stack(faults.LocalStack(), alerts.Alerting())
-            header = {"fault_name": fault.name} | _provenance(command)
+            header = _provenance(command)
+        header = {"fault_name": fault.name, **ran_by} | header
     except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError, cluster.ClusterError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
@@ -913,7 +914,15 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
         run_header = header | {"what": what, "alert": asdict(alert), "budgets": asdict(budgets)}
         client = None if tools is None else tools()
         return loop.investigate_live(
-            alert, budgets, folder, run_header, args.model, binary, actions=offered, tool_client=client
+            alert,
+            budgets,
+            folder,
+            run_header,
+            args.model,
+            binary,
+            actions=offered,
+            tool_client=client,
+            loop_kind=args.loop,
         )
 
     code = 0
@@ -1030,6 +1039,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--no-actions", action="store_true", help="offer no write action: the loop only diagnoses, as in week 3"
     )
     live.add_argument("--platform", choices=PLATFORMS, default="compose", help="where: Compose, or kind (week 6)")
+    live.add_argument("--loop", choices=loop.LOOPS, default=loop.PLAIN, help="the loop that runs it (week 6)")
     calm = actions.add_parser("quiet", help="traffic and no fault: do the alert rules stay quiet?")
     calm.add_argument("--minutes", type=float, default=5.0)
     rehearsal = actions.add_parser(

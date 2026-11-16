@@ -417,11 +417,19 @@ def patch_command(monkeypatch, world, script=None):
     script = script or [tool("query_metrics", query="sum(rate(klaxon_provider_attempts_total[1m]))"), DIAGNOSE_OUTAGE]
     given = []
 
-    def investigate_live(alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None):
+    def investigate_live(
+        alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None, loop_kind=loop.PLAIN
+    ):
         given.append((alert, header, model_id))
         assert tool_client is None  # Klaxon's tool server as it starts on Compose
         return loop.investigate(
-            alert, ScriptedModel(script), Served().client, folder / loop.TRACE, budgets, actions=actions
+            alert,
+            ScriptedModel(script),
+            Served().client,
+            folder / loop.TRACE,
+            budgets,
+            actions=actions,
+            loop_kind=loop_kind,
         )
 
     monkeypatch.setattr(fault_runs.loop, "investigate_live", investigate_live)
@@ -1417,9 +1425,17 @@ def patch_gated(monkeypatch, world, script, answer="{id}", new_damage=False, bef
     monkeypatch.setattr(fault_runs, "Stack", lambda local, alerting: world.stack())
     monkeypatch.setattr(fault_runs, "_provenance", lambda command: {"rerun_command": command, "git_commit": "made-up"})
 
-    def investigate_live(alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None):
+    def investigate_live(
+        alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None, loop_kind=loop.PLAIN
+    ):
         return loop.investigate(
-            alert, ScriptedModel(script), Served().client, folder / loop.TRACE, budgets, actions=actions
+            alert,
+            ScriptedModel(script),
+            Served().client,
+            folder / loop.TRACE,
+            budgets,
+            actions=actions,
+            loop_kind=loop_kind,
         )
 
     monkeypatch.setattr(fault_runs.loop, "investigate_live", investigate_live)

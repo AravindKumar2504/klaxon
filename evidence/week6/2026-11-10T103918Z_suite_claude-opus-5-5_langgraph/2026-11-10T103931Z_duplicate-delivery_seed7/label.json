@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "duplicate-delivery",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "987733571627b3be203e519902168a46080dd52e36c639aef09bdecfbd2d5725",
+  "diagnosis_sha256": "3b83e3f29bd88078420813d53ce94227c7179bd51f4c947c36a7ab44c6c679e7",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Because it rolls back the ledger consumer to restore idempotency and calls for separately approved reversals to correct the duplicate postings.",
+  "at": "2026-11-12T23:41:31Z",
+  "how": "typed at a terminal"
+}

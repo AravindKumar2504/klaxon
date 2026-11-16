@@ -451,8 +451,10 @@ def test_a_gated_run_on_kind_makes_both_tokens_starts_kinds_tools_and_acts_with_
 
     monkeypatch.setattr(fault_runs, "run", run)
 
-    def investigate_live(alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None):
-        given["tool_client"], given["actions"] = tool_client, actions
+    def investigate_live(
+        alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None, loop_kind=fault_runs.loop.PLAIN
+    ):
+        given["tool_client"], given["actions"], given["loop_kind"] = tool_client, actions, loop_kind
         raise KeyboardInterrupt("made up: stop here")
 
     monkeypatch.setattr(fault_runs.loop, "investigate_live", investigate_live)
@@ -474,6 +476,8 @@ def test_a_gated_run_on_kind_makes_both_tokens_starts_kinds_tools_and_acts_with_
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     assert saved["platform"] == "kind" and saved["label"].startswith("Real run on this Mac's kind cluster (Kubernetes")
     assert saved["cluster"] == {"kubernetes_server": "v0-made-up"} and "--platform kind" in saved["rerun_command"]
+    # Week 6, items 2 and 4 together: a run on kind takes the plain loop unless told, and its files say so.
+    assert given["loop_kind"] == fault_runs.loop.PLAIN and saved["loop_kind"] == fault_runs.loop.PLAIN
 
 
 def test_a_gated_run_on_kind_touches_nothing_when_the_cluster_is_not_ready(monkeypatch, tmp_path, capsys):

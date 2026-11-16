@@ -5,8 +5,12 @@ trace holds every step.
 The model's replies are scripted (ScriptedModel), or made up for the test the way a live adapter would return
 them; none came from a model. The tools are Klaxon's real tool list (names, descriptions, schemas) with made-up
 results, served by Klaxon's real MCP server code: in this process, or as a process of its own.
+
+Week 6, item 2: every test here runs twice, once on each loop, the plain one and the LangGraph one (the fixture
+below): the loop's behavior is the same on both.
 """
 
+import functools
 import json
 import os
 import re
@@ -27,6 +31,16 @@ from klaxon.agent.model import Message, Recording, ScriptedModel
 from klaxon.agent.tools import HOME, ToolUnavailable, make_tools
 from klaxon.agent.trace import read_trace
 from tests.agent.inprocess import InProcess
+
+
+@pytest.fixture(autouse=True, params=loop.LOOPS)
+def loop_kind(request, monkeypatch):
+    """Each test, on each loop. Every run here goes through loop.investigate (directly, or through a replay or a live
+    run's code), which is given the loop to use; a replay still uses the loop its run recorded, as it does for real."""
+    if request.param != loop.PLAIN:
+        monkeypatch.setattr(loop, "investigate", functools.partial(loop.investigate, loop_kind=request.param))
+    return request.param
+
 
 REAL = make_tools()  # building them reads nothing; each test replaces what they return
 ALERT = loop.Alert("LedgerLagHigh", "The ledger consumer is 193 messages behind on provider-events, and growing.")
@@ -648,6 +662,17 @@ def test_the_trace_starts_with_the_alert_budgets_tools_and_allow_list(tmp_path):
     assert start["extra"]["alert"] == {"name": ALERT.name, "summary": ALERT.summary, "fired_at": None}
     assert start["extra"]["tool_server"] == {"name": "klaxon-ops", "version": "0.0.1", "protocol": "2025-11-25"}
     assert start["source"] == "scripted" and "no model was called" in start["label"]
+
+
+def test_the_trace_says_which_loop_ran_the_run_and_for_the_langgraph_loop_its_version(tmp_path, loop_kind):
+    # Week 6, item 2: a replay uses the loop a run recorded, and the report never counts two loops in one row.
+    _, _, _, trace = investigate(tmp_path, [tool(), diagnose("c1")])
+    about = trace[0]["extra"]["loop"]
+    assert about["kind"] == loop_kind and list(about)[0] == "kind"
+    if loop_kind == loop.LANGGRAPH:
+        assert about["langgraph_version"] == "1.2.18"
+    else:
+        assert "langgraph_version" not in about
 
 
 def test_a_crash_leaves_a_stop_record_saying_so_and_the_tools_closed(tmp_path):

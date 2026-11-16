@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "provider-outage",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "62189df02256ea75c5e0e51c9a1ba6d785cf0efd46388e1d1e34e74b981fb98f",
+  "diagnosis_sha256": "ccf5ee945bac26308b092eb9517d3d190e6cb26d2e63ac88b72938711c1d4eaa",
+  "verdict": "partly",
+  "fix_fits": true,
+  "why": "Because it correctly recommends no changes on our side, escalating the provider failure, and reconciling pending payments and refunds after recovery.",
+  "at": "2026-11-12T23:42:46Z",
+  "how": "typed at a terminal"
+}

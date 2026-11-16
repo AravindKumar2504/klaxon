@@ -746,12 +746,16 @@ def patch_suite(monkeypatch, world):
         "ConsumerLagHigh": [tool("query_metrics", query="sum(klaxon_consumer_lag)"), NOTHING_WRONG_REPLY],
     }
 
-    def investigate_live(alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None):
+    def investigate_live(
+        alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None, loop_kind=loop.PLAIN
+    ):
         client = Served().client
         if tool_client is not None:  # the case's own client, around the made-up server instead of the real one
             client = evaluation.Withheld(client, tool_client.outages, sleep=world.sleep)
         model = ScriptedModel(scripts[alert.name])
-        return loop.investigate(alert, model, client, folder / loop.TRACE, budgets, actions=actions)
+        return loop.investigate(
+            alert, model, client, folder / loop.TRACE, budgets, actions=actions, loop_kind=loop_kind
+        )
 
     monkeypatch.setattr(evaluation.loop, "investigate_live", investigate_live)
 
@@ -806,9 +810,13 @@ def test_a_suite_whose_model_could_not_answer_stops_and_exits_1(monkeypatch, tmp
     world = DockerStack()
     patch_suite(monkeypatch, world)
 
-    def investigate_live(alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None):
+    def investigate_live(
+        alert, budgets, folder, header, model_id, binary, actions=(), tool_client=None, loop_kind=loop.PLAIN
+    ):
         refusing = ScriptedModel([ModelError("the seat's usage limit was reached (made up)")] * 2)  # and its retry
-        return loop.investigate(alert, refusing, Served().client, folder / loop.TRACE, budgets, actions=actions)
+        return loop.investigate(
+            alert, refusing, Served().client, folder / loop.TRACE, budgets, actions=actions, loop_kind=loop_kind
+        )
 
     monkeypatch.setattr(evaluation.loop, "investigate_live", investigate_live)
     argv = ["run", "--cases", "false-alarm", "--seeds", "7,8", "--evidence-dir", str(tmp_path)]

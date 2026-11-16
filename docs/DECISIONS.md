@@ -889,6 +889,23 @@ Built in the plan's worktree (`.claude/worktrees/week-6-plan`), on the branch `c
 - **Their evidence, committed in item 2's session** (Claude, at his word, `50417ce`): the runs had stayed uncommitted in item 1's worktree. Each replays exactly.
 - **His labels:** 6 runs picked on 2026-11-13 (every run where the graders disagree, and 3 drawn at random), not labeled yet.
 
+## 2026-11-10 (week 6 session: item 2, the LangGraph loop)
+
+In a session of its own, started by the week 6 planning session, on the branch `claude/week-6-langgraph`, in a worktree of its own, from item 1's code (`07c6d0b`, a fast-forward). His four answers came in one multiple-choice batch, each Claude's recommendation:
+
+- **LangGraph: "1.2.18, all locked"** (Aravind, over pinning only LangGraph, or 1.2.17). On PyPI at 02:58 UTC, 1.2.18 (2026-10-26) was the newest release at least two weeks old; 1.2.19 and 1.2.20 were 10 and 5 days old. It is in an optional extra, `.[graph]`. LangGraph and the 37 libraries it needs are pinned in `requirements/graph.lock.txt` (21 of the 38 were new to the venv), each released before 2026-10-27 (pip's `--uploaded-prior-to`). Unpinned, pip would have taken jsonpatch 1.45 and xxhash 4.1.0, both released on 2026-11-09. `make venv` installs them, so `make test` always runs the graph's tests.
+- **The graph's shape: "Shared steps, 6 nodes"** (over the graph owning the state, as LangGraph's tutorials do, or 4 nodes with the rest in plain Python). Each node calls the plain loop's own code for its part; the graph decides only what comes next. Every stop rule is an edge to the end.
+- **Choosing the loop: "Plain default; replay as run"** (over the plain loop for every replay). A replay uses the loop its run recorded, and `LOOP=` replays it on the other.
+- **Records: "Trace + run.json, own rows"** (over a Loop column). Each new run's trace, run.json and suite.json name its loop and LangGraph's version. Runs saved before count as the plain loop's. The report groups by loop too, and its Mode cell adds "LangGraph loop".
+- **The pilot: "Yes, after the mutants"; his labels: "Disagreements + 3 drawn"** (Aravind, 2026-11-10, 10:38 UTC).
+- **His labels** (2026-11-12, typed at his terminal): duplicate delivery, poison message and the false alarm "names the cause"; the provider outage "partly"; the fix fits on all 4. On the false alarm he sided with the judge against the rule; on the provider outage he differs from both graders.
+- **Claude's defaults, beyond his choices:**
+  - *LangSmith off.* LangGraph's libraries can send traces to LangSmith, a hosted service. The loop refuses to run while any of LangSmith's four switches (`LANGSMITH_TRACING`, `LANGCHAIN_TRACING`, and their `_V2` forms) reads "true", or LangSmith's own `tracing_is_enabled` says so. CLAUDE.md: Klaxon never posts to anything Aravind does not own.
+  - *LangGraph's recursion limit, from the budgets:* 4 nodes a step, one for opening the tools, and one for LangGraph's own count of the input: 202 for 50 steps. A test runs the longest run 50 steps allow (201 nodes) and checks it ends on its own rule.
+  - *The graph's state is the step in hand;* the run's state stays the plain loop's `State`, changed only by the plain loop's code.
+  - *A loop that cannot run here is refused before anything:* no trace, no folder, no stack command.
+  - *To keep clear of item 3's branch,* the harness tests are in a file of their own (`tests/test_loop_choice.py`) and the new mutants sit beside item 1's. Two places will still meet at the merge: the mutation runner's copy list (both branches add `requirements/`, with different comments), and the `investigate-fault` recipe in the Makefile, where item 4 will add `PLATFORM=`.
+
 ## 2026-11-13 to 15 (week 6 session: item 4, rollback on kind)
 
 Built in item 2's session, in its worktree (`.claude/worktrees/intelligent-darwin-61fea6`), on the branch `claude/week-6-rollback-on-kind`, cut from item 3's `6280631` with item 1 merged in (`72489ff`). Run live there on 2026-11-15, and finished the same day in a session of its own, which wrote these notes at his word.
