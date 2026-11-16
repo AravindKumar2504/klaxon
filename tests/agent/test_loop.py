@@ -36,9 +36,12 @@ from tests.agent.inprocess import InProcess
 @pytest.fixture(autouse=True, params=loop.LOOPS)
 def loop_kind(request, monkeypatch):
     """Each test, on each loop. Every run here goes through loop.investigate (directly, or through a replay or a live
-    run's code), which is given the loop to use; a replay still uses the loop its run recorded, as it does for real."""
+    run's code), which is given the loop to use; a replay still uses the loop its run recorded, as it does for real.
+    A live run goes through investigate_live, which names its loop itself, so it is given the loop too (week 6, item
+    5: the review found the live path ran the plain loop under both)."""
     if request.param != loop.PLAIN:
         monkeypatch.setattr(loop, "investigate", functools.partial(loop.investigate, loop_kind=request.param))
+        monkeypatch.setattr(loop, "investigate_live", functools.partial(loop.investigate_live, loop_kind=request.param))
     return request.param
 
 
@@ -888,7 +891,9 @@ emit({{"type": "result", "subtype": "success", "is_error": False, "num_turns": 1
 """
 
 
-def test_a_live_run_offline_with_a_fake_claude_and_the_real_server_then_its_replay(tmp_path, monkeypatch, capsys):
+def test_a_live_run_offline_with_a_fake_claude_and_the_real_server_then_its_replay(
+    tmp_path, monkeypatch, capsys, loop_kind
+):
     """The whole live path, with a fake `claude` that prints made-up events in Claude Code's documented shapes,
     Klaxon's real MCP server as a process (with Prometheus out of reach), the recording, the tool results and the
     trace; then the replay of that folder."""
@@ -921,6 +926,7 @@ def test_a_live_run_offline_with_a_fake_claude_and_the_real_server_then_its_repl
     assert len(header["tools"]) == 8 and called["text"].startswith("Prometheus could not be reached")
     trace = read_trace(folder / loop.TRACE)
     assert trace[0]["source"] == "claude-code" and trace[-1]["reason"] == "diagnosed"
+    assert trace[0]["extra"]["loop"]["kind"] == loop_kind  # the loop this test runs on, not the plain one each time
     assert loop.main(["replay", str(folder)]) == 0
     assert "Reproduced: the same prompts, replies, decisions, tool results and stop" in capsys.readouterr().out
 

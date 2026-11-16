@@ -93,6 +93,8 @@ ROLLBACK = catalog.ROLLBACK_DEPLOY.name
 # check. The report never counts two versions in one row, and each version's runs have a folder of their own.
 VERSION = 2
 MODES = {1: "evaluation", 2: "evaluation, week 6"}
+# Week 6, item 5: a fault run on kind never shares a row with a Compose run (the review's finding 8).
+KIND_MODES = ("diagnosis only, week 6, on kind", "gated, week 6, on kind")
 EVIDENCE = REPO / "evidence" / "week6"
 # Before the false alarm's quiet readings: 5 minutes of traffic (Aravind's choice, 2026-11-09; week 5: 60 s, so the
 # alert came 80 to 100 s after a fresh stack started, and most runs blamed a backlog from the restart). The faults keep
@@ -619,6 +621,8 @@ def _mode(saved: Mapping) -> str:
         return MODES.get(version, f"evaluation, version {version}")
     if saved.get("rehearsal"):
         return "rehearsal"
+    if saved.get("platform") == "kind":
+        return KIND_MODES[1] if saved.get("gated") else KIND_MODES[0]
     return "gated, week 4" if saved.get("gated") else "diagnosis only, week 3"
 
 
@@ -865,7 +869,7 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
                 "cost_usd": round(sum(row["cost_usd"] for row in group), 4),
             }
         )
-    order, modes = list(CASES), ["diagnosis only, week 3", "gated, week 4", *MODES.values()]
+    order, modes = list(CASES), ["diagnosis only, week 3", "gated, week 4", *KIND_MODES, *MODES.values()]
     out.sort(
         key=lambda e: (
             e["model"],

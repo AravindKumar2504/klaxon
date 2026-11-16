@@ -555,10 +555,12 @@ class ClusterDeployer:
 
     A deploy is a rollout: one JSON patch of the Deployment's behavior settings, whose first step makes Kubernetes
     refuse the whole patch if the Deployment changed since it was read (its resourceVersion), then a wait until the
-    rollout is done. What runs is the Deployment's current ReplicaSet, which every rollout makes anew; the log names
-    it by the SHA-256 of its uid, a 64-hex id as a Compose container's is, so the log's lines read the same and a
-    rollback refuses unless the revision it was planned on is the one running. The kubectl it is given decides with
-    which access: the cluster's admin for the faults (the harness)."""
+    rollout is done. What runs is the Deployment's current ReplicaSet: a rollout makes a new one, or brings back the
+    earlier one whose pod template it matches, as a rollback does. The log names it by the SHA-256 of its uid, a
+    64-hex id as a Compose container's is, so the log's lines read the same and a rollback refuses unless the revision
+    it was planned on is the one running. The kubectl it is given decides with which access: the cluster's admin for
+    the faults (the harness). A kubectl call that fails is a DeployError here (week 6, item 5), so the gate logs it
+    as it logs a failed docker call on Compose, instead of the run stopping on it."""
 
     def __init__(
         self,
@@ -575,10 +577,14 @@ class ClusterDeployer:
         self._ensure_local()
 
     def _get(self, *what: str) -> dict:
-        return json.loads(self._kubectl("get", *what, "--output", "json"))
+        try:
+            return json.loads(self._kubectl("get", *what, "--output", "json"))
+        except ClusterError as exc:
+            raise deploys.DeployError(f"the cluster could not be read: {exc}") from None
 
     def _current(self, service: str) -> tuple[dict, dict]:
-        """The Deployment, and the ReplicaSet that runs it, once its rollout is done: one running revision."""
+        """The Deployment, and the ReplicaSet that runs it, once every pod is of one revision: ready or not, since a
+        bad revision's pods may never be ready, and that is when a rollback is needed (week 6, item 5)."""
         if service not in deploys.SERVICES:
             raise deploys.DeployError(f"no settings are known for the service {service!r}")
         deployment = self._get("deployment", service)
@@ -587,14 +593,10 @@ class ClusterDeployer:
         done = (
             status.get("observedGeneration", 0) >= meta.get("generation", 1)
             and status.get("updatedReplicas") == wanted
-            and status.get("readyReplicas") == wanted
-            and status.get("availableReplicas") == wanted
-            and not status.get("unavailableReplicas")
+            and status.get("replicas") == wanted  # no pod of an older revision left
         )
         if not done:
-            raise deploys.DeployError(
-                f"{service} is not one ready revision: a rollout is going on, or its pod is not ready"
-            )
+            raise deploys.DeployError(f"{service} is not one revision: a rollout is going on")
         revision = (meta.get("annotations") or {}).get(REVISION)
         sets = [
             replica_set
@@ -614,11 +616,14 @@ class ClusterDeployer:
         environment = {item["name"]: item["value"] for item in container.get("env") or [] if "value" in item}
         return deploys.settings_of(service, environment)
 
+    def _running_of(self, service: str, current: Mapping) -> deploys.Running:
+        identity = hashlib.sha256(str(current["metadata"]["uid"]).encode()).hexdigest()
+        return deploys.Running(identity, self._settings(service, current["spec"]["template"]))
+
     def running(self, service: str) -> deploys.Running:
         """The service's running revision and its settings. Reads only."""
         _, current = self._current(service)
-        identity = hashlib.sha256(str(current["metadata"]["uid"]).encode()).hexdigest()
-        return deploys.Running(identity, self._settings(service, current["spec"]["template"]))
+        return self._running_of(service, current)
 
     def deploy(
         self, service: str, settings: Mapping[str, str], by: str, expect: deploys.Expect | None = None
@@ -630,10 +635,11 @@ class ClusterDeployer:
         wanted = deploys.check_settings(service, settings)
         self.check_local()
         with self.log.locked():
-            try:
-                before: deploys.Running | None = self.running(service)
+            try:  # one read: the patch tests the very resourceVersion the expect was checked on (week 6, item 5)
+                deployment, current = self._current(service)
+                before: deploys.Running | None = self._running_of(service, current)
             except deploys.DeployError:
-                before = None
+                deployment, before = self._get("deployment", service), None
             if expect is not None:
                 latest = self.log.latest(service)
                 if (
@@ -646,20 +652,26 @@ class ClusterDeployer:
                     raise deploys.DeployChanged(f"{service} changed since it was looked at: nothing was deployed")
             if before is not None and before.settings == wanted:
                 return None
-            deployment = self._get("deployment", service)
             patch = self._patch(service, deployment, wanted)
             try:
                 self._kubectl("patch", "deployment", service, "--type", "json", "--patch", patch)
             except ClusterError:
-                # Refused whole: nothing changed. Moved on since it was read (the patch's test step), or another cause.
-                read = deployment["metadata"]["resourceVersion"]
-                if self._get("deployment", service)["metadata"].get("resourceVersion") != read:
-                    raise deploys.DeployChanged(f"{service} changed since it was read: nothing was deployed") from None
-                raise deploys.DeployError(
-                    f"{service}'s rollout was refused by the cluster: nothing was deployed"
-                ) from None
+                # Refused whole, or applied with its answer lost (week 6, item 5): read it again to know which.
+                now = self._get("deployment", service)
+                if self._settings(service, now["spec"]["template"]) != wanted:
+                    read = deployment["metadata"]["resourceVersion"]
+                    if now["metadata"].get("resourceVersion") != read:
+                        raise deploys.DeployChanged(
+                            f"{service} changed since it was read: nothing was deployed"
+                        ) from None
+                    raise deploys.DeployError(
+                        f"{service}'s rollout was refused by the cluster: nothing was deployed"
+                    ) from None
             status = ("rollout", "status", f"deployment/{service}", f"--timeout={WAIT_SECONDS}s")
-            self._kubectl(*status, timeout=WAIT_SECONDS + 60)
+            try:
+                self._kubectl(*status, timeout=WAIT_SECONDS + 60)
+            except ClusterError as exc:  # changed, but not seen done: not logged, as a failed `compose up --wait`
+                raise deploys.DeployError(f"{service} was patched, but its rollout was not seen done: {exc}") from None
             after = self.running(service)
             record = self.log.append(
                 at=deploys.utc_now(self._clock),
@@ -702,12 +714,13 @@ def klaxons_deployer() -> ClusterDeployer:
 
 
 HEALTH_KINDS = "deployments,statefulsets,pods"  # what verification reads of the cluster, as klaxon-reader
+HEALTH_READ_SECONDS = 30.0  # one read of verification's, as its docker reads on Compose (verify.DOCKER_TIMEOUT)
 
 
 def health_objects() -> list[dict]:
     """The namespace's Deployments, StatefulSets and pods, as klaxon-reader reads them: what verification judges the
     cluster's health by (klaxon.agent.verify.cluster_unwell). Reads only."""
-    found = json.loads(reader_kubectl("get", HEALTH_KINDS, "--output", "json"))
+    found = json.loads(reader_kubectl("get", HEALTH_KINDS, "--output", "json", timeout=HEALTH_READ_SECONDS))
     items = found.get("items") if isinstance(found, dict) else None
     if not isinstance(items, list):
         raise ClusterError("the cluster's workloads came back in an unexpected shape")

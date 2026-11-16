@@ -423,7 +423,9 @@ def test_klaxons_tools_on_kind_start_with_the_platform_set_and_the_rest_of_the_e
     assert env[PLATFORM_VARIABLE] == "kind" and env == os.environ | {PLATFORM_VARIABLE: "kind"}
 
 
-def test_a_gated_run_on_kind_makes_both_tokens_starts_kinds_tools_and_acts_with_kinds_parts(monkeypatch, tmp_path):
+def made_up_kind_run(monkeypatch, tmp_path):
+    """A fault run on kind with each of its parts made up, noting what it made (made) and what it was given (given).
+    It stops at the loop: KeyboardInterrupt, so fault_runs.main returns 130."""
     world = World()
     patch_command(monkeypatch, world)
     made, given = [], {}
@@ -458,6 +460,11 @@ def test_a_gated_run_on_kind_makes_both_tokens_starts_kinds_tools_and_acts_with_
         raise KeyboardInterrupt("made up: stop here")
 
     monkeypatch.setattr(fault_runs.loop, "investigate_live", investigate_live)
+    return made, given
+
+
+def test_a_gated_run_on_kind_makes_both_tokens_starts_kinds_tools_and_acts_with_kinds_parts(monkeypatch, tmp_path):
+    made, given = made_up_kind_run(monkeypatch, tmp_path)
     assert fault_runs.main(["run", "money-unit", "--platform", "kind"]) == 130
     # Checked ready, then the two tokens, then the tools listed on kind, then the faults' own deployer on kind.
     assert made == [
@@ -478,6 +485,24 @@ def test_a_gated_run_on_kind_makes_both_tokens_starts_kinds_tools_and_acts_with_
     assert saved["cluster"] == {"kubernetes_server": "v0-made-up"} and "--platform kind" in saved["rerun_command"]
     # Week 6, items 2 and 4 together: a run on kind takes the plain loop unless told, and its files say so.
     assert given["loop_kind"] == fault_runs.loop.PLAIN and saved["loop_kind"] == fault_runs.loop.PLAIN
+
+
+def test_a_diagnosis_only_run_on_kind_gets_no_write_access_and_saves_its_command_without_the_home_folder(
+    monkeypatch, tmp_path
+):
+    # Week 6, item 5 (the review's finding 11): a run that offers no action needs no token of klaxon-rollback, and its
+    # saved command writes the home folder as ~, as Compose's _provenance does.
+    import klaxon.agent.tools as agent_tools
+
+    made, given = made_up_kind_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(agent_tools, "HOME", str(tmp_path))  # the home folder, made up: clean_text writes it as ~
+    argv = ["run", "money-unit", "--platform", "kind", "--no-actions", "--evidence-dir", str(tmp_path / "kind")]
+    assert fault_runs.main(argv) == 130
+    assert made[:2] == ["ready", "reader's token"] and "rollback's token" not in made
+    assert given["actions"] == () and "parts" not in given  # nothing offered, so no gate parts either
+    [folder] = (tmp_path / "kind").iterdir()
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert str(tmp_path) not in saved["rerun_command"] and "--evidence-dir ~/kind" in saved["rerun_command"]
 
 
 def test_a_gated_run_on_kind_touches_nothing_when_the_cluster_is_not_ready(monkeypatch, tmp_path, capsys):

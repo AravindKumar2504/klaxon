@@ -917,6 +917,22 @@ def saved_run(folder, fault_name="duplicate-delivery", **changes):
     return folder
 
 
+def test_the_report_never_puts_a_run_on_kind_in_a_row_with_week_4s_compose_runs():
+    # Week 6, item 5 (the review's finding 8): week 6's gated runs on kind, beside week 4's on Compose, each in rows of
+    # their own, since the platform and the prompt differ.
+    found = evaluation.report([REPO / "evidence" / "week4", REPO / "evidence" / "week6" / "kind"])
+    modes = {row["folder"]: row["mode"] for row in found["runs"]}
+    kind = {folder: mode for folder, mode in modes.items() if folder.startswith("2026-11-15T")}
+    assert len(kind) == 4 and set(kind.values()) == {"gated, week 6, on kind"}
+    assert len(modes) == 13 and {mode for folder, mode in modes.items() if folder not in kind} == {"gated, week 4"}
+    summary = {(entry["case"], entry["mode"]): entry["runs"] for entry in found["summary"]}
+    assert summary["money-unit", "gated, week 6, on kind"] == summary["money-unit", "gated, week 4"] == 2
+    assert summary["duplicate-delivery", "gated, week 6, on kind"] == 2
+    assert summary["duplicate-delivery", "gated, week 4"] == 1
+    page = evaluation.markdown(found)
+    assert page.index("| money-unit | gated, week 4 |") < page.index("| money-unit | gated, week 6, on kind |")
+
+
 def responses(folder, *costs, accepted=True, model="claude-opus-5-5"):
     lines = [{"kind": "header"}]
     lines += [{"kind": "response", "model": model, "accepted": accepted, "cost_usd": cost} for cost in costs]

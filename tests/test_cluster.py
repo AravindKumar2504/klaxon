@@ -844,13 +844,16 @@ class MadeUpCluster:
     """The payments API's Deployment and its ReplicaSets, as `kubectl get ... --output json` describes them; each
     patch makes a new revision. Made up for the tests: not a cluster."""
 
-    def __init__(self, ready: bool = True) -> None:
+    def __init__(self, ready: bool = True, rolling: bool = False) -> None:
         self.calls: list[list[str]] = []
-        self.version, self.revision, self.ready = 100, 1, ready
+        self.version, self.revision, self.ready, self.rolling = 100, 1, ready, rolling
         self.env = [{"name": "DATABASE_URL", "valueFrom": {"secretKeyRef": {"name": "s", "key": "k"}}}]
         self.env += [{"name": name, "value": value} for name, value in GOOD_API.items()]
         self.sets = [self._set(1)]
-        self.refuse = None  # None, or "moved" (another change got there first), or "other"
+        # None, or "moved" (another change got there first), "other", or "applied" (applied, its answer lost)
+        self.refuse = None
+        self.moves_after_read = False  # a change by hand lands right after the next read of the Deployment
+        self.down = None  # None, or the kubectl call that fails: "get" or "rollout"
 
     def _set(self, revision: int) -> dict:
         template = {"spec": {"containers": [{"name": "payments-api", "env": json.loads(json.dumps(self.env))}]}}
@@ -875,6 +878,7 @@ class MadeUpCluster:
             "spec": {"replicas": 1, "template": {"spec": {"containers": [{"name": "payments-api", "env": self.env}]}}},
             "status": {
                 "observedGeneration": self.revision,
+                "replicas": 2 if self.rolling else 1,  # rolling: the older revision's pod still counted
                 "updatedReplicas": 1,
                 "readyReplicas": n,
                 "availableReplicas": n,
@@ -883,23 +887,33 @@ class MadeUpCluster:
 
     def __call__(self, *args: str, timeout: float = 600) -> str:
         self.calls.append(list(args))
+        if self.down == "get" and args[0] == "get":
+            raise cluster.ClusterError("kubectl get failed (1): made up")
         if args[:2] == ("get", "deployment"):
-            return json.dumps(self.deployment())
+            answer = json.dumps(self.deployment())
+            if self.moves_after_read:  # REFUND_CONNECTION set by hand, just after this read
+                self.moves_after_read, self.version = False, self.version + 1
+                self.env[3] = dict(self.env[3], value="kept")
+            return answer
         if args[:2] == ("get", "replicasets"):
             return json.dumps({"items": self.sets})
         if args[:2] == ("patch", "deployment"):
-            if self.refuse is not None:
+            steps = json.loads(args[args.index("--patch") + 1])
+            tested = {"op": "test", "path": "/metadata/resourceVersion", "value": str(self.version)}
+            if self.refuse in ("moved", "other") or steps[0] != tested:  # as Kubernetes refuses a failed test step
                 if self.refuse == "moved":
                     self.version += 1
                 raise cluster.ClusterError("kubectl patch failed (1): made up")
-            steps = json.loads(args[args.index("--patch") + 1])
-            assert steps[0] == {"op": "test", "path": "/metadata/resourceVersion", "value": str(self.version)}
             for step in steps[1:]:
                 index = int(step["path"].split("/")[-2])
                 self.env[index] = dict(self.env[index], value=step["value"])
             self.version, self.revision = self.version + 1, self.revision + 1
             self.sets.append(self._set(self.revision))
+            if self.refuse == "applied":
+                raise cluster.ClusterError("kubectl patch failed: the connection was lost (made up)")
             return "deployment.apps/payments-api patched\n"
+        if args[:2] == ("rollout", "status") and self.down == "rollout":
+            raise cluster.ClusterError("kubectl rollout status failed (1): timed out (made up)")
         return ""
 
 
@@ -914,9 +928,79 @@ def test_kinds_deployer_names_the_running_revision_by_its_replica_sets_uid(tmp_p
     assert running.container == cluster.hashlib.sha256(b"rs-uid-1").hexdigest() and running.settings == GOOD_API
 
 
-def test_a_deployment_mid_rollout_or_not_ready_is_not_one_running_revision(tmp_path):
-    with pytest.raises(cluster.deploys.DeployError, match="not one ready revision"):
-        deployer(tmp_path, MadeUpCluster(ready=False)).running("payments-api")
+def test_a_deployment_mid_rollout_is_not_one_running_revision(tmp_path):
+    with pytest.raises(cluster.deploys.DeployError, match="not one revision: a rollout is going on"):
+        deployer(tmp_path, MadeUpCluster(rolling=True)).running("payments-api")
+
+
+def test_a_bad_revision_whose_pod_is_not_ready_is_still_the_one_running_and_can_be_rolled_back(tmp_path):
+    # Week 6, item 5 (the review's finding 2): a fault's revision whose pod fails its readiness check (faults 2 and 6
+    # can) is the revision running, as on Compose, so Klaxon can plan its rollback and run it.
+    made_up = MadeUpCluster(ready=False)
+    deploying = deployer(tmp_path, made_up)
+    assert deploying.running("payments-api").settings == GOOD_API
+    bad = GOOD_API | {"CHARGE_AMOUNT_UNIT": "dollars"}
+    first = deploying.deploy("payments-api", bad, by="klaxon.faults")
+    expect = cluster.deploys.Expect(first.container, bad, first.seq)
+    back = deploying.deploy("payments-api", GOOD_API, by="Klaxon, approved request r-made-up", expect=expect)
+    assert back is not None and back.settings == GOOD_API and back.replaced_settings == bad
+
+
+def test_a_change_made_between_klaxons_check_and_its_patch_is_refused_not_overwritten(tmp_path):
+    # Week 6, item 5 (finding 3): the patch tests the resourceVersion of the very read its expect was checked on, so a
+    # change that lands just after that read makes Kubernetes refuse the patch: nothing is overwritten.
+    made_up = MadeUpCluster()
+    deploying = deployer(tmp_path, made_up)
+    bad = GOOD_API | {"CHARGE_AMOUNT_UNIT": "dollars"}
+    first = deploying.deploy("payments-api", bad, by="klaxon.faults")
+    made_up.moves_after_read = True
+    expect = cluster.deploys.Expect(first.container, bad, first.seq)
+    with pytest.raises(cluster.deploys.DeployChanged, match="changed since it was read"):
+        deploying.deploy("payments-api", GOOD_API, by="Klaxon, approved request r-made-up", expect=expect)
+    assert made_up.env[3]["value"] == "kept" and made_up.env[2]["value"] == "dollars"  # the change by hand stands
+    assert deploying.log.latest("payments-api").seq == first.seq  # and nothing more was logged
+
+
+def test_a_patch_applied_whose_answer_was_lost_is_a_deploy_done_and_logged(tmp_path):
+    # Week 6, item 5 (finding 5): kubectl failed, but the cluster had applied the patch: the rollout is waited on and
+    # logged, never said to be "nothing was deployed".
+    made_up = MadeUpCluster()
+    made_up.refuse = "applied"
+    bad = GOOD_API | {"CHARGE_AMOUNT_UNIT": "dollars"}
+    record = deployer(tmp_path, made_up).deploy("payments-api", bad, by="klaxon.faults")
+    assert record.settings == bad and record.replaced_settings == GOOD_API
+    assert ["rollout", "status", "deployment/payments-api", "--timeout=300s"] in made_up.calls
+
+
+@pytest.mark.parametrize(("down", "said"), [("get", "could not be read"), ("rollout", "rollout was not seen done")])
+def test_a_kubectl_call_that_fails_is_a_deploy_error_the_gate_logs_not_a_crash(tmp_path, down, said):
+    # Week 6, item 5 (finding 4): the gate and actions catch DeployError (and Compose's StackError), never ClusterError.
+    made_up = MadeUpCluster()
+    deploying = deployer(tmp_path, made_up)
+    made_up.down = down
+    with pytest.raises(cluster.deploys.DeployError, match=said) as caught:
+        deploying.deploy("payments-api", GOOD_API | {"CHARGE_AMOUNT_UNIT": "dollars"}, by="klaxon.faults")
+    assert not isinstance(caught.value, cluster.ClusterError) and deploying.log.latest("payments-api") is None
+    if down == "get":
+        with pytest.raises(cluster.deploys.DeployError, match="could not be read"):
+            deploying.running("payments-api")
+
+
+def test_verifications_read_of_the_cluster_stops_after_30_seconds(monkeypatch):
+    # Week 6, item 5 (finding 10): as its docker reads on Compose, not kubectl's 600 s default, so a hung API server
+    # cannot stretch one health round far past verification's 180 s.
+    from klaxon.agent import verify
+
+    seen = {}
+
+    def reader(*args, timeout=600):
+        seen["args"], seen["timeout"] = args, timeout
+        return json.dumps({"items": []})
+
+    monkeypatch.setattr(cluster, "reader_kubectl", reader)
+    assert cluster.health_objects() == []
+    assert seen["timeout"] == cluster.HEALTH_READ_SECONDS == verify.DOCKER_TIMEOUT
+    assert seen["args"] == ("get", cluster.HEALTH_KINDS, "--output", "json")
 
 
 def test_a_kind_deploy_is_one_patch_tested_on_the_resource_version_then_a_rollout_logged_as_on_compose(tmp_path):

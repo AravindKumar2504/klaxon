@@ -457,3 +457,18 @@ def test_a_server_that_exits_while_its_child_holds_the_pipe_is_seen_to_be_gone_a
     with pytest.raises(mc.McpError, match="the tool server exited"):  # not a timeout, 10 s later
         client.call("service_health", {}, timeout=10)
     assert time.monotonic() - started < 3.0
+
+
+def test_a_tool_server_started_without_an_env_never_inherits_the_platform(monkeypatch):
+    # Week 6, item 5 (the review's finding 9): a KLAXON_PLATFORM=kind left in the shell must not turn a Compose run's
+    # tools to the cluster; only a harness that means it passes it (fault_runs.kind_tools).
+    from klaxon.agent.tools import PLATFORM_VARIABLE
+
+    seen = []
+    monkeypatch.setattr(mc, "StdioTransport", lambda command, cwd, env: seen.append(env) or "made up")
+    monkeypatch.setenv(PLATFORM_VARIABLE, "kind")
+    monkeypatch.setenv("KLAXON_MADE_UP_SETTING", "kept")
+    assert mc.McpClient()._make() == "made up"
+    assert PLATFORM_VARIABLE not in seen[0] and seen[0]["KLAXON_MADE_UP_SETTING"] == "kept"
+    mc.McpClient(env={PLATFORM_VARIABLE: "kind"})._make()
+    assert seen[1] == {PLATFORM_VARIABLE: "kind"}  # passed on purpose, it stands

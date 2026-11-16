@@ -780,6 +780,12 @@ def evidence(record: Record, header: Mapping) -> dict:
 # The command line.
 
 
+def _command(argv: Sequence[str]) -> str:
+    """A run's command as its evidence keeps it: this Mac's home folder written as ~, on Compose and on kind alike
+    (week 6, item 5: kind's provenance took it as typed)."""
+    return clean_text(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]), 2000)
+
+
 def _provenance(command: str) -> dict:
     from klaxon.demo.live import provenance  # the stack's images and versions, as in week 2's evidence
 
@@ -875,7 +881,7 @@ def save(folder: Path, record: Record, header: Mapping) -> None:
 
 def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
     fault = faults.get(args.fault)
-    command = shlex.join(["python", "-m", "klaxon.fault_runs", *argv])
+    command = _command(argv)
     on_kind = args.platform == "kind"
     tools: Callable[[], McpClient] | None = None  # Klaxon's tool server as it starts on Compose
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
@@ -885,7 +891,8 @@ def _run(args: argparse.Namespace, argv: Sequence[str]) -> int:
         if on_kind:  # week 6, item 4: the fault as a rollout; Klaxon reads and acts on the cluster, never as its admin
             cluster.ready()  # the cluster up, every pod ready, the Compose stack down, the ports the cluster's
             cluster.make_reader_kubeconfig()  # the tools' and verification's reads: an hour
-            cluster.make_rollback_kubeconfig()  # the gate's rollback, after a typed approval: an hour
+            if not args.no_actions:  # a run that offers no action gets no write access (week 6, item 5)
+                cluster.make_rollback_kubeconfig()  # the gate's rollback, after a typed approval: an hour
             tools = kind_tools
             binary = preflight(args.model, client=tools)
             parts = Stack(faults.LocalStack(deployer=cluster.ClusterDeployer()), alerts.Alerting())
@@ -947,7 +954,7 @@ def _rehearse(args: argparse.Namespace, argv: Sequence[str]) -> int:
     """A fault under traffic, with the rules and no model (week 4, item 4): what they see of it, and when its alert
     fires, saved as a run's evidence is."""
     fault = faults.get(args.fault)
-    command = shlex.join(["python", "-m", "klaxon.fault_runs", *argv])
+    command = _command(argv)
     try:  # before any folder is made: a run that cannot start leaves nothing behind, and touches nothing
         settings = traffic.Settings(rate=args.rate, seed=args.seed)
         if args.platform == "kind":  # week 6, item 3: the fault deployed as a rollout, in kind's own deploy log

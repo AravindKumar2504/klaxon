@@ -40,7 +40,7 @@ from typing import Protocol
 
 from klaxon import __version__
 from klaxon.agent.model import read_records, utc_now
-from klaxon.agent.tools import clean_text
+from klaxon.agent.tools import PLATFORM_VARIABLE, clean_text
 from klaxon.patient.stack import REPO
 
 PROTOCOL_VERSION = "2025-11-25"
@@ -248,7 +248,13 @@ class McpClient:
         transport: Callable[[], Transport] | None = None,
         start_timeout: float = START_TIMEOUT,
     ) -> None:
-        self._make = transport or (lambda: StdioTransport(command, cwd=cwd, env=env))
+        def make() -> Transport:
+            # Week 6, item 5: the platform is the harness's to set (fault_runs.kind_tools passes it); one left in the
+            # shell is left out here, so a stray KLAXON_PLATFORM=kind never turns a Compose run's tools to the cluster.
+            given = env if env is not None else {k: v for k, v in os.environ.items() if k != PLATFORM_VARIABLE}
+            return StdioTransport(command, cwd=cwd, env=given)
+
+        self._make = transport or make
         self._transport: Transport | None = None
         self._last_id = 0
         self.start_timeout = start_timeout

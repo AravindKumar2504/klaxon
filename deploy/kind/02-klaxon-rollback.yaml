@@ -1,10 +1,15 @@
-# Klaxon's one write on the cluster (week 6, item 4): an approved rollback of one of our four services, and nothing
-# else. Kubernetes enforces it: a token of klaxon-rollback can get, watch and patch those four Deployments, named, and
-# read ReplicaSets to find the revision that runs. No create, no delete, no other workload, no pod, no Secret, no
-# ConfigMap, no other namespace. Only the approval gate uses it, after Aravind's typed approval (make approve); the
-# loop and its tools never get it (they read as klaxon-reader, 01-klaxon-access.yaml). The harness keeps the cluster's
-# admin access. make kind-up applies this file with the access file; each gated run on kind is given a token of
-# klaxon-rollback that lasts an hour (.kind/, not committed).
+# Klaxon's one write on the cluster (week 6, item 4): an approved rollback of one of our four services. Kubernetes
+# enforces which objects: a token of klaxon-rollback can get, watch and patch those four Deployments, named, and read
+# ReplicaSets to find the revision that runs. No create, no delete, no other workload, no direct access to a pod, a
+# Secret or a ConfigMap, no other namespace. It does not enforce which fields: a patch may change any part of those
+# Deployments' pod template (its image, a Secret it reads, a privileged container: the namespace sets no Pod Security
+# level), so what a rollback changes is held by Klaxon's own code alone (cluster.ClusterDeployer._patch: the known
+# settings' values, nothing else). So it guards against Klaxon's code going wrong, not against another process on this
+# Mac, which could read the admin kubeconfig beside its token (week 6, item 5: the separate review's finding 1).
+# Only the approval gate uses it, after Aravind's typed approval (make approve); the loop and its tools never get it
+# (they read as klaxon-reader, 01-klaxon-access.yaml). The harness keeps the cluster's admin access. make kind-up
+# applies this file with the access file; each gated run on kind is given a token of klaxon-rollback that lasts an
+# hour (.kind/, not committed).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
