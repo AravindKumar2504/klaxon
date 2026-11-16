@@ -665,6 +665,27 @@ def test_the_health_sentence_names_the_books_rule_only_for_health_that_read_it()
     )
 
 
+def test_health_keeps_what_it_read_and_on_kind_the_sentence_says_rollouts_and_pods():
+    """Week 6, item 5 (known gap 14 (a), his call: fix it with the week's review fixes). On kind, health reads the
+    cluster's rollouts and pods, not Compose's containers, and verification's sentence says what was read."""
+    clock = Clock()
+    health = verify.wait_healthy(
+        rounds_of(Readings()), list, clock.sleep, clock, unwell=lambda objects: None, what=verify.CLUSTER
+    )
+    assert health.healthy and health.what == verify.CLUSTER
+    sick = verify.wait_healthy(
+        rounds_of(Readings()), list, clock.sleep, clock, within=30.0, unwell=lambda objects: "x", what=verify.CLUSTER
+    )
+    assert not sick.healthy and sick.what == verify.CLUSTER
+    found, _ = verified(check(BOUNDARY), check(LATE))
+    assert found.health.what == "docker" and found.said[0].startswith("Healthy: every container is healthy,")
+    on_kind = replace(found, health=replace(found.health, what=verify.CLUSTER))
+    assert on_kind.said[0] == (
+        "Healthy: every rollout is done and every pod ready, and the metric rules and the books rule were quiet at 2"
+        " evaluations in a row."
+    )
+
+
 def test_health_whose_money_check_gave_no_verdict_says_the_books_rule_had_no_data():
     """The re-check's finding 3: a round whose money check gave no verdict leaves the books rule out, so health must not
     say it was quiet."""

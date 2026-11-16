@@ -398,6 +398,12 @@ class Health:
     # Whether its quiet rounds read the books rule's verdict (week 4, item 4): False when the money check gave none;
     # None for health saved before the books rule.
     books: bool | None = None
+    # What it read besides the rules (week 6, item 5): Compose's containers ("docker"), or on kind CLUSTER, the cluster's
+    # rollouts and pods. Health saved before says nothing of it, and was Compose's.
+    what: str = "docker"
+
+
+CLUSTER = "the cluster"  # what health reads on kind, as fault_runs.kind_parts names it (week 6, item 4)
 
 
 def wait_healthy(
@@ -429,9 +435,9 @@ def wait_healthy(
         rounds.append({"at_utc": evaluation.at_utc, "unwell": why})
         in_a_row = 0 if why else in_a_row + 1
         if in_a_row >= QUIET_IN_A_ROW:
-            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]))
+            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]), what=what)
         if clock() - started + every > within:
-            return Health(False, why or "not quiet long enough", tuple(rounds), books=read[-1])
+            return Health(False, why or "not quiet long enough", tuple(rounds), books=read[-1], what=what)
         sleep(every)
 
 
@@ -537,7 +543,8 @@ def say(found: Verification) -> list[str]:
     health, money = found.health, found.money
     if health.healthy:
         rules = "the metric rules and the books rule were" if health.books else "the metric rules were"
-        lines = [f"Healthy: every container is healthy, and {rules} quiet at {QUIET_IN_A_ROW} evaluations in a row."]
+        stack = "every rollout is done and every pod ready" if health.what == CLUSTER else "every container is healthy"
+        lines = [f"Healthy: {stack}, and {rules} quiet at {QUIET_IN_A_ROW} evaluations in a row."]
         if health.books is False:
             lines[0] += " The books rule had no data: the money check gave no verdict."
     else:

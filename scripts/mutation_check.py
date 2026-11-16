@@ -2301,11 +2301,11 @@ MUTANTS = [
      "        if (rule, subject, number) == BOOKS and check is not None and check.numbers.get(number) is None:",
      "        if (rule, subject, number) == BOOKS:", False),
     ("the health sentence never names the books rule", A + "verify.py",
-     "            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]))",
-     "            return Health(True, None, tuple(rounds))", False),
+     "            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]), what=what)",
+     "            return Health(True, None, tuple(rounds), what=what)", False),
     ("health says the books rule was read when a quiet round had no verdict", A + "verify.py",
-     "            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]))",
-     "            return Health(True, None, tuple(rounds), books=True)", False),
+     "            return Health(True, None, tuple(rounds), books=all(read[-QUIET_IN_A_ROW:]), what=what)",
+     "            return Health(True, None, tuple(rounds), books=True, what=what)", False),
     ("health never says the books rule had no data", A + "verify.py",
      "        if health.books is False:\n", "        if False:\n", False),
     ("books_read counts a money check with no verdict as read", A + "verify.py",
@@ -3735,6 +3735,17 @@ MUTANTS = [
     ('a fault run saves its command with the home folder in it', 'src/klaxon/fault_runs.py',
      '    return clean_text(shlex.join(["python", "-m", "klaxon.fault_runs", *argv]), 2000)',
      '    return shlex.join(["python", "-m", "klaxon.fault_runs", *argv])', False),
+    # Week 6, item 5 (known gap 14 (a)): health keeps what it read, and the sentence on kind says rollouts and pods.
+    ('healthy health forgets that it read the cluster', A + 'verify.py',
+     ', books=all(read[-QUIET_IN_A_ROW:]), what=what)',
+     ', books=all(read[-QUIET_IN_A_ROW:]))', False),
+    ('health that is not healthy forgets that it read the cluster', A + 'verify.py',
+     ', books=read[-1], what=what)',
+     ', books=read[-1])', False),
+    ('verification on kind says every container is healthy', A + 'verify.py',
+     '        stack = "every rollout is done and every pod ready" if health.what == CLUSTER else'
+     ' "every container is healthy"',
+     '        stack = "every container is healthy"', False),
 ]
 
 

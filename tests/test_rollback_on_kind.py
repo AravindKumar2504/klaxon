@@ -412,7 +412,7 @@ def test_kind_parts_roll_back_through_klaxons_deployer_and_verify_the_clusters_h
     assert seen["verify"] == {
         "containers": cluster.health_objects,
         "unwell": verify.cluster_unwell,
-        "what": "the cluster",
+        "what": verify.CLUSTER,  # so verification's sentence says rollouts and pods (week 6, item 5)
     }
     assert parts.deploys == Deployer.log.records
 
