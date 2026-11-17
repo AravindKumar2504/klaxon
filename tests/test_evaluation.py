@@ -428,7 +428,7 @@ def test_a_false_alarms_evidence_is_saved_and_printed(tmp_path, capsys):
     saved = json.loads((tmp_path / fault_runs.RUN_FILE).read_text())
     assert saved["label"] == evaluation.label(record) and saved["case"]["name"] == "false-alarm"
     printed = saved["printed_output"]
-    assert printed[0] == "Klaxon week 6: an evaluation run (case false-alarm, seed 7): a false alarm"
+    assert printed[0] == "Klaxon: an evaluation run (case false-alarm, seed 7), on Docker Compose: a false alarm"
     assert any("written by the harness, not raised by the rules" in line for line in printed)
     assert "Saved in" in capsys.readouterr().out
     # The review's finding L2: a false alarm's run is graded by the rule, as a fault run is, and says so.
@@ -474,7 +474,8 @@ def test_an_evaluation_run_on_a_fault_plans_the_rollback_asks_nobody_and_the_har
     assert "withheld" not in text
     printed = fault_runs.render(record).splitlines()
     assert (
-        printed[0] == "Klaxon week 6: an evaluation run on case duplicate-delivery, seed 7, a fault: duplicate-delivery"
+        printed[0]
+        == "Klaxon: an evaluation run on case duplicate-delivery, seed 7, a fault, on Docker Compose: duplicate-delivery"
     )
     whole = "\n".join(printed)
     assert "The gate: not asked: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent" in whole

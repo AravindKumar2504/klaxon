@@ -38,6 +38,10 @@ services = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# The web panel's stylesheet (week 7): served from the package, never from another site.
+"klaxon.panel" = ["static/*.css"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Plain `pytest` runs only the offline tests. The others need Docker: make test-integration, make e2e.

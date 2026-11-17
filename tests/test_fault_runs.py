@@ -476,7 +476,7 @@ def test_the_command_runs_one_fault_and_saves_everything_in_one_folder(offline, 
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d{6}Z_fault-run_provider-outage", folder.name)
     saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
     assert saved["label"] == fault_runs.label(fault_runs.Record(**{k: saved[k] for k in RECORD_FIELDS}))
-    assert saved["printed_output"][0] == "Klaxon week 3: a run of the first loop on a fault: provider-outage"
+    assert saved["printed_output"][0] == "Klaxon: a diagnosis-only run on a fault, on Docker Compose: provider-outage"
     for claim in (
         "provider-outage, was injected on purpose",
         "The alert was raised",
@@ -701,7 +701,9 @@ def test_a_rehearsal_waits_for_the_alert_clears_the_fault_reads_the_rules_again_
     assert "loop_started_at" not in out.timings and out.cleared == {"made_up": "cleared"}
     said = fault_runs.label(out)
     assert fault_runs.REHEARSAL in said and "loop" not in said and "Claude" not in said
-    assert fault_runs.render(out).startswith("Klaxon week 4: a rehearsal of a fault, with no model: provider-outage")
+    assert fault_runs.render(out).startswith(
+        "Klaxon: a rehearsal of a fault, with no model, on Docker Compose: provider-outage"
+    )
 
 
 def test_a_rehearsal_whose_alert_never_fires_says_so(monkeypatch, tmp_path):
@@ -1250,7 +1252,7 @@ def test_a_gated_run_whose_traffic_never_began_is_still_said_as_gated():
         fault_runs.run(
             world.fault(), record, world.stack(), Settings(run_id="r1"), diagnosed(world), gated=world.klaxon.parts()
         )
-    assert record.gated and fault_runs.render(record).startswith("Klaxon week 4: a gated run on a fault")
+    assert record.gated and fault_runs.render(record).startswith("Klaxon: a gated run on a fault, on Docker Compose")
 
 
 @pytest.mark.parametrize("stop", [signal.SIGTERM, signal.SIGHUP])
@@ -1332,7 +1334,13 @@ def test_a_gated_runs_label_says_how_the_request_was_answered(result, decided, s
     label = fault_runs.label(record)
     assert said in label
     assert "offered one write action (rollback_deploy), which runs only if a person approves it at the gate" in label
-    assert fault_runs.render(record).splitlines()[0] == "Klaxon week 4: a gated run on a fault: duplicate-delivery"
+    assert (
+        fault_runs.render(record).splitlines()[0]
+        == "Klaxon: a gated run on a fault, on Docker Compose: duplicate-delivery"
+    )
+    # Known gap 14 (c), fixed in week 7: on kind, the title names kind, and no week.
+    record.platform = "kind"
+    assert fault_runs.render(record).splitlines()[0] == "Klaxon: a gated run on a fault, on kind: duplicate-delivery"
 
 
 def test_a_week_3_run_says_nothing_of_a_gate():

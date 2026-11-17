@@ -89,6 +89,8 @@ from klaxon.patient.stack import REPO, StackError
 # Where a run ran (week 6, item 3): the Compose stack, or the kind cluster. Compose's words are as before.
 PLATFORMS = ("compose", "kind")
 KIND_EVIDENCE = REPO / "evidence" / "week6" / "kind"  # a fault's rehearsals on the cluster
+# A run's printed title names its platform, and no week (known gap 14 (c), fixed in week 7): saved runs keep theirs.
+ON = {"compose": "Docker Compose", "kind": "kind"}
 WHERE = {
     "compose": "this Mac's Docker Compose stack",
     "kind": "this Mac's kind cluster (Kubernetes in Docker, from our own manifests in deploy/kind)",
@@ -708,17 +710,14 @@ def _render_gated(record: Record) -> list[str]:
 
 def render(record: Record) -> str:
     f = record.fault
-    title = (
-        "Klaxon week 4: a gated run on a fault" if record.gated else "Klaxon week 3: a run of the first loop on a fault"
-    )
+    title = "Klaxon: a gated run on a fault" if record.gated else "Klaxon: a diagnosis-only run on a fault"
     if record.rehearsal:
-        title = "Klaxon week 4: a rehearsal of a fault, with no model"
+        title = "Klaxon: a rehearsal of a fault, with no model"
     if record.case is not None:
         what = "a rehearsal of" if record.rehearsal else "an evaluation run on"
-        # Every evaluation run made since version 2 of the harness (klaxon.evaluation.VERSION) is week 6's.
-        title = f"Klaxon week 6: {what} case {record.case['name']}, seed {record.case['seed']}, a fault"
+        title = f"Klaxon: {what} case {record.case['name']}, seed {record.case['seed']}, a fault"
     lines = [
-        f"{title}: {f['name']}",
+        f"{title}, on {ON.get(record.platform, record.platform)}: {f['name']}",
         label(record),
         "",
         f"The fault: {f['title']}",

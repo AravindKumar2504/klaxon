@@ -392,7 +392,8 @@ def render(record: fault_runs.Record) -> str:
         return fault_runs.render(record)
     case = record.case
     lines = [
-        f"Klaxon week 6: an evaluation run (case {case['name']}, seed {case['seed']}): a false alarm",
+        f"Klaxon: an evaluation run (case {case['name']}, seed {case['seed']}), on"
+        f" {fault_runs.ON.get(record.platform, record.platform)}: a false alarm",
         label(record),
         "",
         f"The case: {record.fault['title']}",

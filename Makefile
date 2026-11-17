@@ -29,7 +29,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 	claude-command claude-check loop-prompt loop-graph investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
 	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration \
-	kind-up kind-down kind-ps kind-check kind-reader
+	kind-up kind-down kind-ps kind-check kind-reader panel
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -53,7 +53,11 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
-		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py
+		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
+		src/klaxon/panel tests/test_panel.py
+
+panel: ## the web panel on 127.0.0.1 (PORT=8090): it shows the saved runs, calls nothing and changes nothing (week 7)
+	$(PY) -m klaxon.panel --port $(or $(PORT),8090)
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
