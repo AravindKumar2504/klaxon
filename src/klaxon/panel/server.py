@@ -8,11 +8,11 @@ FastAPI's own docs pages are off, as they load files from another site.
 from __future__ import annotations
 
 import argparse
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 
 from klaxon.panel import pages, runs
 
@@ -49,10 +49,13 @@ def hosts(port: int) -> frozenset[str]:
     return frozenset({f"127.0.0.1:{port}", f"localhost:{port}"})
 
 
-def create_app(root: Path = runs.EVIDENCE, port: int = PORT) -> FastAPI:
-    """The panel, reading the runs under root."""
+def create_app(root: Path = runs.EVIDENCE, port: int = PORT, also: Iterable[Path] = ()) -> FastAPI:
+    """The panel, reading the runs under root, and the folders also names (make panel ALSO=, such as make
+    gate-demo's): folders from its own command line, never from a request."""
     allowed = hosts(port)
+    extra = tuple(Path(folder) for folder in also)
     css = (STATIC / "panel.css").read_text(encoding="utf-8")
+    script = (STATIC / "live.js").read_text(encoding="utf-8")
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.middleware("http")
@@ -77,15 +80,25 @@ def create_app(root: Path = runs.EVIDENCE, port: int = PORT) -> FastAPI:
     @app.api_route("/runs", methods=list(METHODS))
     def all_runs(request: Request) -> Response:
         show = shown(request)
-        return HTMLResponse(pages.runs_page(runs.rows(root, show), show))
+        return HTMLResponse(pages.runs_page(runs.rows(root, show, extra), show))
 
     @app.api_route("/run/{name}", methods=list(METHODS))
     def one_run(name: str, request: Request) -> Response:
-        folder = runs.index(root).get(name)  # by name, from evidence/'s own folders: never a path from the request
+        # By name, from evidence/'s own folders and the command line's: never a path from the request.
+        folder = runs.index(root, extra).get(name)
         if folder is None:
             return HTMLResponse(pages.not_found(name), status_code=404)
         show = shown(request)
         return HTMLResponse(pages.run_page(runs.run(folder, root, show), show))
+
+    @app.api_route("/run/{name}/state", methods=list(METHODS))
+    def run_state(name: str) -> Response:
+        """What the live view asks every 2 seconds: the folder's fingerprint, and whether to keep asking."""
+        folder = runs.index(root, extra).get(name)
+        if folder is None:
+            return JSONResponse({"error": "no such run"}, status_code=404)
+        view = runs.run(folder, root)
+        return JSONResponse({"version": view["version"], "live": bool(view["live"])})
 
     @app.api_route("/evaluation", methods=list(METHODS))
     def evaluation_report(request: Request) -> Response:
@@ -97,18 +110,29 @@ def create_app(root: Path = runs.EVIDENCE, port: int = PORT) -> FastAPI:
     def stylesheet() -> Response:
         return Response(css, media_type="text/css")
 
+    @app.api_route("/static/live.js", methods=list(METHODS))
+    def live_view() -> Response:
+        return Response(script, media_type="text/javascript")
+
     return app
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m klaxon.panel", description="Klaxon's web panel: it only shows.")
     parser.add_argument("--port", type=int, default=PORT, help=f"its port on 127.0.0.1 (default {PORT})")
+    parser.add_argument(
+        "--also",
+        type=Path,
+        action="append",
+        default=[],
+        help="a run folder outside evidence/, such as make gate-demo's",
+    )
     args = parser.parse_args(argv)
     import uvicorn  # the services' server, already installed (make venv): only needed to serve
 
     print(f"Klaxon's panel: http://{HOST}:{args.port}/runs (it only reads evidence/; Ctrl-C stops it)", flush=True)
     uvicorn.run(
-        create_app(port=args.port),
+        create_app(port=args.port, also=args.also),
         host=HOST,
         port=args.port,
         log_level="warning",

@@ -203,3 +203,20 @@ table.list tr:hover td { background: #0E151D; }
   color: var(--soft); background: #141C26; cursor: pointer;
 }
 .said { margin: 6px 0 6px 18px; color: var(--soft); font-size: 13px; }
+
+/* the live view (week 7, item 2) */
+.live { display: none; }
+.livebar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; color: var(--soft);
+  border: 1px solid rgba(63, 185, 80, .5); background: var(--green-bg);
+}
+.sev.on { color: #CFF5D6; background: rgba(63, 185, 80, .2); border-color: rgba(63, 185, 80, .6); }
+.waits { margin: 4px 0 6px; color: var(--soft); }
+.timer {
+  font-family: var(--mono); font-size: 12.5px; color: var(--amber); border: 1px solid rgba(227, 179, 65, .45);
+  border-radius: 999px; padding: 2px 10px; white-space: nowrap;
+}
+.btn {
+  font: inherit; font-size: 13px; font-weight: 650; padding: 6px 14px; border-radius: 8px; margin-top: 8px;
+  border: 1px solid var(--line2); color: var(--soft); background: #141C26; cursor: pointer;
+}

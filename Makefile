@@ -54,10 +54,10 @@ lint: ## ruff: style and common mistakes
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
 		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
-		src/klaxon/panel tests/test_panel.py
+		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py
 
-panel: ## the web panel on 127.0.0.1 (PORT=8090): it shows the saved runs, calls nothing and changes nothing (week 7)
-	$(PY) -m klaxon.panel --port $(or $(PORT),8090)
+panel: ## the web panel on 127.0.0.1 (PORT=8090; ALSO=<folder>, such as make gate-demo's): it shows runs, changes nothing (week 7)
+	$(PY) -m klaxon.panel --port $(or $(PORT),8090) $(if $(ALSO),--also $(ALSO))
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait

@@ -48,7 +48,7 @@ def card(title: str, *body: object, tags: Sequence[Html] = (), extra: str = "") 
     return el("section", head, *body, class_=f"card {extra}".strip())
 
 
-def layout(title: str, on: str, *body: object) -> Html:
+def layout(title: str, on: str, *body: object, script: bool = False) -> Html:
     nav = el("nav", [el("a", name, href=link, class_="on" if name == on else None) for name, link in NAV], class_="nav")
     chips = el(
         "div",
@@ -65,6 +65,7 @@ def layout(title: str, on: str, *body: object) -> Html:
         el("meta", name="referrer", content="no-referrer"),
         el("title", title, " | Klaxon"),
         el("link", rel="stylesheet", href="/static/panel.css"),
+        el("script", src="/static/live.js", defer=True) if script else None,
     )
     page = el("body", top, el("main", *body, class_="page"), el("footer", FOOT, class_="foot"))
     return join(Html("<!doctype html>\n"), el("html", head, page, lang="en"))
@@ -156,6 +157,8 @@ def _run_line(row: Mapping, show: bool) -> Html:
     first = el("td", link, el("div", row.get("where", ""), class_="sub"))
     if row.get("problem"):
         return el("tr", first, el("td", row["problem"], colspan="12", class_="p"))
+    if row.get("note"):  # a run still going, or make gate-demo's simulation (make panel ALSO=)
+        return el("tr", first, el("td", row["note"], colspan="12", class_="w"))
     mode = evaluation.mode_cell(row) if row.get("mode") else "-"
     stopped = row.get("not_run") or row.get("loop") or ("rehearsal: no model" if row.get("rehearsal") else "-")
     graders = [el("td", "held back", class_="p"), el("td", "held back", class_="p")]
@@ -185,13 +188,33 @@ def run_page(view: Mapping, show: bool) -> Html:
         problems.insert(0, el("li", view["row"]["problem"]))
     side = [_this_run(view), _approval(view), _verification(view)]
     main = [_signals(view), _diagnosis(view, show, link), _steps(view)]
+    # The live view (week 7, item 2): /static/live.js reads this marker, asks the panel every 2 seconds whether the
+    # run's folder changed (its state, below), and reloads the page when it did. It only reads.
+    marker = el(
+        "div",
+        class_="live",
+        data_state=href("run", view["folder"], "state"),
+        data_version=view["version"],
+        data_live="true" if view.get("live") else "false",
+    )
+    banner = None
+    if view.get("live"):
+        banner = el(
+            "p",
+            el("span", "LIVE", class_="sev on"),
+            " This run is going on now, or waits for a person. The page follows its folder every 2 seconds.",
+            class_="livebar",
+        )
     return layout(
         view["folder"],
         "Runs",
+        marker,
+        banner,
         _header(view),
         card("Could not show everything", el("ul", problems, class_="said"), extra="warn") if problems else None,
         el("div", el("div", main, class_="col"), el("div", side, class_="col"), class_="grid"),
         _postmortem(view),
+        script=True,
     )
 
 
@@ -214,15 +237,27 @@ def _header(view: Mapping) -> Html:
             "div",
             el("span", "ALERT", class_="sev"),
             el("h1", alert.get("name") or "No alert"),
-            tag("Recorded run"),
+            tag("Simulation", "design") if view.get("simulation") else tag("Recorded run"),
             el("span", f"Fired {alert['fired_at']}" if alert.get("fired_at") else "", class_="when"),
             class_="row",
         ),
         el("p", alert.get("summary"), class_="summary") if alert.get("summary") else None,
-        el("p", view["label"], class_="label") if view.get("label") else None,
+        el("p", _label(view), class_="label") if _label(view) else None,
         el("ol", pipe, class_="pipe"),
         class_="card ihead",
     )
+
+
+def _label(view: Mapping) -> str | None:
+    """What the run's evidence is: its run.json's own label; a simulation's; or, for a run still going, what is
+    known before its run.json comes."""
+    if view.get("label"):
+        return view["label"]
+    if view.get("simulation"):
+        return runs.SIMULATION
+    if view.get("going"):
+        return "A run going on now, on this Mac. Its run.json, with the run's full label, is written when it ends."
+    return None
 
 
 def _number(key: str, value: object) -> str:
@@ -266,7 +301,7 @@ def _signals(view: Mapping) -> Html | None:
 
 def _graders(view: Mapping, show: bool, link: str) -> Html:
     row = view["row"]
-    if row.get("problem"):
+    if row.get("problem") or row.get("note"):
         return el("p", "No grader graded it.", class_="note")
     if row.get("held_back"):
         return el(
@@ -343,7 +378,7 @@ def _diagnosis(view: Mapping, show: bool, link: str) -> Html:
         el("p", "Proposed, not applied: the loop itself never applies a fix.", class_="note"),
         el("div", "Evidence, each cited by its tool call", class_="lbl"),
         el("ul", evidence, class_="evidence"),
-        tags=[tag("Recorded Claude response")],
+        tags=[tag("Made up for the demo", "design") if view.get("simulation") else tag("Recorded Claude response")],
     )
 
 
@@ -444,11 +479,18 @@ def _this_run(view: Mapping) -> Html:
         ("Cost estimate", f"{_money(used.get('cost_usd'))} at API prices *" if used.get("calls") else "-"),
         ("Folder", view["where"]),
     ]
+    if view.get("simulation"):
+        return card(
+            "This run",
+            el("p", runs.SIMULATION),
+            el("p", "No trace and no model call: nothing to replay.", class_="note"),
+        )
+    traced = bool(view.get("trace_label") or view.get("stop") or view.get("steps"))
     return card(
         "This run",
         el("dl", [join(el("dt", key), el("dd", value)) for key, value in lines], class_="kv"),
-        el("div", "Replay it offline", class_="lbl"),
-        el("pre", f"make replay-run RUN={view['typed']}", class_="term"),
+        el("div", "Replay it offline", class_="lbl") if traced and not view.get("going") else None,
+        el("pre", f"make replay-run RUN={view['typed']}", class_="term") if traced and not view.get("going") else None,
         el("p", "* Claude Code's own estimate. The seat is not billed per call.", class_="note"),
         el("p", view.get("recording_label"), class_="note") if view.get("recording_label") else None,
     )
@@ -457,7 +499,13 @@ def _this_run(view: Mapping) -> Html:
 def _approval(view: Mapping) -> Html:
     asked, request, decision = view.get("gate") or {}, view.get("request") or {}, view.get("decision") or {}
     saved = view.get("saved") or {}
-    if not saved.get("gated"):
+    if not request and view.get("going"):
+        return card(
+            "Approval",
+            el("p", "No request yet."),
+            el("p", "Klaxon can ask. Only a person approves, typed at a terminal.", class_="note"),
+        )
+    if not request and not saved.get("gated"):
         return card(
             "Approval",
             el("p", "No action was offered: this run could only diagnose."),
@@ -482,9 +530,27 @@ def _approval(view: Mapping) -> Html:
         )
         for event in view["events"]
     ]
-    said = decision.get("decision") or "no decision on record"
+    command = f"make approve RUN={view['typed']}"
+    pending = view.get("left") is not None
+    said = decision.get("decision") or ("none yet" if pending else "none: no answer in time means denied")
+    waits = None
+    if pending:
+        left = int(view["left"])
+        waits = el(
+            "p",
+            el("b", "Waiting for you. "),
+            "Approve or deny it in your own terminal, with the command below. ",
+            el(
+                "span",
+                f"expires in {left // 60}:{left % 60:02d}",
+                class_="timer",
+                data_expires=request.get("expires_at"),
+            ),
+            class_="waits",
+        )
     return card(
         "Approval request",
+        waits,
         el("div", "Klaxon asked to run", class_="lbl"),
         el(
             "p",
@@ -514,9 +580,10 @@ def _approval(view: Mapping) -> Html:
         el("div", "The gate's trail (gate.jsonl)", class_="lbl"),
         el("ul", trail, class_="trail"),
         el("div", "Approved or denied in a terminal, never here", class_="lbl"),
-        el("pre", f"make approve RUN={view['typed']}", class_="term"),
+        el("pre", command, class_="term"),
+        el("button", "Copy command", type="button", class_="btn", data_copy=command) if pending else None,
         el("p", "Klaxon can ask. Only a person approves. No answer in 10 minutes means denied.", class_="note"),
-        tags=[tag("Recorded")],
+        tags=[tag("Simulation", "design") if view.get("simulation") else tag("Recorded")],
         extra="appr",
     )
 

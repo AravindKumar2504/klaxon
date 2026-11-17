@@ -2,6 +2,7 @@
 
 import html
 import json
+import re
 import shutil
 
 import pytest
@@ -204,7 +205,10 @@ def test_every_answer_carries_the_policy(client, path):
 @pytest.mark.parametrize("path", ["/runs", "/evaluation", f"/run/{APPROVED_ON_KIND}", f"/run/{FIRST_LOOP}"])
 def test_no_page_has_an_inline_script_or_style_or_another_site(client, path):
     text = client.get(path).text
-    assert "<script" not in text and " style=" not in text and "<style" not in text
+    scripts = re.findall(r"<script[^>]*>(.*?)</script>", text, flags=re.S)
+    assert all(body == "" for body in scripts)  # no inline script: only the panel's own file, below
+    assert re.findall(r"<script[^>]*>", text) in ([], ['<script src="/static/live.js" defer>'])
+    assert " style=" not in text and "<style" not in text and " on" + "click=" not in text
     assert "http://" not in text.replace("http://127.0.0.1", "") and "https://" not in text
 
 
