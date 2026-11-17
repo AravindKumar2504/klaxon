@@ -867,7 +867,7 @@ def test_a_live_run_that_cannot_start_leaves_no_folder_behind(tmp_path, monkeypa
     assert not (tmp_path / "evidence").exists()
 
 
-FAKE_CLAUDE = """#!{python} -I -S
+FAKE_CLAUDE = """#!{python} -IS
 import json, os, re, sys
 PLAN = {plan!r}
 stdin = sys.stdin.read()

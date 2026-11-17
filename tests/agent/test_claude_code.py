@@ -32,7 +32,7 @@ pytestmark = pytest.mark.usefixtures("live_calls_allowed")
 SYSTEM = "You are Klaxon, in a test."
 ASK = [Message("user", "Reply with the word ok")]
 
-FAKE = """#!{python} -I -S
+FAKE = """#!{python} -IS
 import json, os, subprocess, sys, time
 PLAN, SEEN = {plan!r}, {seen!r}
 plan = json.load(open(PLAN))

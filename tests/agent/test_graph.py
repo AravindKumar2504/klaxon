@@ -141,7 +141,9 @@ def test_the_drawing_is_langgraphs_own_drawing_of_the_graph_a_run_uses(capsys):
 
 
 def test_make_loop_graph_prints_the_drawing_and_calls_nothing():
-    shown_ = subprocess.run(["make", "-n", "loop-graph"], cwd=REPO, capture_output=True, text=True, check=True)
+    shown_ = subprocess.run(
+        ["make", "--no-print-directory", "-n", "loop-graph"], cwd=REPO, capture_output=True, text=True, check=True
+    )
     assert shown_.stdout.strip() == ".venv/bin/python -m klaxon.agent.graph draw"
 
 

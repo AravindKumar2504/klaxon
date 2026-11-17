@@ -61,7 +61,7 @@ lint: ## ruff: style and common mistakes
 # a user that is not root, as on GitHub's machines, with live model calls off. Nothing is written to this folder.
 CI_IMAGE := python:3.12.16-trixie
 ci-linux: local-docker-only ## CI's offline job in an official Linux python container: make venv, lint and test, on a copy (needs Docker)
-	$(DOCKER) run --rm --mount type=bind,source="$(CURDIR)",target=/repo,readonly \
+	$(DOCKER) run --rm --init --mount type=bind,source="$(CURDIR)",target=/repo,readonly \
 		--env KLAXON_NO_LIVE_MODEL=1 --env PIP_DISABLE_PIP_VERSION_CHECK=1 $(CI_IMAGE) bash -euo pipefail -c ' \
 		useradd --create-home runner; mkdir /home/runner/work; \
 		tar -C /repo --exclude=./.venv --exclude=./.kind --exclude=./.git --exclude="*.egg-info" \
