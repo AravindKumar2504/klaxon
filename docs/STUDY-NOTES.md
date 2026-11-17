@@ -1197,3 +1197,42 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 - *Why mutants in CI.* The full list takes 6 to 7 hours on your Mac, overnight with its lid open. Split across GitHub's machines it should take about an hour (an estimate), and its log is public. Every push also replays the saved live runs: a regression check on the agent's recorded behavior.
 
 **One idea to own before item 1: untrusted text in a web page.** A log line or a tool result can hold any text: an instruction to a model, or an HTML tag. In a page, a tag that is not escaped becomes code in your browser (cross-site scripting). So every piece of a run is escaped before it is shown, and the page's Content-Security-Policy refuses inline scripts and files from other sites. It is the rule Klaxon already follows with the model: what a tool returns is data, never instructions.
+
+## Week 7, item 1 (built 2026-11-17): the panel on saved runs
+
+**What it is.** A local web page that shows Klaxon's saved runs. Run `make panel`, then open http://127.0.0.1:8090/runs.
+
+**What it shows.** The runs list, one run's page, and the evaluation report. A run's page follows its path: the alert, the signals the rules read, the diagnosis and its evidence, each step, the approval request, verification, and the postmortem. Each piece of evidence links to the step whose tool result it cites.
+
+**Why it is safe to open.** It only reads. Four guards:
+- *One address.* It listens on 127.0.0.1, so no other machine reaches it.
+- *One Host.* A web page elsewhere can point a name of its own at 127.0.0.1 (DNS rebinding). The panel answers only to its own name and port.
+- *Two methods.* GET and HEAD. There is nothing to change, so nothing else is answered.
+- *Text stays text.* Everything a run holds goes through one escaping function, and the page's policy (CSP) refuses inline scripts and files from other sites.
+
+**The hold-back.** On a run you have not labeled, the panel shows neither grader's verdict until you ask. That keeps your week 8 labels blind.
+
+**What to read in the code.** `esc`, `el` and `markdown` in `src/klaxon/panel/html.py`; `index`, `held` and `run` in `runs.py`; `guard` and `create_app` in `server.py`.
+
+**Likely questions.**
+- *Why can't the panel approve?* Your typed approval is the gate's core. A button on a local page is an endpoint any process on the Mac could try. The panel shows the exact command instead.
+- *How do you know it escapes everything?* A test plants a script tag, an image tag, an instruction and hidden characters in a run's alert, diagnosis, tool result and postmortem. The page shows them as text. Mutants that remove the escaping are caught.
+- *Are its numbers right?* The evaluation page calls the same code as make eval-report, and a test checks its totals line by line.
+
+## Week 7, item 2 (built 2026-11-17): the panel, live
+
+**What it adds.** A run's page follows the run while it goes on. Every 2 seconds the page asks the panel one question: did anything in this run's folder change? If yes, it reloads. A waiting request shows its time left and the exact command, with a copy button.
+
+**Why polling.** One small question every 2 seconds is easy to test and easy to reason about. The page never sends anything but that question.
+
+**Try it.** In one terminal, `make gate-demo` (a simulation). In a second, `make panel ALSO=<the folder it prints>`, and open the link the panel prints. Then, in a third, `make approve RUN=<that folder>`, and watch the page change.
+
+## Week 7, item 3 (built 2026-11-17): CI on GitHub
+
+**What it is.** GitHub runs Klaxon's tests on its own machines at every push. The week's review branch also runs the stack's tests and the full mutation list, in 10 parts side by side.
+
+**What it never does.** It never calls a model, holds no secret, and never runs Klaxon live. One switch, `KLAXON_NO_LIVE_MODEL`, refuses every live model call before anything starts.
+
+**Pinned, twice.** Each GitHub action is pinned to a full commit hash, so a moved tag cannot change what runs. Each test tool is pinned to a release at least two weeks old, so a new release cannot turn CI red by itself.
+
+**What to read.** `.github/workflows/ci.yml`; `refuse_while_live_calls_are_off` in `src/klaxon/agent/claude_code.py`; `--shard` in `scripts/mutation_check.py`.

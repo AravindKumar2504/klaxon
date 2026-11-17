@@ -964,3 +964,29 @@ Planned in a session of its own, started by the session that ran week 6's review
   - *The week.* Items 1 and 3 in parallel sessions (other files; both may touch the Makefile and the README, so the review branch merges them, as in week 6). Item 2 after item 1. One stack at a time on this Mac; CI's stack runs on GitHub's machine and never touches it. Docker on only when needed, and stopped after. If the week runs long, the full mutation list runs on this Mac overnight as before, and CI's mutation jobs wait for week 8; nothing else moves without his word.
 - **Where week 6's inputs go** (Claude). Known gap 14: (c), item 1; (d), week 9, beside (e), since both need a live check on kind; (e) and (g), week 9, his calls of 2026-11-16; (b), (f) and (h) stay as recorded. Known gap 15 (a) to (c): week 8's plan, whose comparison runs measure both cases again. Week 7 changes nothing in the loop, its prompt or the cases.
 - **PLAN.md** (Claude): the week 7 row names what this plan decided, and the schedule's week 7 row names his part.
+
+## 2026-11-17 (week 7 session: items 1 and 2, the panel)
+
+In the planning session and its worktree, at his choice ("Do it here", for item 1 and for item 3): item 1 on `claude/week-7-panel`, cut from the plan's `d3249d8`; item 2 on `claude/week-7-live`, cut from item 1.
+
+- **His choices** (multiple choice, each the recommended one): Claude's defaults for items 1, 2 and 3, "Keep them all"; the order, "In parallel, with a helper": Claude builds items 1 and 2, and a helper Claude writes item 3 at the same time, in a worktree of its own, reviewed by Claude before he sees it.
+- **The hold-back, as built** (Claude, within his default): `make label-pick` saves no list of the runs it picks, so the panel holds back both graders' verdicts on every run he has not labeled, not only on picked ones. `?graders=shown` shows them, as `SHOW_JUDGE=1` does. The evaluation page is `make eval-report`'s own report, so, like it, it holds back only the judge's.
+- **The evaluation page is make eval-report's text** (Claude): `evaluation.markdown(evaluation.report(...))`, laid out by a small Markdown reader that escapes all of it. It offers only the folders the docs name: weeks 3 to 6, and kind's.
+- **Port 8090** (Claude): neither Compose nor kind uses it.
+- **The printed title** (Claude; gap 14 (c)): for example "Klaxon: a gated run on a fault, on kind: money-unit". "A run of the first loop" is now "a diagnosis-only run". Saved runs keep the title they printed.
+- **When the live view follows a run** (Claude, item 2): while it has no `run.json` and its folder changed in the last 30 minutes; while a request waits and has not expired; and while a run that acted waits for its postmortem, up to 30 minutes after it ended. A request past its time with no decision shows "no answer in time means denied", as the gate treats it.
+- **A folder outside evidence/** (Claude, item 2): shown only when the panel's own command line names it (`make panel ALSO=<folder>`), for `make gate-demo`'s temporary folder, and labeled a simulation, its diagnosis "made up for the demo".
+- **Left out of the mockup** (Claude, the plan's limits): its Reject button, its data-repair card, and its "On call" chip with his name.
+
+## 2026-11-17 (week 7 session: item 3, CI on GitHub)
+
+Written by a helper Claude, started by the planning session at his choice ("In parallel, with a helper"), in a worktree of its own, on `claude/week-7-ci`, cut from the plan's `d3249d8`. Reviewed by Claude: each action's hash checked against GitHub's tag, the tests and lint run again, and a merge with items 1 and 2 tried (one conflict, in the Makefile's lint list, where both add files).
+
+- **His choices** (multiple choice, each the recommended one): Claude's defaults, "Keep them all"; the test tools, "Pin them now"; the Linux check, "Now"; the reminders, "Read main, refresh schedule" (below).
+- **The switch is checked in two places** (the helper): `find_claude`, which every live run calls first, so a refused run makes no folder; and `ClaudeCode`, which every live call goes through, a caller that brings its own binary included.
+- **The offline tests turn the switch on too** (the helper): so they behave the same here and on GitHub. A test that runs the adapter against a fake program of its own turns it off for itself.
+- **No pip cache** (the helper): each job installs the pinned libraries from PyPI.
+- **10 parts, by place** (the helper): part k takes every tenth mutant, so each file's mutants spread across the parts.
+- **The pins** (the helper, at his "Pin them now"): made like LangGraph's, by pip's `--uploaded-prior-to 2026-11-03`, with `graph.lock.txt` as a constraint. Eight resolved older than the venv made that day (ruff 0.17.5 to 0.17.3, fastapi 0.163.1 to 0.162.0, and six more). The older ruff changed nothing in the code. The patient's image keeps its own pins (`services.lock.txt`), which differ, as before.
+- **Three Linux differences, found by make ci-linux** (Claude; `84d3fbc`): a `#!` line's options (Linux passes all of them as one argument, so the tests' fake claude, `-I -S`, would not start: 74 failures; now `-IS`); GNU make 4's "Entering directory" lines in a make started from another make (the one test that compares make's whole output now passes `--no-print-directory`); and a container with no init to reap the processes its children leave (`make ci-linux` now runs docker with `--init`).
+- **The 9 am and 8 pm reminders read main** (his "Read main, refresh schedule"): each reads STATUS from `main` with `git show`, never the repo folder's working copy, which stays on `claude/week-5-results`, and its schedule is PLAN's as of 2026-11-17.
