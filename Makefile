@@ -24,7 +24,7 @@ unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PR
 PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
-.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
+.PHONY: help venv test lint ci-linux up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt loop-graph investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
@@ -34,9 +34,9 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 
-venv: ## create .venv with Klaxon, its test tools, the service libraries and LangGraph (its libraries pinned: requirements/graph.lock.txt)
+venv: ## create .venv with Klaxon, its test tools, the service libraries and LangGraph, every library pinned (requirements/graph.lock.txt and dev.lock.txt)
 	python3.12 -m venv .venv
-	.venv/bin/pip install -c requirements/graph.lock.txt -e '.[dev,services,graph]'
+	.venv/bin/pip install -c requirements/graph.lock.txt -c requirements/dev.lock.txt -e '.[dev,services,graph]'
 
 test: ## offline tests, no Docker needed
 	$(PY) -m pytest -q
@@ -54,10 +54,23 @@ lint: ## ruff: style and common mistakes
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
 		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
-		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py
+		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py tests/test_dev_lock.py
 
 panel: ## the web panel on 127.0.0.1 (PORT=8090; ALSO=<folder>, such as make gate-demo's): it shows runs, changes nothing (week 7)
 	$(PY) -m klaxon.panel --port $(or $(PORT),8090) $(if $(ALSO),--also $(ALSO))
+
+# CI's offline job on Linux, here on this Mac (week 7, item 3), before a push: an official python image with CI's
+# Python. The repo is mounted read-only and copied inside, without .venv, .kind, .git or anything built, then run by
+# a user that is not root, as on GitHub's machines, with live model calls off. Nothing is written to this folder.
+CI_IMAGE := python:3.12.16-trixie
+ci-linux: local-docker-only ## CI's offline job in an official Linux python container: make venv, lint and test, on a copy (needs Docker)
+	$(DOCKER) run --rm --init --mount type=bind,source="$(CURDIR)",target=/repo,readonly \
+		--env KLAXON_NO_LIVE_MODEL=1 --env PIP_DISABLE_PIP_VERSION_CHECK=1 $(CI_IMAGE) bash -euo pipefail -c ' \
+		useradd --create-home runner; mkdir /home/runner/work; \
+		tar -C /repo --exclude=./.venv --exclude=./.kind --exclude=./.git --exclude="*.egg-info" \
+			--exclude=__pycache__ --exclude=.pytest_cache --exclude=.ruff_cache -cf - . | tar -C /home/runner/work -xf -; \
+		chown -R runner:runner /home/runner/work; \
+		runuser -u runner -- bash -euo pipefail -c "cd ~/work && make venv && make lint && make test"'
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait

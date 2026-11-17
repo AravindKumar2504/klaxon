@@ -1,6 +1,6 @@
 # Exact versions for the LangGraph loop's optional extra, .[graph] (week 6, item 2; klaxon.agent.graph). A constraints
-# file: make venv installs the project with it,
-#   .venv/bin/pip install -c requirements/graph.lock.txt -e '.[dev,services,graph]'
+# file: make venv installs the project with it, and with dev.lock.txt for the rest (week 7),
+#   .venv/bin/pip install -c requirements/graph.lock.txt -c requirements/dev.lock.txt -e '.[dev,services,graph]'
 # Made on 2026-11-10 UTC (Aravind's choice: "1.2.18, all locked") by installing langgraph==1.2.18 into this project's
 # venv with pip's --uploaded-prior-to 2026-10-27T00:00:00Z, and the venv's other versions held as they were, so each
 # library here was released at least two weeks before it was pinned. LangGraph 1.2.18 itself: 2026-10-26.

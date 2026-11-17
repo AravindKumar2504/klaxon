@@ -10,7 +10,9 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "mutation_check.py"
-USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--only FILE ...]"
+USAGE = (
+    "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--shard K/N] [--only FILE ...]"
+)
 
 
 def run(*args):
@@ -102,3 +104,57 @@ def test_the_runners_copy_holds_every_folder_kind_ups_image_tag_reads():
     copied = set(re.findall(r'"([^"]+)"', listed))
     needed = {path.relative_to(cluster.REPO).parts[0] for path in cluster.build_inputs()}
     assert needed <= copied and "requirements" in copied
+
+
+# Week 7, item 3: --shard K/N, so CI runs the full list as N parts side by side.
+
+
+def test_shard_reads_part_k_of_n():
+    runner = load_runner()
+    assert runner.shard_of(["--with-stack"]) is None
+    assert runner.shard_of(["--shard", "3/10"]) == (3, 10)
+    assert runner.shard_of(["--stack-only", "--shard", "1/1", "--only", "Makefile"]) == (1, 1)
+
+
+@pytest.mark.parametrize("value", ["0/10", "11/10", "3", "3/0", "-1/10", "a/b", "3/10/2", "03/10", " 3/10", ""])
+def test_a_shard_that_is_not_k_of_n_is_refused(value):
+    runner = load_runner()
+    with pytest.raises(ValueError, match="--shard takes K/N"):
+        runner.shard_of(["--shard", value] if value else ["--shard"])
+
+
+@pytest.mark.parametrize("value", ["0/10", "11/10", "x"])
+def test_the_command_line_refuses_a_bad_shard_before_it_copies_anything(value, tmp_path):
+    work = tmp_path / "work"
+    done = run(str(tmp_path / "repo"), str(work), "--shard", value)
+    assert done.returncode == 2
+    assert "--shard takes K/N" in done.stderr and USAGE in done.stderr
+    assert "Traceback" not in done.stderr and not work.exists()
+
+
+@pytest.mark.parametrize("parts", [1, 2, 3, 10, 2000])
+def test_the_n_parts_together_are_every_mutant_picked_each_once(parts):
+    runner = load_runner()
+    picked = runner.select(False, False, [])
+    shards = [runner.in_shard(picked, (part, parts)) for part in range(1, parts + 1)]
+    names = [m[0] + m[1] + m[2] for shard in shards for m in shard]
+    assert sorted(names) == sorted(m[0] + m[1] + m[2] for m in picked) and len(set(names)) == len(names)
+    assert max(map(len, shards)) - min(map(len, shards)) <= 1  # even parts
+    assert runner.in_shard(picked, None) == picked
+
+
+def test_shards_split_what_only_and_stack_only_pick():
+    runner = load_runner()
+    for picked in (runner.select(False, False, ["src/klaxon/agent/claude_code.py"]), runner.select(True, True, [])):
+        assert picked
+        first, second = runner.in_shard(picked, (1, 2)), runner.in_shard(picked, (2, 2))
+        assert first == picked[0::2] and second == picked[1::2]  # in turn, by place in what was picked
+
+
+@pytest.mark.parametrize(
+    "args", [["--shard", "1/2", "--only", "no/such.py"], ["--only", "no/such.py", "--shard", "1/2"]]
+)
+def test_the_shard_is_not_read_as_a_file_for_only(args, tmp_path):
+    done = run(str(tmp_path / "repo"), str(tmp_path / "work"), *args)
+    assert done.returncode == 2
+    assert done.stdout.strip() == "no mutants for: no/such.py"  # not "--shard, 1/2, no/such.py"

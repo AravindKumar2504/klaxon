@@ -141,7 +141,9 @@ def test_the_drawing_is_langgraphs_own_drawing_of_the_graph_a_run_uses(capsys):
 
 
 def test_make_loop_graph_prints_the_drawing_and_calls_nothing():
-    shown_ = subprocess.run(["make", "-n", "loop-graph"], cwd=REPO, capture_output=True, text=True, check=True)
+    shown_ = subprocess.run(
+        ["make", "--no-print-directory", "-n", "loop-graph"], cwd=REPO, capture_output=True, text=True, check=True
+    )
     assert shown_.stdout.strip() == ".venv/bin/python -m klaxon.agent.graph draw"
 
 
@@ -329,7 +331,7 @@ def test_a_replay_on_a_loop_that_cannot_run_here_is_refused_saying_why(tmp_path,
     assert loop.main(["replay", str(tmp_path / "run")]) == 0  # the plain loop needs no LangGraph, nor its switches
 
 
-def test_a_live_runs_loop_reaches_investigate_and_its_trace(tmp_path, monkeypatch):
+def test_a_live_runs_loop_reaches_investigate_and_its_trace(tmp_path, monkeypatch, live_calls_allowed):
     seen = {}
     real = loop.investigate
 
@@ -383,7 +385,11 @@ def test_langgraph_is_an_optional_extra_pinned_exactly_with_every_library_it_bri
 
 def test_make_venv_installs_the_graph_extra_with_its_lock():
     shown_ = subprocess.run(["make", "-n", "venv"], cwd=REPO, capture_output=True, text=True, check=True)
-    assert ".venv/bin/pip install -c requirements/graph.lock.txt -e '.[dev,services,graph]'" in shown_.stdout
+    # Since week 7, item 3, with dev.lock.txt too: every library in the venv is pinned (tests/test_dev_lock.py).
+    wanted = (
+        ".venv/bin/pip install -c requirements/graph.lock.txt -c requirements/dev.lock.txt -e '.[dev,services,graph]'"
+    )
+    assert wanted in shown_.stdout
 
 
 MADE = [("investigate-fault", ["FAULT=poison-message"]), ("eval", []), ("replay-run", ["RUN=x"])]

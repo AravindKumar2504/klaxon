@@ -21,7 +21,7 @@ from klaxon.agent import catalog, claude_code, gate, loop, verify
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.claude_code import find_claude
 from klaxon.agent.contract import Diagnosis, Evidence, FixAction, ProposedFix
-from klaxon.agent.model import ModelError, ScriptedModel, text_sha256
+from klaxon.agent.model import ModelError, Recording, ScriptedModel, text_sha256
 from klaxon.agent.tools import make_tools
 from klaxon.agent.trace import read_trace
 from klaxon.checks import live
@@ -352,7 +352,7 @@ class Tools:
 READ_ONLY = {"readOnlyHint": True, "destructiveHint": False}
 
 
-def test_preflight_checks_the_model_claude_code_and_the_tools(monkeypatch, tmp_path):
+def test_preflight_checks_the_model_claude_code_and_the_tools(monkeypatch, tmp_path, live_calls_allowed):
     fake = tmp_path / "claude"
     fake.write_text("#!/bin/sh\n")
     fake.chmod(0o755)
@@ -370,8 +370,9 @@ def test_preflight_checks_the_model_claude_code_and_the_tools(monkeypatch, tmp_p
         fault_runs.preflight("claude-opus-5-5", lambda: Tools())
 
 
-def test_no_test_can_find_the_real_claude_code():
-    # tests/conftest.py: whatever a mutant breaks, an offline test can never reach Aravind's seat.
+def test_no_test_can_find_the_real_claude_code(live_calls_allowed):
+    # tests/conftest.py: whatever a mutant breaks, an offline test can never reach Aravind's seat. This checks the
+    # guard below the switch that turns live calls off (the next test), so the switch is off here.
     assert os.environ["KLAXON_CLAUDE_BIN"] == NO_CLAUDE
     with pytest.raises(ModelError, match="not an executable file"):
         find_claude()
@@ -379,6 +380,19 @@ def test_no_test_can_find_the_real_claude_code():
     assert claude_code.APP_COPIES == NO_APP_COPIES
     with pytest.raises(ModelError, match="Claude Code was not found"):
         find_claude({"PATH": "/usr/bin:/bin"})
+
+
+def test_every_offline_test_runs_with_live_calls_switched_off(tmp_path):
+    # tests/conftest.py, as in CI (week 7, item 3): no test can look for Claude Code or make a live adapter, unless it
+    # turns the switch off for itself to run the adapter against a fake program of its own.
+    assert os.environ[claude_code.LIVE_OFF] == "1"
+    with pytest.raises(claude_code.LiveCallsOff):
+        find_claude()
+    recording = Recording(tmp_path / "calls.jsonl")
+    before = recording.path.read_text()
+    with pytest.raises(claude_code.LiveCallsOff):
+        claude_code.ClaudeCode(recording, binary="/bin/sh")
+    assert recording.path.read_text() == before
 
 
 def test_a_run_that_cannot_start_touches_nothing_and_leaves_no_folder(monkeypatch, tmp_path, capsys):

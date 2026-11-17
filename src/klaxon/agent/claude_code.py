@@ -28,6 +28,9 @@ Every reply is recorded (klaxon.agent.model.Recording) before the loop sees it, 
 reply that cannot be recorded is not returned. The recording leaves out Claude Code's rate-limit events, which
 describe the seat's usage, not the call.
 
+While KLAXON_NO_LIVE_MODEL is set (CI sets it, and so do the offline tests), every live call is refused before
+anything starts: Klaxon does not look for Claude Code, and no live adapter can be made.
+
 Run: python -m klaxon.agent.claude_code command   print the exact command of a live call; calls nothing
      python -m klaxon.agent.claude_code check     one tiny live call ("Reply with the word ok"), saved as evidence
 """
@@ -173,9 +176,27 @@ def _version(name: str) -> tuple[int, ...]:
         return (-1,)
 
 
+# The switch that turns every live call off (week 7, item 3). CI sets it for every job, and the offline tests set it
+# for themselves (tests/conftest.py). Each live run finds Claude Code first, before it touches anything, and every
+# live call goes through a ClaudeCode: both refuse while the switch is on, so nothing is started.
+LIVE_OFF = "KLAXON_NO_LIVE_MODEL"
+
+
+class LiveCallsOff(ModelError):
+    """A live call refused before anything ran: the switch turns live calls off."""
+
+
+def refuse_while_live_calls_are_off(env: Mapping[str, str] = os.environ) -> None:
+    """Raise LiveCallsOff while the switch is on: set to anything but "" or "0"."""
+    if env.get(LIVE_OFF, "") not in ("", "0"):
+        raise LiveCallsOff(f"live model calls are switched off ({LIVE_OFF} is set), so nothing was started")
+
+
 def find_claude(env: Mapping[str, str] = os.environ, copies: Path | None = None) -> Path:
     """Claude Code's executable: KLAXON_CLAUDE_BIN if set, else `claude` on the PATH, else the newest copy the
-    Claude desktop app keeps (~/Library/Application Support/Claude/claude-code/<version>/<build>/)."""
+    Claude desktop app keeps (~/Library/Application Support/Claude/claude-code/<version>/<build>/). Refused while
+    live calls are switched off (LIVE_OFF in env)."""
+    refuse_while_live_calls_are_off(env)
     configured = env.get("KLAXON_CLAUDE_BIN")
     if configured:
         path = Path(configured).expanduser()
@@ -379,6 +400,7 @@ class ClaudeCode:
         timeout_seconds: float = DEFAULT_TIMEOUT,
         require_model: bool = True,
     ) -> None:
+        refuse_while_live_calls_are_off()  # first: with the switch on, no live adapter exists to call anything
         if not isinstance(recording, Recording):
             raise TypeError("a live adapter needs a Recording: every live reply is saved before it is used")
         if not REQUESTED.fullmatch(model):

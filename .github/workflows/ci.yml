@@ -1,0 +1,108 @@
+# Klaxon's CI (week 7, item 3; docs/DECISIONS.md, 2026-11-16). It runs Klaxon's tests on GitHub's machines: never
+# Klaxon live, never a model, never a secret. KLAXON_NO_LIVE_MODEL, below, refuses every live model call.
+#
+# Every push and pull request: lint and the offline tests (they replay the saved live runs on both loops).
+# The week's review branch (claude/week-<n>-review) also: the Compose stack's integration and end-to-end tests with
+# the stack's mutants, and the full offline mutation list in 10 parts side by side. GitHub starts a by-hand run
+# (workflow_dispatch) only from the copy of this file on main, so until the merge the review branch's name starts them.
+#
+# Each action is pinned to the full commit hash of its newest release published at least two weeks before 2026-11-17
+# (read with gh api: the repo's releases, then the tag's ref; both tags point straight at a commit).
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  KLAXON_NO_LIVE_MODEL: "1" # every live model call is refused before anything starts (src/klaxon/agent/claude_code.py)
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  offline:
+    name: Lint and offline tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, released 2026-07-20
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0, released 2026-10-22
+        with:
+          python-version: "3.12.16"
+      - name: The Python make venv uses
+        run: python3.12 -c "import sys; print(sys.executable, sys.version)"
+      - name: make venv
+        run: make venv
+      - name: make lint
+        run: make lint
+      - name: make test
+        run: make test
+
+  stack:
+    name: The stack's tests and mutants
+    needs: offline
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref_name, 'claude/week-') && endsWith(github.ref_name, '-review'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, released 2026-07-20
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0, released 2026-10-22
+        with:
+          python-version: "3.12.16"
+      - name: make venv
+        run: make venv
+      - name: Docker on this machine
+        run: docker version && docker compose version
+      - name: make up
+        run: make up
+      - name: make test-integration
+        run: make test-integration
+      - name: The stack's mutants
+        run: .venv/bin/python -u scripts/mutation_check.py "$GITHUB_WORKSPACE" "$RUNNER_TEMP/stack-mutants" --stack-only
+      - name: make e2e
+        run: make e2e
+      - name: The stack's state, if a step failed
+        if: failure()
+        run: make ps && docker compose --file compose.yaml --project-name klaxon logs --tail=200
+      - name: make reset
+        if: always()
+        run: make reset
+
+  mutants:
+    name: Mutation list, part ${{ matrix.part }} of 10
+    needs: offline
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && startsWith(github.ref_name, 'claude/week-') && endsWith(github.ref_name, '-review'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, released 2026-07-20
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0, released 2026-10-22
+        with:
+          python-version: "3.12.16"
+      - name: make venv
+        run: make venv
+      - name: The offline mutants, part ${{ matrix.part }} of 10
+        run: .venv/bin/python -u scripts/mutation_check.py "$GITHUB_WORKSPACE" "$RUNNER_TEMP/mutants" --shard "${{ matrix.part }}/10"

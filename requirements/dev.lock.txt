@@ -1,0 +1,55 @@
+# Exact versions for the rest of the project's venv: the test tools and the patient services' libraries, .[dev,services]
+# (week 7, item 3; Aravind's choice: "Pin them now", 2026-11-17). Every library they bring that graph.lock.txt does
+# not pin already. A constraints file: make venv installs the project with both,
+#   .venv/bin/pip install -c requirements/graph.lock.txt -c requirements/dev.lock.txt -e '.[dev,services,graph]'
+# so a venv made on this Mac, in CI or by make ci-linux holds the same versions. The patient's image keeps its own
+# pins (requirements/services.lock.txt).
+# Made on 2026-11-17 UTC by installing the project into a new venv from python3.12 (pip 26.2.1) with
+#   pip install --uploaded-prior-to 2026-11-03T00:00:00Z -c requirements/graph.lock.txt -e '.[dev,services]'
+# then pip freeze, less the 19 libraries graph.lock.txt pins (each resolved at its version there), so each library
+# here was uploaded at least two weeks before it was pinned.
+annotated-doc==0.0.5
+attrs==26.1.0
+cffi==2.1.1
+click==8.5.0
+confluent-kafka==2.16.1
+cryptography==50.0.2
+fastapi==0.162.0
+googleapis-common-protos==1.76.0
+iniconfig==2.3.1
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+mcp==2.2.0
+mcp-types==2.2.0
+opentelemetry-api==1.45.2
+opentelemetry-exporter-http-transport==0.66b2
+opentelemetry-exporter-otlp-common==0.66b2
+opentelemetry-exporter-otlp-proto-common==1.45.2
+opentelemetry-exporter-otlp-proto-http==1.45.2
+opentelemetry-instrumentation==0.66b2
+opentelemetry-instrumentation-dbapi==0.66b2
+opentelemetry-instrumentation-httpx==0.66b2
+opentelemetry-instrumentation-psycopg==0.66b2
+opentelemetry-instrumentation-redis==0.66b2
+opentelemetry-proto==1.45.2
+opentelemetry-sdk==1.45.2
+opentelemetry-semantic-conventions==0.66b2
+opentelemetry-util-http==0.66b2
+pluggy==1.7.0
+protobuf==7.36.2
+psycopg==3.3.6
+psycopg-binary==3.3.6
+psycopg-pool==3.3.3
+pycparser==3.12
+Pygments==2.21.0
+PyJWT==2.15.1
+pytest==9.2.0
+python-multipart==0.0.33
+redis==8.1.0
+referencing==0.37.0
+rpds-py==2026.9.1
+ruff==0.17.3
+sse-starlette==3.6.0
+starlette==1.10.0
+uvicorn==0.54.0
+wrapt==2.5.2
