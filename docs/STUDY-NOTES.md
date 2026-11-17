@@ -1252,6 +1252,8 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 **Likely questions.**
 - *Why did make ci-linux miss the first finding?* It copies the repo with tar, which keeps each file's time. A git clone does not.
 - *Why does one fix have no mutant?* Breaking it makes the reader loop for ever, so the mutation run would hang, not fail.
+- *Why does the week 7 run say "gated, week 4"?* A mode is named for the week that built it, and the gate came in week 4. The folder and the time say when the run ran.
+- *Why is week 7 not on the evaluation page?* The page's folders were chosen before week 7's run existed. The runs page shows the run, and `make eval-report RUNS=evidence/week7` reports it: 1 run, 4 model calls, $0.18.
 
 ## Week 7 in one page (2026-11-16 and 17)
 
@@ -1269,3 +1271,5 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 **What the checks found.** `make ci-linux`: three Linux differences in the tests, fixed. The separate review: 4 medium, among them a clone making an old run look live, and the kind runs left out of a report. CI's first run on GitHub: every job passed, and all 1,395 mutants were caught.
 
 **What it does not show.** CI on `main` (it comes with the merge). A live run on kind in the panel (the saved kind runs show). Anything about real systems: synthetic data and a simulated provider throughout.
+
+**Your review (2026-11-17).** You ran the four commands, and each printed what Claude's run had. You accepted the week. It was merged into `main` and pushed, and the review branch deleted on GitHub.

@@ -1013,3 +1013,12 @@ In the planning session and its worktree, at his word ("now"), on `claude/week-7
 - **Mutants checked quickly, the full list on GitHub** (Claude): the fixes' 11 mutants, each against its own test file on a copy; the full list in CI's 10 parts, as he chose for item 3.
 - **The push: "Push it now"** (Aravind, over "Not yet"): `claude/week-7-review` only, the first branch other than `main` this repo has pushed; `main` untouched.
 - **CI's first run** (Claude, at his OK): every job passed, with no fix needed: lint and the offline tests, the stack job, and the full mutation list in 10 parts (1,362 of 1,362 caught; the stack's 33 of 33). 2 h 43 min in all: the parts ran a few at a time, not all 10 at once, so the plan's "about an hour" was low.
+
+## 2026-11-17 (week 7: Aravind's review)
+
+In the planning session, where items 1 to 4 ran, at his request ("lets review week 7 now"), after the review list's four commands, each matching Claude's run. His answers, in one multiple-choice batch:
+
+- **Week 7: "Accept"** (Claude's recommendation).
+- **Merging and pushing: "Merge and push"** (Claude's recommendation, over merging only, or not yet). After this record, `main` is fast-forwarded from `9d6fa13` to this branch and pushed, `main` only. CI's lint and offline tests then run on `main`. The week 7 branches stay as they are on this Mac.
+- **The review branch on GitHub: "Delete it on GitHub"** (Claude's recommendation, over keeping it). After the push, `claude/week-7-review` is deleted on GitHub. `main` holds every commit, and CI run 44037113149 stays on GitHub's Actions page.
+- **Two labels, recorded, not changed** (Claude): known gap 16 (g).
