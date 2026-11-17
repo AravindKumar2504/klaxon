@@ -1227,6 +1227,8 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 **Try it.** In one terminal, `make gate-demo` (a simulation). In a second, `make panel ALSO=<the folder it prints>`, and open the link the panel prints. Then, in a third, `make approve RUN=<that folder>`, and watch the page change.
 
+**What the live run showed (2026-11-17).** On fault 1, the page followed the run from the alert to the postmortem: the steps as they came, your request with its countdown and command, your approval, verification, and the draft. One flaw showed first on the gate demo: after your yes, the page stopped asking a moment too soon. Now it follows an approved request until the gate says how it ended.
+
 ## Week 7, item 3 (built 2026-11-17): CI on GitHub
 
 **What it is.** GitHub runs Klaxon's tests on its own machines at every push. The week's review branch also runs the stack's tests and the full mutation list, in 10 parts side by side.

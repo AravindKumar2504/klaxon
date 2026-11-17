@@ -990,3 +990,13 @@ Written by a helper Claude, started by the planning session at his choice ("In p
 - **The pins** (the helper, at his "Pin them now"): made like LangGraph's, by pip's `--uploaded-prior-to 2026-11-03`, with `graph.lock.txt` as a constraint. Eight resolved older than the venv made that day (ruff 0.17.5 to 0.17.3, fastapi 0.163.1 to 0.162.0, and six more). The older ruff changed nothing in the code. The patient's image keeps its own pins (`services.lock.txt`), which differ, as before.
 - **Three Linux differences, found by make ci-linux** (Claude; `84d3fbc`): a `#!` line's options (Linux passes all of them as one argument, so the tests' fake claude, `-I -S`, would not start: 74 failures; now `-IS`); GNU make 4's "Entering directory" lines in a make started from another make (the one test that compares make's whole output now passes `--no-print-directory`); and a container with no init to reap the processes its children leave (`make ci-linux` now runs docker with `--init`).
 - **The 9 am and 8 pm reminders read main** (his "Read main, refresh schedule"): each reads STATUS from `main` with `git show`, never the repo folder's working copy, which stays on `claude/week-5-results`, and its schedule is PLAN's as of 2026-11-17.
+
+## 2026-11-17 (week 7 session: the gate demo and the live run, with his approval)
+
+In the planning session, on `claude/week-7-live`, at his word: "lets do the gate demo and live run now".
+
+- **His approvals:** the gate demo's r-5e13 (04:22:07 UTC) and the live run's r-33b5 (04:26:11 UTC), each typed at his terminal (`make approve`, in the app's Terminal panel). Claude never approves.
+- **The live run's evidence in evidence/week7/** (Claude, the plan's default): started as `python -m klaxon.fault_runs run duplicate-delivery --steps 10 --tool-calls 8 --evidence-dir evidence/week7`, which is what `make investigate-fault` runs, with the folder named; the sign-in check with `--evidence-dir evidence/week7` too.
+- **The screenshots** (Claude): headless Chrome with a throwaway profile, so his own Chrome was not touched; PNG, 1440 pixels wide, 3.8 MB in all.
+- **The fix the gate demo found** (Claude): a page follows an approved request until the gate logs how its action ended, as STATUS says.
+- **After the runs** (Claude): `make down`, then Docker Desktop stopped.
