@@ -328,6 +328,8 @@ def _diagnosis(view: Mapping, show: bool, link: str) -> Html:
     found = view.get("diagnosis") or {}
     if not found:
         stop = view.get("stop") or {}
+        if view.get("going") and not stop:
+            return card("Diagnosis", el("p", "Not yet: the loop is still investigating."))
         return card(
             "Diagnosis",
             el("p", "No diagnosis. The loop stopped: ", stop.get("reason") or view["loop"].get("reason") or "-", "."),
@@ -443,7 +445,7 @@ def _steps(view: Mapping) -> Html:
                 class_="step",
             )
         )
-    said = "-"
+    said = f"Going on now: {len(view['steps'])} steps so far." if view.get("going") else "-"
     if stop:
         said = (
             f"Stopped: {stop.get('reason')} ({stop.get('detail') or stop.get('meaning') or ''}). "
@@ -468,7 +470,7 @@ def _this_run(view: Mapping) -> Html:
         return f"{_plain(value)}{unit}" + (f" of {_plain(limit)}{unit}" if limit is not None else "")
 
     lines = [
-        ("Kind", evaluation.mode_cell(row) if row.get("mode") else "-"),
+        ("Kind", evaluation.mode_cell(row) if row.get("mode") else ("going on now" if view.get("going") else "-")),
         ("Platform", runs.PLATFORM_NAMES.get(str(view.get("platform")), view.get("platform") or "-")),
         ("Model", row.get("model") or ", ".join(used.get("models") or []) or "-"),
         ("Through", ", ".join(f"Claude Code {v}" for v in view.get("versions") or []) or "-"),

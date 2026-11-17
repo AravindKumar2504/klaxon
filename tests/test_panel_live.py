@@ -89,6 +89,7 @@ def test_a_run_going_on_is_followed_step_by_step(run):
     page = run.page()
     assert 'data-live="true"' in page and "LIVE" in page and "No request yet." in page
     assert "A run going on now, on this Mac." in page
+    assert "Not yet: the loop is still investigating." in page and "Going on now: 0 steps so far." in page
     first = run.client.get(f"/run/{NAME}/state").json()
     assert first == {"version": run.view()["version"], "live": True}
     run.trace(steps=2)
@@ -118,6 +119,20 @@ def test_an_answered_request_shows_the_decision_and_no_copy_button(run):
     assert run.path()["Verify"] == ("now", "health, then money")
     page = run.page()
     assert "data-copy=" not in page and "Waiting for you." not in page and "typed at a terminal" in page
+
+
+def test_an_approved_request_is_followed_until_the_gate_says_how_it_ended(demo, tmp_path):
+    # Found with make gate-demo on 2026-11-17: the page reloaded at the decision, then stopped before "done" came.
+    client = TestClient(server.create_app(root=tmp_path / "evidence", also=[demo]), base_url=BASE)
+    source = runs.index()[SOURCE]
+    events = (source / gate.LOG).read_text().splitlines()
+    (demo / gate.DECISION).write_text((source / gate.DECISION).read_text())
+    (demo / gate.LOG).write_text("\n".join(events[:3]) + "\n")  # requested, approved, decision taken
+    assert client.get(f"/run/{demo.name}/state").json()["live"] is True
+    (demo / gate.LOG).write_text("\n".join(events) + "\n")  # running, then done
+    assert client.get(f"/run/{demo.name}/state").json()["live"] is False
+    page = html.unescape(client.get(f"/run/{demo.name}").text)
+    assert "the action ran" in page
 
 
 def test_an_expired_request_is_denied_and_waits_no_more(run):

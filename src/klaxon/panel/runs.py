@@ -30,6 +30,8 @@ PHASES = ("Alert", "Investigate", "Diagnose", "Approve", "Act", "Verify", "Postm
 REPORT_FOLDERS = ("week3", "week4", "week5", "week6", "week6/kind")
 # The live view (week 7, item 2): a run with no run.json yet, whose folder changed this recently, is still going.
 LIVE_MINUTES = 30
+# The gate's events that say how an approved action ended (klaxon.agent.gate.log): till one comes, the page follows.
+SETTLED = ("done", "failed", "not run", "stopped", "refused", "decision not taken", "approval refused")
 GATE_DEMO = "klaxon-gate-demo-"  # the folder make gate-demo makes (klaxon.demo.gate_demo), outside evidence/
 SIMULATION = (
     "A simulation (make gate-demo): a made-up stack and a made-up diagnosis, to try the gate. No model was called, and"
@@ -338,6 +340,8 @@ def run(folder: Path, root: Path = EVIDENCE, show: bool = False, now: float | No
     ended = _seconds(saved.get("ran_at_utc")) is not None and (folder / fault_runs.RUN_FILE).is_file()
     recent = ended and now - (folder / fault_runs.RUN_FILE).stat().st_mtime < LIVE_MINUTES * 60
     acted = _map(saved.get("gate")).get("result") == "done"
+    # Approved, and the gate has not yet said how the action ended (found with make gate-demo, 2026-11-17).
+    acting = _map(decision).get("decision") == "approved" and not any(e.get("event") in SETTLED for e in events)
     step_count = sum(1 for r in trace if r.get("kind") == "step")
     live_info = {"going": going, "steps": step_count, "request": request, "decision": decision, "events": events}
     live_info["left"] = left
@@ -369,7 +373,7 @@ def run(folder: Path, root: Path = EVIDENCE, show: bool = False, now: float | No
         "going": going,
         # Followed every 2 seconds while it goes on, while a request waits, and while a run that acted waits for its
         # postmortem (make postmortem, a little after the run): then the page stops asking.
-        "live": going or left is not None or (recent and acted and markdown_text is None),
+        "live": going or left is not None or acting or (recent and acted and markdown_text is None),
         "version": version(folder),
         "simulation": folder.name.startswith(GATE_DEMO),
         "verification": _map(saved.get("verification")),

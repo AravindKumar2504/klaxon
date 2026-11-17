@@ -3810,7 +3810,7 @@ MUTANTS = [
      '        f"{title}: {f[\'name\']}",', False),
     # Week 7, item 2: the live view follows a run while it goes on, and a waiting request shows its command.
     ('the live view follows a finished run', P + 'runs.py',
-     '        "live": going or left is not None or (recent and acted and markdown_text is None),',
+     '        "live": going or left is not None or acting or (recent and acted and markdown_text is None),',
      '        "live": True,', False),
     ('a run with no run.json is in progress forever', P + 'runs.py',
      '    return not (folder / fault_runs.RUN_FILE).is_file() and now - changed_at(folder) < LIVE_MINUTES * 60',
@@ -3830,6 +3830,9 @@ MUTANTS = [
     ('an expired request shows as never asked', P + 'runs.py',
      '    elif request:  # asked, and nobody answered in time: no answer means denied\n        out += [("no", "expired: no answer"), ("off", "nothing ran")]',
      '    elif False:  # asked, and nobody answered in time: no answer means denied\n        out += [("no", "expired: no answer"), ("off", "nothing ran")]', False),
+    ('an approved request is not followed till its action ends', P + 'runs.py',
+     '    acting = _map(decision).get("decision") == "approved" and not any(e.get("event") in SETTLED for e in events)',
+     '    acting = False', False),
 ]
 
 
