@@ -5,14 +5,17 @@ replaces one piece of code with a plausible mistake (commit before booking, answ
 Kafka did not confirm, trust Redis alone, ...). The copy lives in WORKDIR, so the repo itself
 is never touched. A mutant is "caught" when at least one test fails.
 
-Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--only FILE ...]    (or: make mutants)
+Usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--shard K/N] [--only FILE ...]    (or: make mutants)
 Offline mutants run the offline suite. --with-stack also runs the mutants that need the
 stack's PostgreSQL, Redis and Kafka (pytest -m integration; make up first); --stack-only runs
-those alone. --only, last, runs just the mutants of the files named, as the list names them
+those alone. --shard K/N runs part K of N of what is picked: mutant i, counted from 0, when
+i % N == K - 1. So N runs side by side, as in CI, run each mutant once (week 7).
+--only, last, runs just the mutants of the files named, as the list names them
 (src/klaxon/agent/model.py).
 Exit 0 when every mutant is caught, 1 when one survives, 2 when the unbroken copy fails.
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -706,6 +709,19 @@ MUTANTS = [
      "        except Exception as exc:  # the model's failures, and Klaxon's own", "        except ModelError as exc:  # the model's failures, and Klaxon's own", False),
     ("a live adapter works without a recording", A + "claude_code.py",
      "        if not isinstance(recording, Recording):\n            raise TypeError(", "        if False:\n            raise TypeError(", False),
+    # Week 7, item 3: the switch that turns live calls off (CI, the offline tests).
+    ("with live calls switched off, Claude Code is still looked for", A + "claude_code.py",
+     "    refuse_while_live_calls_are_off(env)\n    configured", "    configured", False),
+    ("with live calls switched off, a live adapter can still be made", A + "claude_code.py",
+     "        refuse_while_live_calls_are_off()  # first", "        pass  # first", False),
+    ("the switch is read from Klaxon's environment, not the one Claude Code is looked for in", A + "claude_code.py",
+     "    refuse_while_live_calls_are_off(env)\n", "    refuse_while_live_calls_are_off()\n", False),
+    ("only the value 1 turns live calls off", A + "claude_code.py",
+     '    if env.get(LIVE_OFF, "") not in ("", "0"):', '    if env.get(LIVE_OFF, "") == "1":', False),
+    ("the switch set to 0 turns live calls off", A + "claude_code.py",
+     '    if env.get(LIVE_OFF, "") not in ("", "0"):', '    if env.get(LIVE_OFF, "") not in ("",):', False),
+    ("a refused live call is not a ModelError, so a live run's preflight crashes on it", A + "claude_code.py",
+     "class LiveCallsOff(ModelError):", "class LiveCallsOff(Exception):", False),
     ("a recording keeps scripted or replayed replies as if live", A + "model.py",
      "        if reply.source not in LIVE:", "        if False:", False),
     ("a reopened recording has no header of its own", A + "model.py",
@@ -3756,6 +3772,27 @@ def select(with_stack: bool, stack_only: bool, only: list[str]) -> list[tuple]:
     return [m for m in MUTANTS if (with_stack or not m[4]) and (m[4] or not stack_only) and (not only or m[1] in only)]
 
 
+def shard_of(args: list[str]) -> tuple[int, int] | None:
+    """--shard K/N from the arguments, part K of N (1 <= K <= N), or None without it. Raises ValueError otherwise."""
+    if "--shard" not in args:
+        return None
+    at = args.index("--shard")
+    value = args[at + 1] if at + 1 < len(args) else ""
+    found = re.fullmatch(r"([1-9][0-9]*)/([1-9][0-9]*)", value)
+    if not found or int(found[1]) > int(found[2]):
+        raise ValueError(f"--shard takes K/N, part K of N (1 <= K <= N), such as 3/10, not {value!r}")
+    return int(found[1]), int(found[2])
+
+
+def in_shard(selected: list[tuple], shard: tuple[int, int] | None) -> list[tuple]:
+    """Part K of N of the mutants picked: mutant i, counted from 0, when i % N == K - 1. Taken in turn, so each part
+    gets some of every file's mutants, and the N parts together hold each mutant picked exactly once."""
+    if shard is None:
+        return selected
+    part, parts = shard
+    return [m for i, m in enumerate(selected) if i % parts == part - 1]
+
+
 # Week 6, item 5: tests/test_mutation_check.py's guard reads this runner's copy, where one mutant is always applied, so
 # it failed under nearly every mutant and, with -x, stopped the suite before the test files that sort after it: a mutant
 # was counted caught without its own tests running. It belongs to make test, not to a mutant's run.
@@ -3774,7 +3811,9 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
         return subprocess.CompletedProcess(args, 1, "FAILED (the tests did not end within 600 s)", "")
 
 
-USAGE = "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--only FILE ...]"
+USAGE = (
+    "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--shard K/N] [--only FILE ...]"
+)
 
 
 def main() -> int:
@@ -3785,9 +3824,18 @@ def main() -> int:
         print(USAGE, file=sys.stderr)
         return 2
     repo, work = Path(sys.argv[1]), Path(sys.argv[2])
-    stack_only = "--stack-only" in sys.argv  # week 5: the stack's mutants alone, once the offline ones have run
-    with_stack = stack_only or "--with-stack" in sys.argv
-    only = sys.argv[sys.argv.index("--only") + 1 :] if "--only" in sys.argv else []
+    args = sys.argv[3:]
+    try:
+        shard = shard_of(args)  # week 7: one of CI's parallel parts
+    except ValueError as exc:
+        print(f"{exc}\n{USAGE}", file=sys.stderr)
+        return 2
+    if shard is not None:
+        at = args.index("--shard")
+        args = args[:at] + args[at + 2 :]
+    stack_only = "--stack-only" in args  # week 5: the stack's mutants alone, once the offline ones have run
+    with_stack = stack_only or "--with-stack" in args
+    only = args[args.index("--only") + 1 :] if "--only" in args else []
     unknown = sorted(set(only) - {m[1] for m in MUTANTS})
     if unknown:
         print(f"no mutants for: {', '.join(unknown)}")
@@ -3812,7 +3860,10 @@ def main() -> int:
     )
     assert str(work) in check.stdout, f"the copy is not the code under test: {check.stdout}"
 
-    selected = select(with_stack, stack_only, only)
+    picked = select(with_stack, stack_only, only)
+    selected = in_shard(picked, shard)
+    if shard is not None:
+        print(f"part {shard[0]} of {shard[1]}: {len(selected)} of the {len(picked)} mutants picked")
     # A mutant that does not compile would be "caught" by any test that imports its module: say so, and stop.
     broken = []
     for name, file, old, new, _ in selected:

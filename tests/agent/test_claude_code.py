@@ -25,6 +25,10 @@ from klaxon.agent.model import Message, Recording
 from klaxon.agent.tools import HOME
 from klaxon.patient.stack import REPO
 
+# These tests run the live adapter against fake programs, never a model, so the switch that turns live calls off
+# (on for every other test: tests/conftest.py) is off here. The switch's own tests below turn it on themselves.
+pytestmark = pytest.mark.usefixtures("live_calls_allowed")
+
 SYSTEM = "You are Klaxon, in a test."
 ASK = [Message("user", "Reply with the word ok")]
 
@@ -916,6 +920,55 @@ def test_then_the_newest_copy_the_desktop_app_keeps(tmp_path):
 def test_nothing_found_says_how_to_point_klaxon_at_it(tmp_path):
     with pytest.raises(m.ModelError, match="set KLAXON_CLAUDE_BIN"):
         cc.find_claude({"PATH": ""}, copies=tmp_path / "app")
+
+
+# The switch that turns live calls off (week 7, item 3): CI sets it, and so do the offline tests.
+
+
+@pytest.mark.parametrize("value", ["1", "yes", "true", "anything"])
+def test_with_the_switch_on_claude_code_is_not_even_looked_for(fake, tmp_path, value):
+    env = {cc.LIVE_OFF: value, "KLAXON_CLAUDE_BIN": str(fake.path), "PATH": ""}
+    with pytest.raises(cc.LiveCallsOff, match=cc.LIVE_OFF):
+        cc.find_claude(env, copies=tmp_path / "app")
+    assert issubclass(cc.LiveCallsOff, m.ModelError)  # every live run's preflight already stops on a ModelError
+
+
+@pytest.mark.parametrize("value", ["", "0"])
+def test_the_switch_set_to_nothing_or_0_is_off(fake, tmp_path, value):
+    env = {cc.LIVE_OFF: value, "KLAXON_CLAUDE_BIN": str(fake.path), "PATH": ""}
+    assert cc.find_claude(env, copies=tmp_path / "app") == fake.path
+
+
+def test_with_the_switch_on_no_live_adapter_can_be_made_and_nothing_starts(fake, recording, monkeypatch):
+    monkeypatch.setenv(cc.LIVE_OFF, "1")
+    started = []
+    monkeypatch.setattr(cc.subprocess, "Popen", lambda *a, **k: started.append(a))
+    before = recording.path.read_text()
+    with pytest.raises(cc.LiveCallsOff, match=cc.LIVE_OFF):
+        live(fake, recording)  # its binary is given, so it never looks for Claude Code: the adapter refuses itself
+    assert started == [] and not fake.ran()
+    assert recording.path.read_text() == before  # nothing to record: no call began
+
+
+def test_with_the_switch_off_a_live_adapter_works_as_before(fake, recording, monkeypatch):
+    monkeypatch.delenv(cc.LIVE_OFF, raising=False)
+    assert live(fake, recording).ask(SYSTEM, ASK).text == "ok"
+    assert fake.ran()
+
+
+@pytest.mark.parametrize("action", ["check", "command"])
+def test_with_the_switch_on_the_commands_refuse_before_anything(fake, tmp_path, action):
+    evidence = tmp_path / "evidence"
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(Path.home()), "KLAXON_CLAUDE_BIN": str(fake.path)}
+    env |= {"PYTHONPATH": str(REPO / "src"), cc.LIVE_OFF: "1"}
+    args = [action, "--evidence-dir", str(evidence)] if action == "check" else [action]
+    done = subprocess.run(
+        [sys.executable, "-m", "klaxon.agent.claude_code", *args], env=env, capture_output=True, text=True, timeout=60
+    )
+    assert done.returncode == 2
+    assert f"live model calls are switched off ({cc.LIVE_OFF} is set)" in done.stderr
+    assert "Traceback" not in done.stderr and done.stdout == ""
+    assert not fake.ran() and not evidence.exists()
 
 
 # The commands

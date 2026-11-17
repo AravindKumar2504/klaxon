@@ -329,7 +329,7 @@ def test_a_replay_on_a_loop_that_cannot_run_here_is_refused_saying_why(tmp_path,
     assert loop.main(["replay", str(tmp_path / "run")]) == 0  # the plain loop needs no LangGraph, nor its switches
 
 
-def test_a_live_runs_loop_reaches_investigate_and_its_trace(tmp_path, monkeypatch):
+def test_a_live_runs_loop_reaches_investigate_and_its_trace(tmp_path, monkeypatch, live_calls_allowed):
     seen = {}
     real = loop.investigate
 

@@ -16,6 +16,10 @@ _SESSION_LOGS = tempfile.mkdtemp(prefix="klaxon-test-deploys-")
 atexit.register(shutil.rmtree, _SESSION_LOGS, ignore_errors=True)
 os.environ["KLAXON_DEPLOY_LOG"] = str(Path(_SESSION_LOGS) / "deploys.jsonl")
 os.environ["KLAXON_KIND_DEPLOY_LOG"] = str(Path(_SESSION_LOGS) / "deploys-kind.jsonl")  # kind's own (week 6)
+# Live model calls are switched off for every test, as CI switches them off (week 7, item 3): no test can find
+# Claude Code or make a live adapter. A test that runs the adapter against a fake program of its own turns the switch
+# off for itself (live_calls_allowed, below), so the same tests pass here and in CI.
+os.environ[claude_code.LIVE_OFF] = "1"
 
 SECRET = b"test-secret-not-real"
 NO_CLAUDE = "/nonexistent/klaxon-offline-tests-never-call-claude"
@@ -32,6 +36,14 @@ def no_real_claude_code(monkeypatch):
     own fake."""
     monkeypatch.setenv("KLAXON_CLAUDE_BIN", NO_CLAUDE)
     monkeypatch.setattr(claude_code, "APP_COPIES", NO_APP_COPIES)
+
+
+@pytest.fixture
+def live_calls_allowed(monkeypatch):
+    """The switch that turns live calls off, off for one test: one that runs the live adapter against a fake program
+    of its own, never a model, or that checks the guard below the switch. no_real_claude_code, above, still hides the
+    real Claude Code."""
+    monkeypatch.delenv(claude_code.LIVE_OFF, raising=False)
 
 
 @pytest.fixture(autouse=True)

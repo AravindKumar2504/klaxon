@@ -892,7 +892,7 @@ emit({{"type": "result", "subtype": "success", "is_error": False, "num_turns": 1
 
 
 def test_a_live_run_offline_with_a_fake_claude_and_the_real_server_then_its_replay(
-    tmp_path, monkeypatch, capsys, loop_kind
+    tmp_path, monkeypatch, capsys, loop_kind, live_calls_allowed
 ):
     """The whole live path, with a fake `claude` that prints made-up events in Claude Code's documented shapes,
     Klaxon's real MCP server as a process (with Prometheus out of reach), the recording, the tool results and the

@@ -24,7 +24,7 @@ unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PR
 PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
-.PHONY: help venv test lint up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
+.PHONY: help venv test lint ci-linux up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt loop-graph investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
@@ -54,6 +54,19 @@ lint: ## ruff: style and common mistakes
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
 		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py
+
+# CI's offline job on Linux, here on this Mac (week 7, item 3), before a push: an official python image with CI's
+# Python. The repo is mounted read-only and copied inside, without .venv, .kind, .git or anything built, then run by
+# a user that is not root, as on GitHub's machines, with live model calls off. Nothing is written to this folder.
+CI_IMAGE := python:3.12.16-trixie
+ci-linux: local-docker-only ## CI's offline job in an official Linux python container: make venv, lint and test, on a copy (needs Docker)
+	$(DOCKER) run --rm --mount type=bind,source="$(CURDIR)",target=/repo,readonly \
+		--env KLAXON_NO_LIVE_MODEL=1 --env PIP_DISABLE_PIP_VERSION_CHECK=1 $(CI_IMAGE) bash -euo pipefail -c ' \
+		useradd --create-home runner; mkdir /home/runner/work; \
+		tar -C /repo --exclude=./.venv --exclude=./.kind --exclude=./.git --exclude="*.egg-info" \
+			--exclude=__pycache__ --exclude=.pytest_cache --exclude=.ruff_cache -cf - . | tar -C /home/runner/work -xf -; \
+		chown -R runner:runner /home/runner/work; \
+		runuser -u runner -- bash -euo pipefail -c "cd ~/work && make venv && make lint && make test"'
 
 up: local-docker-only ## build, start, wait until healthy (bad baselines: HANDLER=naive, CONFIRMER=by_provider_id)
 	$(COMPOSE) up --detach --build --wait
