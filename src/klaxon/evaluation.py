@@ -774,7 +774,7 @@ def run_folders(paths: Iterable[Path]) -> tuple[list[Path], list[str], list[Path
     folder of either (a week's). Rehearsals, and folders that hold no run, are left out, and said. Also the suites
     found, whose files say what they planned and did not run."""
     found: list[Path] = []
-    left_out: list[str] = []
+    left: list[tuple[Path | None, str]] = []
     suites: list[Path] = []
     seen: set[Path] = set()
 
@@ -782,24 +782,28 @@ def run_folders(paths: Iterable[Path]) -> tuple[list[Path], list[str], list[Path
         key = path.resolve()
         if key in seen:
             return
-        seen.add(key)
         if (path / fault_runs.RUN_FILE).is_file():
+            seen.add(key)
             if "_rehearsal_" in path.name:
-                left_out.append(f"{path.name}: a rehearsal, with no model")
+                left.append((None, f"{path.name}: a rehearsal, with no model"))
             else:
                 found.append(path)
         elif (path / SUITE_FILE).is_file():
+            seen.add(key)
             suites.append(path)
             for child in _subfolders(path):
                 visit(child, False)
         elif container:
+            seen.add(key)
             for child in _subfolders(path):
                 visit(child, False)
         else:
-            left_out.append(f"{path.name}: it holds no {fault_runs.RUN_FILE}")
+            # Not marked seen: a folder named later (week6/kind after week6) is still read (week 7's review).
+            left.append((key, f"{path.name}: it holds no {fault_runs.RUN_FILE}"))
 
     for path in paths:
         visit(path, True)
+    left_out = [said for key, said in left if key is None or key not in seen]
     return found, left_out, suites
 
 

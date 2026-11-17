@@ -8,6 +8,8 @@ FastAPI's own docs pages are off, as they load files from another site.
 from __future__ import annotations
 
 import argparse
+import sys
+import traceback
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from pathlib import Path
 
@@ -42,6 +44,7 @@ HEADERS = {
 }
 WRONG_HOST = "Refused: this panel answers only as 127.0.0.1 or localhost, on its own port."
 WRONG_METHOD = "Refused: this panel only shows. It answers GET and HEAD, nothing that could change anything."
+BROKEN = "The panel could not make this page. What went wrong is in the terminal that runs make panel."
 
 
 def hosts(port: int) -> frozenset[str]:
@@ -65,7 +68,11 @@ def create_app(root: Path = runs.EVIDENCE, port: int = PORT, also: Iterable[Path
         elif request.method not in METHODS:
             response = PlainTextResponse(WRONG_METHOD, status_code=405, headers={"Allow": ", ".join(METHODS)})
         else:
-            response = await call_next(request)
+            try:
+                response = await call_next(request)
+            except Exception:  # a page that cannot be made still carries the panel's headers (the review's 6)
+                traceback.print_exc(file=sys.stderr)
+                response = PlainTextResponse(BROKEN, status_code=500)
         for key, value in HEADERS.items():
             response.headers[key] = value
         return response

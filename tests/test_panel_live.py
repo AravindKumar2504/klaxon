@@ -26,7 +26,9 @@ def _stamp(at: datetime) -> str:
 
 class Growing:
     """A made-up run folder that grows the way a live run's does: the trace and recordings first, the request, the
-    decision and the gate's trail, then run.json at the end, then the postmortem."""
+    decision and the gate's trail, then run.json at the end, then the postmortem. Every record it writes carries the
+    time `when` (now, unless a test says otherwise), as a live run's records carry the time they were written: the
+    panel goes by those times, never by the files' own (the week's review, finding 1)."""
 
     def __init__(self, tmp_path):
         self.source = runs.index()[SOURCE]
@@ -34,9 +36,14 @@ class Growing:
         self.folder = self.root / "week7" / NAME
         self.folder.mkdir(parents=True)
         self.client = TestClient(server.create_app(root=self.root), base_url=BASE)
+        self.when = datetime.now(UTC)
 
     def lines(self, name):
-        return (self.source / name).read_text().splitlines()
+        out = []
+        for line in (self.source / name).read_text().splitlines():
+            record = json.loads(line)
+            out.append(json.dumps(record | {key: _stamp(self.when) for key in runs.STAMPS if key in record}))
+        return out
 
     def write(self, name, lines):
         (self.folder / name).write_text("".join(f"{line}\n" for line in lines))
@@ -49,25 +56,22 @@ class Growing:
         self.write(loop.TOOL_RESULTS, self.lines(loop.TOOL_RESULTS)[:1])
 
     def request(self, expires_in: float):
-        now = datetime.now(UTC)
         made = json.loads((self.source / gate.REQUEST).read_text())
-        made |= {"created_at": _stamp(now), "expires_at": _stamp(now + timedelta(seconds=expires_in)), "run": NAME}
-        (self.folder / gate.REQUEST).write_text(json.dumps(made))
+        made |= {"created_at": _stamp(self.when), "expires_at": _stamp(self.when + timedelta(seconds=expires_in))}
+        (self.folder / gate.REQUEST).write_text(json.dumps(made | {"run": NAME}))
         self.write(gate.LOG, self.lines(gate.LOG)[:1])
         return made
 
-    def decide(self):
-        (self.folder / gate.DECISION).write_text((self.source / gate.DECISION).read_text())
-        self.write(gate.LOG, self.lines(gate.LOG))
+    def decide(self, events: int | None = None):
+        decided = json.loads((self.source / gate.DECISION).read_text()) | {"at": _stamp(self.when)}
+        (self.folder / gate.DECISION).write_text(json.dumps(decided))
+        self.write(gate.LOG, self.lines(gate.LOG)[:events])  # requested, approved, decision taken, running, done
 
-    def end(self, minutes_ago: float = 0):
-        path = self.folder / fault_runs.RUN_FILE
-        path.write_text((self.source / fault_runs.RUN_FILE).read_text())
-        then = time.time() - minutes_ago * 60
-        os.utime(path, (then, then))
+    def end(self):
+        (self.folder / fault_runs.RUN_FILE).write_text((self.source / fault_runs.RUN_FILE).read_text())
 
-    def page(self):
-        answer = self.client.get(f"/run/{NAME}")
+    def page(self, **query):
+        answer = self.client.get(f"/run/{NAME}", params=query)
         assert answer.status_code == 200
         return html.unescape(answer.text)
 
@@ -135,6 +139,17 @@ def test_an_approved_request_is_followed_until_the_gate_says_how_it_ended(demo, 
     assert "the action ran" in page
 
 
+def test_a_refused_try_at_approving_does_not_end_the_following(demo, tmp_path):
+    # make approve run without a terminal logs "approval refused", and the request stays open (finding 5).
+    client = TestClient(server.create_app(root=tmp_path / "evidence", also=[demo]), base_url=BASE)
+    source = runs.index()[SOURCE]
+    events = (source / gate.LOG).read_text().splitlines()
+    refused = json.dumps({"at": json.loads(events[0])["at"], "event": "approval refused", "why": "no terminal"})
+    (demo / gate.DECISION).write_text((source / gate.DECISION).read_text())
+    (demo / gate.LOG).write_text("\n".join([events[0], refused, *events[1:3]]) + "\n")
+    assert client.get(f"/run/{demo.name}/state").json()["live"] is True
+
+
 def test_an_expired_request_is_denied_and_waits_no_more(run):
     run.trace(steps=4, stop=True)
     run.request(expires_in=-5)
@@ -157,20 +172,46 @@ def test_the_end_of_a_run_then_its_postmortem_stop_the_following(run):
 
 
 def test_a_run_that_ended_long_ago_is_not_followed(run):
+    run.when -= timedelta(minutes=runs.LIVE_MINUTES + 1)
     run.trace(steps=4, stop=True)
-    run.request(expires_in=-5)
+    run.request(expires_in=600)
     run.decide()
-    run.end(minutes_ago=runs.LIVE_MINUTES + 1)
+    run.end()
     assert not run.view()["live"]
 
 
-def test_a_run_with_no_run_json_and_no_change_for_long_is_not_going(run):
+def test_a_run_with_no_run_json_and_no_record_for_long_is_not_going(run):
+    run.when -= timedelta(minutes=runs.LIVE_MINUTES + 1)
     run.trace(steps=2)
-    then = time.time() - (runs.LIVE_MINUTES + 1) * 60
-    for path in run.folder.iterdir():
-        os.utime(path, (then, then))
     assert not run.view()["live"] and not run.view()["going"]
     assert runs.NO_RUN_FILE in run.page()
+
+
+def test_the_files_own_times_never_make_a_run_look_live(run):
+    # A fresh git checkout gives every file the time it was made: on GitHub, week 3's first live run looked live
+    # (the week's review, finding 1). The records' own times decide.
+    run.when -= timedelta(days=3)
+    run.trace(steps=2)
+    now = time.time()
+    for path in run.folder.iterdir():
+        os.utime(path, (now, now))
+    assert not run.view()["going"] and not run.view()["live"]
+
+
+def test_an_action_running_shows_on_the_path_while_the_gate_runs_it(run):
+    run.trace(steps=4, stop=True)
+    run.request(expires_in=600)
+    run.decide(events=4)  # the log ends at "running"
+    assert run.view()["live"] and run.path()["Act"] == ("now", "running")
+
+
+def test_an_approved_action_whose_records_stopped_long_ago_is_not_followed(run):
+    # A run killed mid-action leaves its log at "running": followed only while its records keep coming (finding 5).
+    run.when -= timedelta(minutes=runs.LIVE_MINUTES + 1)
+    run.trace(steps=4, stop=True)
+    run.request(expires_in=600)
+    run.decide(events=4)
+    assert not run.view()["live"]
 
 
 def test_the_saved_runs_are_not_followed(run):

@@ -643,6 +643,18 @@ def _verification(view: Mapping) -> Html | None:
 def _postmortem(view: Mapping) -> Html | None:
     if not view.get("postmortem"):
         return None
+    if view["row"].get("held_back"):  # the draft states the rule's verdict: held back with the graders' (finding 3)
+        return card(
+            "Postmortem draft",
+            el(
+                "p",
+                "Held back until you label this run: the draft states the rule's verdict. ",
+                el("a", "Show it", href=f"{href('run', view['folder'])}?graders={SHOWN}"),
+                ".",
+                class_="note",
+            ),
+            extra="wide",
+        )
     marks = None
     if view.get("reviewed"):
         marks = el(
@@ -714,7 +726,3 @@ def not_found(name: str) -> Html:
         el("p", "No saved run in evidence/ has the name ", el("code", name), "."),
         el("p", el("a", "All runs", href="/runs")),
     )
-
-
-def refused(why: str) -> Html:
-    return join(Html("<!doctype html>\n"), el("html", el("body", el("p", why)), lang="en"))

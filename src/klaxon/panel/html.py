@@ -86,8 +86,14 @@ def _inline(text: str) -> Html:
     return Html(_BOLD.sub(r"<b>\1</b>", _CODE.sub(r"<code>\1</code>", escaped)))
 
 
+_PIPE = re.compile(r"(?<!\\)\|")  # a cell's border; an escaped one, \|, is a pipe inside a cell
+
+
 def _cells(line: str) -> list[str]:
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+    row = line.strip()
+    row = row[1:] if row.startswith("|") else row
+    row = row[:-1] if row.endswith("|") and not row.endswith("\\|") else row
+    return [cell.strip() for cell in _PIPE.split(row)]
 
 
 def markdown(text: str) -> Html:
@@ -99,9 +105,10 @@ def markdown(text: str) -> Html:
         line = lines[i]
         if not line.strip():
             i += 1
-        elif line.startswith("#"):
-            level = min(len(line) - len(line.lstrip("#")), 4)
-            out.append(el(f"h{level + 1}", _inline(line.lstrip("#").strip())))
+        elif line.lstrip().startswith("#"):
+            heading = line.lstrip()
+            level = min(len(heading) - len(heading.lstrip("#")), 4)
+            out.append(el(f"h{level + 1}", _inline(heading.lstrip("#").strip())))
             i += 1
         elif line.lstrip().startswith("|"):
             block = []
@@ -109,6 +116,8 @@ def markdown(text: str) -> Html:
                 block.append(lines[i])
                 i += 1
             rows = [_cells(row) for row in block if not set(row.replace("|", "").strip()) <= set("-: ")]
+            if not rows:  # only borders: nothing to show (the review's finding 6)
+                continue
             head, body = rows[0], rows[1:]
             out.append(
                 el(
@@ -128,7 +137,8 @@ def markdown(text: str) -> Html:
                 i += 1
             out.append(el("ul", items))
         else:
-            para = []
+            para = [lines[i].strip()]  # always this line, so the reader always moves on (the review's finding 4)
+            i += 1
             while i < len(lines) and lines[i].strip() and not lines[i].lstrip().startswith(("#", "|", "- ", "* ")):
                 para.append(lines[i].strip())
                 i += 1

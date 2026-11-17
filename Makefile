@@ -67,7 +67,7 @@ ci-linux: local-docker-only ## CI's offline job in an official Linux python cont
 	$(DOCKER) run --rm --init --mount type=bind,source="$(CURDIR)",target=/repo,readonly \
 		--env KLAXON_NO_LIVE_MODEL=1 --env PIP_DISABLE_PIP_VERSION_CHECK=1 $(CI_IMAGE) bash -euo pipefail -c ' \
 		useradd --create-home runner; mkdir /home/runner/work; \
-		tar -C /repo --exclude=./.venv --exclude=./.kind --exclude=./.git --exclude="*.egg-info" \
+		tar -C /repo --exclude=./.venv --exclude=./.kind --exclude=./.git --exclude=./.claude --exclude="*.egg-info" \
 			--exclude=__pycache__ --exclude=.pytest_cache --exclude=.ruff_cache -cf - . | tar -C /home/runner/work -xf -; \
 		chown -R runner:runner /home/runner/work; \
 		runuser -u runner -- bash -euo pipefail -c "cd ~/work && make venv && make lint && make test"'

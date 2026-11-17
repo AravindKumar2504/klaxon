@@ -1395,3 +1395,14 @@ def test_week_5s_runs_and_week_6s_are_never_counted_in_one_row(tmp_path):
     rows = [row for row in evaluation.report([old, new])["summary"] if row["case"] == saved["case"]["name"]]
     assert sorted((row["mode"], row["runs"]) for row in rows) == [("evaluation", 1), ("evaluation, week 6", 1)]
     assert evaluation._mode({"case": {}, "evaluation_version": 3}) == "evaluation, version 3"
+
+
+def test_a_folder_named_after_the_folder_that_holds_it_is_still_read():
+    # Week 7's review, finding 2: week6 left kind out ("it holds no run.json") and marked it seen, so a later
+    # week6/kind read nothing. Now a folder is marked seen only when it is taken or read.
+    week6 = evaluation.REPO / "evidence" / "week6"
+    found, left_out, _ = evaluation.run_folders([week6, week6 / "kind"])
+    kind = [folder for folder in found if folder.parent.name == "kind"]
+    assert len(kind) == 4 and not any(line.startswith("kind:") for line in left_out)
+    alone, left_alone, _ = evaluation.run_folders([week6])
+    assert len(alone) == len(found) - 4 and any(line.startswith("kind:") for line in left_alone)

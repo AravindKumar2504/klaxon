@@ -61,7 +61,7 @@ def test_a_run_with_no_run_json_says_so(client):
 def test_the_approved_run_on_kind_shows_its_path_request_and_verification(client):
     view = runs.run(_run_folder(APPROVED_ON_KIND))
     assert [(p["name"], p["state"]) for p in view["phases"]] == [(name, "done") for name in runs.PHASES]
-    text = html.unescape(client.get(f"/run/{APPROVED_ON_KIND}").text)
+    text = html.unescape(client.get(f"/run/{APPROVED_ON_KIND}", params={"graders": pages.SHOWN}).text)
     assert "r-b619" in text and "approved" in text and "typed at a terminal" in text
     assert "make approve RUN=evidence/week6/kind/" + APPROVED_ON_KIND in text
     assert "make replay-run RUN=evidence/week6/kind/" + APPROVED_ON_KIND in text
@@ -137,7 +137,7 @@ def planted(tmp_path):
 
 def test_planted_markup_shows_as_text(planted):
     client, name = planted
-    text = client.get(f"/run/{name}").text
+    text = client.get(f"/run/{name}", params={"graders": pages.SHOWN}).text
     for raw in ("<script>alert", "<img src=x", 'onmouseover="alert'):  # no tag, no attribute: only text
         assert raw not in text
     assert "&lt;script&gt;alert(&quot;planted&quot;)&lt;/script&gt;&lt;img src=x onerror=alert(1)&gt;" in text
@@ -268,3 +268,63 @@ def test_the_evaluation_page_holds_back_the_judge_as_make_eval_report_does(clien
     assert held and f"The judge's verdicts on {held} runs are held back" in text
     shown = html.unescape(client.get("/evaluation", params={"from": "week5", "graders": pages.SHOWN}).text)
     assert "are held back" not in shown
+
+
+# The week's review (2026-11-17): its findings, each with a test
+
+
+def test_the_default_evaluation_page_holds_the_kind_runs(client):
+    # Finding 2: run_folders marked week6/kind seen when it read week6, so a later week6/kind was skipped.
+    text = html.unescape(client.get("/evaluation").text)
+    found = evaluation.report([EVIDENCE / name for name in runs.REPORT_FOLDERS])
+    assert "gated, week 6, on kind" in text  # (week5/kind, which holds no run, is rightly left out, and said)
+    assert sum(1 for row in found["runs"] if row["mode"] == "gated, week 6, on kind") == 4
+    for line in (line for line in evaluation.markdown(found).splitlines() if line.startswith("In all:")):
+        assert line in text
+
+
+def test_the_postmortem_is_held_back_with_the_graders(client):
+    # Finding 3: the draft states the rule's verdict, so it waits with the graders' verdicts.
+    held = html.unescape(client.get(f"/run/{APPROVED_ON_KIND}").text)
+    assert "Held back until you label this run: the draft states the rule's verdict." in held
+    assert "The rule's verdict" not in held and "Postmortem draft: Customers charged" not in held
+    shown = html.unescape(client.get(f"/run/{APPROVED_ON_KIND}", params={"graders": pages.SHOWN}).text)
+    assert "Postmortem draft: Customers charged 100 times the amount: a money-unit bug" in shown
+
+
+def test_the_markdown_reader_always_moves_on_and_never_fails():
+    # Finding 4: an indented heading made the reader loop for ever. Finding 6: a table of borders only raised.
+    found = page_html.markdown("text\n # an indented heading\n  - an indented item\n|\n|---|\nlast\n")
+    assert "<h2>an indented heading</h2>" in found and "<li>an indented item</li>" in found
+    assert found.count("<p>") == 2 and "<table>" not in found
+
+
+def test_an_escaped_pipe_stays_in_its_cell():
+    # Finding 8: postmortem.md writes a pipe in a cell as \\|.
+    found = page_html.markdown("| What | From |\n|---|---|\n| restarted ledger \\| then replayed | gate.jsonl |\n")
+    assert "<td>restarted ledger | then replayed</td><td>gate.jsonl</td>" in found
+
+
+def test_a_page_that_cannot_be_made_still_carries_the_panels_headers(monkeypatch):
+    # Finding 6: an error answered by Starlette itself carried no policy.
+    def broken(*args, **kwargs):
+        raise RuntimeError("made up for the test")
+
+    monkeypatch.setattr(runs, "run", broken)
+    answer = TestClient(server.create_app(), base_url=BASE, raise_server_exceptions=False).get(f"/run/{FIRST_LOOP}")
+    assert answer.status_code == 500 and answer.text == server.BROKEN
+    assert "default-src 'none'" in answer.headers["content-security-policy"]
+    assert answer.headers["x-frame-options"] == "DENY"
+
+
+def test_a_recording_line_still_being_written_is_said_not_fatal(tmp_path):
+    # Finding 6: a half-written model-recording line made the page fail.
+    root = tmp_path / "evidence"
+    folder = root / "week6" / APPROVED_ON_KIND
+    shutil.copytree(_run_folder(APPROVED_ON_KIND), folder)
+    with open(folder / "model-recording.jsonl", "a", encoding="utf-8") as recording:
+        recording.write('{"kind": "response", "text": "half')
+    client = TestClient(server.create_app(root=root), base_url=BASE)
+    answer = client.get(f"/run/{APPROVED_ON_KIND}")
+    assert answer.status_code == 200 and "model-recording.jsonl" in html.unescape(answer.text)
+    assert client.get(f"/run/{APPROVED_ON_KIND}/state").status_code == 200

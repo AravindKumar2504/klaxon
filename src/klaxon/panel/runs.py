@@ -31,7 +31,9 @@ REPORT_FOLDERS = ("week3", "week4", "week5", "week6", "week6/kind")
 # The live view (week 7, item 2): a run with no run.json yet, whose folder changed this recently, is still going.
 LIVE_MINUTES = 30
 # The gate's events that say how an approved action ended (klaxon.agent.gate.log): till one comes, the page follows.
-SETTLED = ("done", "failed", "not run", "stopped", "refused", "decision not taken", "approval refused")
+# ("approval refused" is make approve run without a terminal: the request stays open, so it is not one.)
+SETTLED = ("done", "failed", "not run", "stopped", "refused")
+STAMPS = ("at", "received_at", "opened_at", "created_at")  # the times a run's records carry
 GATE_DEMO = "klaxon-gate-demo-"  # the folder make gate-demo makes (klaxon.demo.gate_demo), outside evidence/
 SIMULATION = (
     "A simulation (make gate-demo): a made-up stack and a made-up diagnosis, to try the gate. No model was called, and"
@@ -74,9 +76,36 @@ def _json(path: Path) -> object:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def changed_at(folder: Path) -> float:
-    """When anything in the run's folder last changed: its newest file's time (0 when it holds none)."""
-    return max((entry.stat().st_mtime for entry in os.scandir(folder) if entry.is_file()), default=0.0)
+def _stamped(record: object) -> float | None:
+    if isinstance(record, Mapping):
+        for key in STAMPS:
+            seconds = _seconds(record.get(key))
+            if seconds is not None:
+                return seconds
+    return None
+
+
+def last_written(folder: Path) -> float:
+    """When the run last wrote a record, by the times written inside its files (the trace's, the recordings', the tool
+    results' and the gate's), never by the files' own times: a fresh git checkout gives every file the time it was
+    made, so an old run would look new (the week's review, finding 1). 0 when no record says."""
+    times = []
+    for name in (loop.TRACE, loop.RECORDING, loop.TOOL_RESULTS, gate.LOG, gate.REQUEST, gate.DECISION):
+        path = folder / name
+        try:
+            text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        except (OSError, ValueError):
+            continue
+        records = [text] if name.endswith(".json") else reversed(text.splitlines())
+        for line in records:
+            try:
+                seconds = _stamped(json.loads(line))
+            except ValueError:
+                continue  # a line still being written
+            if seconds is not None:
+                times.append(seconds)
+                break
+    return max(times, default=0.0)
 
 
 def version(folder: Path) -> str:
@@ -86,8 +115,8 @@ def version(folder: Path) -> str:
 
 
 def in_progress(folder: Path, now: float) -> bool:
-    """A run still going: no run.json yet, and something in its folder changed in the last LIVE_MINUTES."""
-    return not (folder / fault_runs.RUN_FILE).is_file() and now - changed_at(folder) < LIVE_MINUTES * 60
+    """A run still going: no run.json yet, and a record written in its folder in the last LIVE_MINUTES."""
+    return not (folder / fault_runs.RUN_FILE).is_file() and now - last_written(folder) < LIVE_MINUTES * 60
 
 
 def _seconds(stamp: object) -> float | None:
@@ -269,6 +298,7 @@ def phases(
     gated = bool(saved.get("gated")) or bool(request)
     diagnosis, asked = _map(found.get("diagnosis")), _map(saved.get("gate"))
     result = asked.get("result") or next((e.get("event") for e in reversed(events) if e.get("event") == "done"), None)
+    last_event = next((e.get("event") for e in reversed(events) if e.get("event") != "approval refused"), None)
     verified = _map(saved.get("verification")).get("verdict")
     decided = _map(asked.get("decided")).get("decision") or _map(live.get("decision")).get("decision")
     if found:
@@ -285,7 +315,12 @@ def phases(
     out = [("done", alert.get("fired_at") or "") if alert else ("no", "no alert"), investigate, diagnose]
     if decided:
         out += [("done" if decided == "approved" else "no", decided)]
-        out += [("done", "the action ran") if result == "done" else ("no", str(result or "nothing ran"))]
+        if result == "done":
+            out.append(("done", "the action ran"))
+        elif decided == "approved" and last_event == "running" and (going or live.get("acting")):
+            out.append(("now", "running"))
+        else:
+            out.append(("no", str(result or (last_event if last_event in SETTLED else None) or "nothing ran")))
     elif live.get("left") is not None:
         out += [("now", "waiting for you"), ("off", "not yet")]
     elif request:  # asked, and nobody answered in time: no answer means denied
@@ -335,16 +370,24 @@ def run(folder: Path, root: Path = EVIDENCE, show: bool = False, now: float | No
     found = held(row(folder, root), show)
     if found.get("problem") and found["problem"] != NO_RUN_FILE:
         problems.append(found["problem"])
+    written = last_written(folder)
+    fresh = now - written < LIVE_MINUTES * 60  # a record written in the last LIVE_MINUTES, by the records' own times
     going = in_progress(folder, now) and not folder.name.startswith(GATE_DEMO)
     left = waiting(request, decision, now)
-    ended = _seconds(saved.get("ran_at_utc")) is not None and (folder / fault_runs.RUN_FILE).is_file()
-    recent = ended and now - (folder / fault_runs.RUN_FILE).stat().st_mtime < LIVE_MINUTES * 60
+    recent = (folder / fault_runs.RUN_FILE).is_file() and fresh
     acted = _map(saved.get("gate")).get("result") == "done"
-    # Approved, and the gate has not yet said how the action ended (found with make gate-demo, 2026-11-17).
-    acting = _map(decision).get("decision") == "approved" and not any(e.get("event") in SETTLED for e in events)
+    # Approved, and the gate has not yet said how the action ended (found with make gate-demo, 2026-11-17), for as
+    # long as the gate's records keep coming: a run that died mid-action is not followed for ever (the review's 5).
+    settled = any(e.get("event") in SETTLED for e in events)
+    acting = _map(decision).get("decision") == "approved" and not settled and fresh
     step_count = sum(1 for r in trace if r.get("kind") == "step")
     live_info = {"going": going, "steps": step_count, "request": request, "decision": decision, "events": events}
-    live_info["left"] = left
+    live_info |= {"left": left, "acting": acting}
+    try:
+        used = evaluation.usage(folder)
+    except (OSError, ValueError) as exc:  # a recording line still being written: said, never a failed page
+        problems.append(f"{loop.RECORDING} cannot be read yet ({type(exc).__name__})")
+        used = {"recorded": True, "calls": 0, "failed": 0, "accepted": 0, "models": [], "cost_usd": 0.0}
     return {
         "folder": folder.name,
         "where": where(folder, root),
@@ -363,7 +406,7 @@ def run(folder: Path, root: Path = EVIDENCE, show: bool = False, now: float | No
         "steps": steps(trace, tools, replies),
         "diagnosis": _map(found_loop.get("diagnosis")) or _map(_map(request).get("diagnosis")),
         "versions": versions,
-        "usage": evaluation.usage(folder),
+        "usage": used,
         "budgets": _map(saved.get("budgets")) or _map(start.get("budgets")),
         "gate": _map(saved.get("gate")),
         "request": request,
