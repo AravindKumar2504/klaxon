@@ -1000,3 +1000,16 @@ In the planning session, on `claude/week-7-live`, at his word: "lets do the gate
 - **The screenshots** (Claude): headless Chrome with a throwaway profile, so his own Chrome was not touched; PNG, 1440 pixels wide, 3.8 MB in all.
 - **The fix the gate demo found** (Claude): a page follows an approved request until the gate logs how its action ended, as STATUS says.
 - **After the runs** (Claude): `make down`, then Docker Desktop stopped.
+
+## 2026-11-17 (week 7 session: item 4, the week's review)
+
+In the planning session and its worktree, at his word ("now"), on `claude/week-7-review`, cut from `claude/week-7-live` (`16243fa`).
+
+- **The merge** (Claude): item 3's branch into the review branch; the Makefile's lint list kept both sides. The venv was made again from both lock files before any test, so the tests ran on the pinned versions.
+- **The separate review** (Claude): a fresh Claude, read-only and offline, given the code and the known gaps only. Each finding was checked against the code before its fix, and every one was fixed (STATUS has them), each with a test.
+- **"Going on" from the records' own times** (Claude; finding 1): the panel reads the newest time written in the trace, the recordings and the gate's records. A file's own time changes with a git checkout.
+- **run_folders reads a folder named after the folder that holds it** (Claude; finding 2): a folder it leaves out is no longer marked seen. This changes `make eval-report` too: `RUNS='evidence/week6 evidence/week6/kind'` now holds the 4 kind runs. No number in the docs came from such a pair.
+- **The postmortem waits with the graders** (Claude; finding 3): the draft states the rule's verdict, so on a run he has not labeled it shows only after "Show it". The live run's too, until he labels it.
+- **Mutants checked quickly, the full list on GitHub** (Claude): the fixes' 11 mutants, each against its own test file on a copy; the full list in CI's 10 parts, as he chose for item 3.
+- **The push: "Push it now"** (Aravind, over "Not yet"): `claude/week-7-review` only, the first branch other than `main` this repo has pushed; `main` untouched.
+- **CI's first run** (Claude, at his OK): every job passed, with no fix needed: lint and the offline tests, the stack job, and the full mutation list in 10 parts (1,362 of 1,362 caught; the stack's 33 of 33). 2 h 43 min in all: the parts ran a few at a time, not all 10 at once, so the plan's "about an hour" was low.

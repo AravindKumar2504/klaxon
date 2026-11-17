@@ -1238,3 +1238,34 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 **Pinned, twice.** Each GitHub action is pinned to a full commit hash, so a moved tag cannot change what runs. Each test tool is pinned to a release at least two weeks old, so a new release cannot turn CI red by itself.
 
 **What to read.** `.github/workflows/ci.yml`; `refuse_while_live_calls_are_off` in `src/klaxon/agent/claude_code.py`; `--shard` in `scripts/mutation_check.py`.
+
+## Week 7, item 4 (2026-11-17): the week's review
+
+**What it is.** The week's branches on one review branch, a separate Claude's review and its fixes, and CI's first run on GitHub.
+
+**What the review found.** No high-severity defect: 4 medium, 3 low, 2 nits, all fixed, each with a test. The two to know:
+- *A file's time is not a record's time.* The panel decided "going on now" from when a run's files last changed. A git checkout gives every file the time it was made, so on GitHub an October run looked live. Now the panel reads the times written inside the run's records.
+- *A folder left out was marked seen.* Asking make eval-report for week6 and then week6/kind read kind's runs zero times. The bug was in week 5's code; the panel's default page showed it.
+
+**What CI showed.** Every job passed on GitHub's machines: the 3,408 offline tests, the stack's integration and end-to-end tests, and every mutant, 1,362 offline and 33 with the stack, all caught. The full mutation list took 2 h 43 min there, in parts side by side, where on your Mac it took a night.
+
+**Likely questions.**
+- *Why did make ci-linux miss the first finding?* It copies the repo with tar, which keeps each file's time. A git clone does not.
+- *Why does one fix have no mutant?* Breaking it makes the reader loop for ever, so the mutation run would hang, not fail.
+
+## Week 7 in one page (2026-11-16 and 17)
+
+**What it built.** Four items, after the plan on Mon Nov 16.
+1. *The panel:* a local page that shows every saved run, its evidence and the evaluation report. It only shows.
+2. *Its live view:* the page follows a run as it happens, and shows a waiting request with its time left and the exact command.
+3. *CI on GitHub:* the tests on every push; the stack's tests and the full mutation list on the week's review branch; live model calls switched off; every action and test tool pinned.
+4. *The review:* one branch, a separate review and its fixes, and CI's first run.
+
+**What the live runs showed** (your OK, your approvals).
+- *The gate demo:* you approved it at your terminal. It found one flaw in the live view, fixed the same hour.
+- *Fault 1, live, with the panel open:* the loop named the cause in 25 s; you approved the rollback 70 s after the request; verification passed; the money stayed wrong, as a rollback repairs nothing. The panel followed it all the way.
+- *Cost:* 6 calls, $0.32 at API prices by Claude Code's estimate (the plan: about 7 and $0.45).
+
+**What the checks found.** `make ci-linux`: three Linux differences in the tests, fixed. The separate review: 4 medium, among them a clone making an old run look live, and the kind runs left out of a report. CI's first run on GitHub: every job passed, and all 1,395 mutants were caught.
+
+**What it does not show.** CI on `main` (it comes with the merge). A live run on kind in the panel (the saved kind runs show). Anything about real systems: synthetic data and a simulated provider throughout.
