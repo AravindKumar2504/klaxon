@@ -34,9 +34,9 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
 
-venv: ## create .venv with Klaxon, its test tools, the service libraries and LangGraph (its libraries pinned: requirements/graph.lock.txt)
+venv: ## create .venv with Klaxon, its test tools, the service libraries and LangGraph, every library pinned (requirements/graph.lock.txt and dev.lock.txt)
 	python3.12 -m venv .venv
-	.venv/bin/pip install -c requirements/graph.lock.txt -e '.[dev,services,graph]'
+	.venv/bin/pip install -c requirements/graph.lock.txt -c requirements/dev.lock.txt -e '.[dev,services,graph]'
 
 test: ## offline tests, no Docker needed
 	$(PY) -m pytest -q
@@ -53,7 +53,8 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/patient/deploys.py src/klaxon/demo/gate_demo.py tests/test_deploys.py tests/fake_docker.py \
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
-		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py
+		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
+		tests/test_dev_lock.py
 
 # CI's offline job on Linux, here on this Mac (week 7, item 3), before a push: an official python image with CI's
 # Python. The repo is mounted read-only and copied inside, without .venv, .kind, .git or anything built, then run by

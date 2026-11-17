@@ -383,7 +383,11 @@ def test_langgraph_is_an_optional_extra_pinned_exactly_with_every_library_it_bri
 
 def test_make_venv_installs_the_graph_extra_with_its_lock():
     shown_ = subprocess.run(["make", "-n", "venv"], cwd=REPO, capture_output=True, text=True, check=True)
-    assert ".venv/bin/pip install -c requirements/graph.lock.txt -e '.[dev,services,graph]'" in shown_.stdout
+    # Since week 7, item 3, with dev.lock.txt too: every library in the venv is pinned (tests/test_dev_lock.py).
+    wanted = (
+        ".venv/bin/pip install -c requirements/graph.lock.txt -c requirements/dev.lock.txt -e '.[dev,services,graph]'"
+    )
+    assert wanted in shown_.stdout
 
 
 MADE = [("investigate-fault", ["FAULT=poison-message"]), ("eval", []), ("replay-run", ["RUN=x"])]
