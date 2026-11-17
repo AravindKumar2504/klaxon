@@ -1183,3 +1183,17 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 **What it does not show.** How the two loops compare: one run per case. How the rollback on kind does over many runs: one approved run per fault. Anything about real systems: synthetic data, a simulated provider, one node.
 
 **Your review (2026-11-16).** You ran the four commands, and each printed what Claude's run had. You accepted the week. The rollback account's hardening and the prompt's line on kind wait for week 9's safety pass.
+
+**Week 7** (planned Mon Nov 16; your review on Thu Nov 19): a web panel that shows saved runs and a live one, and CI on GitHub.
+
+## Week 7, the plan (decided 2026-11-16)
+
+**What week 7 will add.** A web panel that shows Klaxon's runs: the saved ones, and one while it happens, with the request it makes and the command you type to approve it. And CI: GitHub will run the tests on every push, and on the week's review branch the stack's tests and the full mutation list too. Nothing is built yet; STATUS has the four items.
+
+**The ideas behind your four choices.**
+- *Why the panel only shows.* Your typed approval is the gate's core (week 4). A button on a local web page is an endpoint that any process on this Mac, and any page open in your browser, could try. A panel with no write endpoint has nothing there to secure. It shows the exact command instead.
+- *Why Python pages.* The panel's work is reading runs and laying them out. In Python it sits under the same tests and mutants as the rest, and the October mockup's HTML and CSS become its pages. React stays possible later, since each page is built from plain data first.
+- *Why one live run.* The saved runs test every page. Only a real run tests the live view end to end: steps arriving, a real request, your approval, verification, the postmortem. Fault 1 is the mockup's run, so the two can be compared.
+- *Why mutants in CI.* The full list takes 6 to 7 hours on your Mac, overnight with its lid open. Split across GitHub's machines it should take about an hour (an estimate), and its log is public. Every push also replays the saved live runs: a regression check on the agent's recorded behavior.
+
+**One idea to own before item 1: untrusted text in a web page.** A log line or a tool result can hold any text: an instruction to a model, or an HTML tag. In a page, a tag that is not escaped becomes code in your browser (cross-site scripting). So every piece of a run is escaped before it is shown, and the page's Content-Security-Policy refuses inline scripts and files from other sites. It is the rule Klaxon already follows with the model: what a tool returns is data, never instructions.
