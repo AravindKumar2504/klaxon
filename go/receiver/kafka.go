@@ -38,10 +38,7 @@ type publishError string
 
 func (e publishError) Error() string { return string(e) }
 
-type kafkaPublisher struct {
-	client  *kgo.Client
-	timeout time.Duration
-}
+type kafkaPublisher struct{ client *kgo.Client }
 
 // newKafkaPublisher makes the producer. It connects when it is first used.
 func newKafkaPublisher(bootstrap, clientID string, l *logs) (*kafkaPublisher, error) {
@@ -61,7 +58,7 @@ func newKafkaPublisher(bootstrap, clientID string, l *logs) (*kafkaPublisher, er
 	if err != nil {
 		return nil, err
 	}
-	return &kafkaPublisher{client, ackTimeout}, nil
+	return &kafkaPublisher{client}, nil
 }
 
 // seeds are the brokers KAFKA_BOOTSTRAP names, comma-separated.
@@ -99,7 +96,7 @@ func newRecord(topic, key string, value []byte, headers []kafkaHeader) *kgo.Reco
 // Publish writes one message and waits for the broker's acknowledgement: it returns the partition and offset.
 func (p *kafkaPublisher) Publish(topic, key string, value []byte, headers []kafkaHeader) (int32, int64, error) {
 	record := newRecord(topic, key, value, headers)
-	ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ackTimeout)
 	defer cancel()
 	done := make(chan error, 1)
 	p.client.Produce(ctx, record, func(_ *kgo.Record, err error) { done <- err })
