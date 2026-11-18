@@ -1,9 +1,9 @@
 # Klaxon's CI (week 7, item 3; docs/DECISIONS.md, 2026-11-16). It runs Klaxon's tests on GitHub's machines: never
 # Klaxon live, never a model, never a secret. KLAXON_NO_LIVE_MODEL, below, refuses every live model call.
 #
-# Every push and pull request: lint and the offline tests (they replay the saved live runs on both loops).
-# The week's review branch (claude/week-<n>-review) also: the Compose stack's integration and end-to-end tests with
-# the stack's mutants, and the full offline mutation list in 10 parts side by side. GitHub starts a by-hand run
+# Every push and pull request: lint and the offline tests (they replay the saved live runs on both loops), and the Go
+# receiver's checks (week 8). The week's review branch (claude/week-<n>-review) also: the Compose stack's integration
+# and end-to-end tests with the stack's mutants, and the full offline mutation list in 10 parts side by side. GitHub starts a by-hand run
 # (workflow_dispatch) only from the copy of this file on main, so until the merge the review branch's name starts them.
 #
 # Each action is pinned to the full commit hash of its newest release published at least two weeks before 2026-11-17
@@ -48,6 +48,22 @@ jobs:
         run: make lint
       - name: make test
         run: make test
+
+  # Week 8, item 2: the webhook receiver in Go. make test-go runs gofmt, go vet and go test in the official golang
+  # image, pinned by digest (the Makefile's GO_IMAGE), as on Aravind's Mac. Its mutants are in the mutation list
+  # below, with the others: each part runs its share with make test-go.
+  go:
+    name: The Go receiver (gofmt, vet, tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, released 2026-07-20
+        with:
+          persist-credentials: false
+      - name: Docker on this machine
+        run: docker version
+      - name: make test-go
+        run: make test-go
 
   stack:
     name: The stack's tests and mutants

@@ -66,7 +66,9 @@ def call(app, request: dict) -> tuple[int, dict[str, str], bytes]:
     }
     size = 1024 if request.get("chunked") else max(len(body), 1)
     pieces = [body[i : i + size] for i in range(0, len(body), size)] or [b""]
-    incoming = [{"type": "http.request", "body": piece, "more_body": i < len(pieces) - 1} for i, piece in enumerate(pieces)]
+    incoming = [
+        {"type": "http.request", "body": piece, "more_body": i < len(pieces) - 1} for i, piece in enumerate(pieces)
+    ]
     answer: dict = {"body": b""}
 
     async def receive() -> dict:
