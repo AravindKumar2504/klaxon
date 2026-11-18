@@ -37,7 +37,7 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
 | 5 | Nov 10-16 | Evaluation harness (faults 1-6, a false alarm, missing evidence; seeds) and first results on Opus and Sonnet; Claude as a judge beside the rule, checked by Aravind; his corrections to a postmortem recorded; start Kubernetes | |
 | 6 | Nov 17-23 | LangGraph version of the loop, the same loop as a graph so the two compare; the week 5 review's three changes (a warm-up before the false alert, a line on how a rollback is planned, a check that a proposed rollback names its action); Klaxon, on this Mac, works on the patient on Kubernetes (kind) and can undo a bad rollout, after his typed approval | CSYE 11/18: LangGraph |
 | 7 | Nov 24-30 | Web panel that only shows (saved runs, and a run while it happens; approval stays typed at his terminal), its pages made by the Python server from the October mockup; CI on GitHub (lint and the offline tests on every push; the stack's tests and the full mutation list on the week's review branch); one gated live run with the panel open | |
-| 8 | Dec 1-7 | Multi-agent version; the Go service; comparison runs | CSYE 12/2: multi-agent |
+| 8 | Dec 1-7 | Multi-agent version with four roles (triage, investigator, fixer, and a reviewer before the gate; verification after an action stays code); the webhook receiver in Go; comparison runs (plain, LangGraph and multi-agent loops; 8 cases, 3 seeds, Opus 5.5: 72 runs); OpenHands' own agent on fault 1, on a local model (qwen3:8b; for CSYE only) | CSYE 12/2: multi-agent |
 | 9 | Dec 8-14 | Safety pass (prompt injection planted in logs, budgets); Terraform; INFO ten-artifact packet | CSYE 12/9 eval, 12/16 safety |
 | 10 | Dec 15-~19 | Both finals; public write-up; 2-minute demo video; resume bullets with measured numbers | Finals (check Canvas for exact dates) |
 
@@ -50,7 +50,7 @@ It replaces the dates in the table above. Nothing is cut. Each week is planned o
 | Fri Nov 6 to Tue Nov 10 | 5, the rest | Item 3: first results (the 40 runs left, the judge, his labels). Item 4: his postmortem corrections. Item 5: a start on Kubernetes. Item 6: docs | OK the runs; label about 17 runs; type his corrections; review on Tue |
 | Mon Nov 9 to Sun Nov 15 (started early, his choice) | 6 | LangGraph version of the loop; the week 5 review's three changes; Klaxon undoes a bad rollout on Kubernetes (kind) | Plan (done Mon Nov 9); OK the live runs; approve the two rollbacks on kind; label the disagreements; review on Sun |
 | Mon Nov 16 to Thu Nov 19 | 7 | Web panel (it only shows: saved runs and a live run); CI on GitHub (the offline tests, the stack, the mutants); one gated live run with the panel open | Plan (done Mon Nov 16); OK the live run and approve it; OK the push for CI's first run; review (done Tue Nov 17) |
-| Fri Nov 20 to Fri Nov 27 | 8 | Multi-agent version; the Go service; comparison runs (plain Python, LangGraph, multi-agent; OpenHands on one comparable task) | Plan on Fri; OK the overnight runs; review on Fri (Thanksgiving, Thu Nov 26, off) |
+| Wed Nov 18 to Fri Nov 27 (started early, his choice) | 8 | Multi-agent version (four roles); the webhook receiver in Go; comparison runs (plain, LangGraph, multi-agent: 72 runs, one night); OpenHands on fault 1 | Plan (done Tue Nov 17); OK the pilot and approve its run; OK the night; label the runs; OK and approve the Go receiver's live run; OK OpenHands' runs; OK the push; review by Wed Nov 25 (Thanksgiving, Thu Nov 26, off) |
 | Sat Nov 28 to Tue Dec 1 | 9 | Safety pass (prompt injection planted in logs, budgets; from week 6's review, an admission policy and a Pod Security level for the rollback account on kind, checked live, and the rollback tool's line on kind); Terraform; INFO ten-artifact packet | Plan on Sat, review on Tue |
 | Wed Dec 2 to Fri Dec 4 | 10 | Public write-up; 2-minute demo video (real footage); resume bullets with measured numbers; both finals' materials | The video; final review on Fri |
 | Sat Dec 5 to Sun Dec 6 | Buffer | Anything late | |
@@ -88,4 +88,4 @@ Reminders: scheduled tasks in the Claude app at 9 am and 8 pm, his local time, r
 
 ## After December
 
-Kubernetes hardening, more incident types, and search over runbooks and past incidents, with the comparison with and without it (moved here on 2026-11-06). The public write-up and resume numbers are due by Dec 4 now, and keep improving after.
+Kubernetes hardening, more incident types, search over runbooks and past incidents, with the comparison with and without it (moved here on 2026-11-06), and the HolmesGPT comparison (moved here on 2026-11-17). The public write-up and resume numbers are due by Dec 4 now, and keep improving after.

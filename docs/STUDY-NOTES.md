@@ -1273,3 +1273,18 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 **What it does not show.** CI on `main` (it comes with the merge). A live run on kind in the panel (the saved kind runs show). Anything about real systems: synthetic data and a simulated provider throughout.
 
 **Your review (2026-11-17).** You ran the four commands, and each printed what Claude's run had. You accepted the week. It was merged into `main` and pushed, and the review branch deleted on GitHub.
+
+**Week 8** (planned Tue Nov 17; build from Wed Nov 18; your review by Wed Nov 25): a multi-agent version, the receiver in Go, and the comparison runs.
+
+## Week 8, the plan (decided 2026-11-17)
+
+**What week 8 will add.** A third version of Klaxon's loop, in which four agents share the work; the webhook receiver, rewritten in Go; and a comparison: the three loops on the same 8 cases and 3 seeds in one night, and OpenHands, a general coding agent, on fault 1, on a local model. Nothing is built yet; STATUS has the five items. None of it costs you money.
+
+**The ideas behind your five choices.**
+- *Why four roles.* They follow an on-call engineer's steps: decide where to look, look, write the fix, have someone check it. The new part is the reviewer: a second reading of each claim against its evidence, before you are asked. Verification after the fix stays code: health and money are checked as facts.
+- *Why the receiver in Go.* It is small, it is where the money comes in, and everything around it already checks it: the faults, the alerts, Klaxon's tools and the stack's tests. If the Go version answers differently from the Python one, a test fails.
+- *Why 72 fresh runs.* The loops must face the same cases, seeds, stack, model and night, so that only the loop differs. One seed gives one run per case, which says little. Week 6's runs are over a week old; mixing them in would add a second difference.
+- *Why OpenHands on a local model.* OpenHands' own agent needs an API key or a local model; your seat cannot serve it. The local model costs nothing, and it is how CSYE 7374's own exercises run. It is far weaker than Opus 5.5, so read its result as a look at another agent's design (its tools, its sandbox, when it stops), not as a race.
+- *Why start Wednesday.* The night of runs is the week's biggest risk. A spare day absorbs a night that fails.
+
+**One idea to own before item 1: a fair comparison.** Change one thing at a time. Here the loop changes; the model, cases, seeds, tools, budgets, stack and night stay the same. Report cost beside accuracy: a loop that needs more calls must earn them. And read every miss, not only the score.
