@@ -15,7 +15,6 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
@@ -80,18 +79,17 @@ type capture struct {
 	logs    *logs
 }
 
+// newCapture makes the service's own providers (newProviders), sending at once to memory.
 func newCapture(t *testing.T) *capture {
 	t.Helper()
 	c := &capture{spans: tracetest.NewInMemoryExporter(), reader: sdkmetric.NewManualReader(), records: &memoryLogs{},
 		stdout: &bytes.Buffer{}}
-	limits := sdktrace.NewSpanLimits()
-	limits.AttributeValueLengthLimit = maxLoggedChars
-	traces := sdktrace.NewTracerProvider(sdktrace.WithSyncer(c.spans), sdktrace.WithRawSpanLimits(limits))
-	metrics := sdkmetric.NewMeterProvider(sdkmetric.WithReader(c.reader))
-	pipeline := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewSimpleProcessor(c.records)))
-	c.p = &providers{traces, metrics, pipeline, func(context.Context) error { return nil }}
-	var err error
-	if c.logs, err = newLogs(service, "", false, pipeline, c.stdout); err != nil {
+	res, err := serviceResource(context.Background(), service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.p = newProviders(res, c.spans, c.reader, c.records, false)
+	if c.logs, err = newLogs(service, "", false, c.p.logs, c.stdout); err != nil {
 		t.Fatal(err)
 	}
 	return c

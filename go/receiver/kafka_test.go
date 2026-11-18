@@ -55,21 +55,23 @@ func TestTheRecordIsTheSignedBytesKeyedByPaymentWithItsHeadersInOrder(t *testing
 	}
 }
 
-func TestWithKafkaDownPublishFailsInTimeAndHealthSaysSo(t *testing.T) {
+func TestWithKafkaDownTheWriteTimesOutWithinThreeSecondsAndHealthSaysSo(t *testing.T) {
+	// With no broker, the client gives up on the record after its 3 s delivery timeout, before the receiver's own 4 s
+	// wait ends: the provider gets its 503 before its own 5 s timeout. (About 3 s, on a real client.)
 	c := newCapture(t)
 	publisher, err := newKafkaPublisher("127.0.0.1:1", service, c.logs) // nothing listens on port 1
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer publisher.Close()
-	publisher.timeout = 500 * time.Millisecond
 	started := time.Now()
 	_, _, err = publisher.Publish(eventsTopic, "pay_000001", []byte("{}"), nil)
+	waited := time.Since(started)
 	if _, isPublishError := err.(publishError); !isPublishError {
 		t.Fatalf("got %v, want a publishError", err)
 	}
-	if waited := time.Since(started); waited > 2*time.Second {
-		t.Errorf("waited %v", waited)
+	if !strings.HasPrefix(err.Error(), kgo.ErrRecordTimeout.Error()) || waited >= ackTimeout {
+		t.Errorf("after %v: %v", waited, err) // not the delivery timeout: the 4 s backstop, or something else
 	}
 	if publisher.Healthy() {
 		t.Error("healthy with no broker")

@@ -65,19 +65,30 @@ func setupTelemetry(ctx context.Context, service string) (*providers, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newProviders(res, spans, sdkmetric.NewPeriodicReader(points), records, true), nil
+}
+
+// newProviders makes the three providers for one service, sending to these exporters (telemetry.py's build). With
+// batch false they send at once, so a test reads what was sent.
+func newProviders(res *resource.Resource, spans sdktrace.SpanExporter, reader sdkmetric.Reader, records sdklog.Exporter,
+	batch bool) *providers {
 	limits := sdktrace.NewSpanLimits()
-	limits.AttributeValueLengthLimit = maxLoggedChars
-	traces := sdktrace.NewTracerProvider(sdktrace.WithResource(res), sdktrace.WithRawSpanLimits(limits),
-		sdktrace.WithBatcher(spans))
-	metrics := sdkmetric.NewMeterProvider(sdkmetric.WithResource(res),
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(points)))
+	limits.AttributeValueLengthLimit = maxLoggedChars // as in the JSON logs
+	sending := sdktrace.WithSyncer(spans)
+	var processor sdklog.Processor = sdklog.NewSimpleProcessor(records)
+	if batch {
+		sending = sdktrace.WithBatcher(spans)
+		processor = sdklog.NewBatchProcessor(records)
+	}
+	traces := sdktrace.NewTracerProvider(sdktrace.WithResource(res), sdktrace.WithRawSpanLimits(limits), sending)
+	metrics := sdkmetric.NewMeterProvider(sdkmetric.WithResource(res), sdkmetric.WithReader(reader))
 	// A backstop: every log value is already cut at 300 characters (logs.go).
 	logs := sdklog.NewLoggerProvider(sdklog.WithResource(res), sdklog.WithAttributeValueLengthLimit(2000),
-		sdklog.WithProcessor(sdklog.NewBatchProcessor(records)))
+		sdklog.WithProcessor(processor))
 	shutdown := func(ctx context.Context) error {
 		return errors.Join(traces.Shutdown(ctx), metrics.Shutdown(ctx), logs.Shutdown(ctx))
 	}
-	return &providers{traces, metrics, logs, shutdown}, nil
+	return &providers{traces, metrics, logs, shutdown}
 }
 
 // serviceResource is who sends the telemetry. Prometheus names the job "klaxon-patient/webhook-receiver" from it.
