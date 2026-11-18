@@ -138,16 +138,16 @@ claude-check: ## one tiny live call to Claude on Aravind's seat ("Reply with the
 # pasted into the shell's text: an apostrophe in an alert cannot break the command or run as one.
 LOOP_ARGS = --alert "$$ALERT" --alert-name "$${ALERT_NAME:-manual}" $${STEPS:+--steps "$$STEPS"} \
 	$${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} $${TIME_LIMIT:+--seconds "$$TIME_LIMIT"}
-loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...' (OFFERED=1: as a gated or evaluation run, with rollback_deploy)
-	$(PY) -m klaxon.agent.loop prompt $(LOOP_ARGS) $${OFFERED:+--offered}
+loop-prompt: ## print what the loop tells the model, for an alert; calls no model: make loop-prompt ALERT='...' (OFFERED=1: as a gated or evaluation run, with rollback_deploy; LOOP=multi: each role's, week 8)
+	$(PY) -m klaxon.agent.$(if $(filter multi,$(LOOP)),team,loop) prompt $(LOOP_ARGS) $${OFFERED:+--offered}
 
-loop-graph: ## the LangGraph loop's graph in Mermaid, as LangGraph draws it (week 6); calls nothing
-	$(PY) -m klaxon.agent.graph draw
+loop-graph: ## the LangGraph loop's graph in Mermaid, as LangGraph draws it (week 6; LOOP=multi: the multi-agent loop's, week 8); calls nothing
+	$(PY) -m klaxon.agent.$(if $(filter multi,$(LOOP)),team,graph) draw
 
 investigate: ## one live run of the loop: Claude on Aravind's seat, the running stack (STEPS=, TOOL_CALLS=, TIME_LIMIT=seconds)
 	$(PY) -m klaxon.agent.loop run $(LOOP_ARGS)
 
-replay-run: ## replay a recorded run offline and check it reproduces: make replay-run RUN=evidence/week3/<run folder> (LOOP=plain|langgraph; by default the run's own)
+replay-run: ## replay a recorded run offline and check it reproduces: make replay-run RUN=evidence/week3/<run folder> (LOOP=plain|langgraph|multi; by default the run's own)
 	$(PY) -m klaxon.agent.loop replay "$$RUN" $${LOOP:+--loop "$$LOOP"}
 
 alerts: ## the alert rules (symptoms only) read the running stack once, and print what they read; reads only (WATCH=seconds)
@@ -156,7 +156,7 @@ alerts: ## the alert rules (symptoms only) read the running stack once, and prin
 alerts-under-traffic: ## traffic and no fault: do the alert rules stay quiet? (MINUTES=5, RATE=3), saved to evidence/week4/
 	$(PY) -m klaxon.fault_runs quiet $${MINUTES:+--minutes "$$MINUTES"} $${RATE:+--rate "$$RATE"}
 
-investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only; LOOP=langgraph; PLATFORM=kind: on the kind cluster, saved to evidence/week6/kind/)
+investigate-fault: ## one gated live run on a fault: Klaxon may ask to act (make approve answers), verifies, then the fault is cleared (his OK first; NO_ACTIONS=1: diagnosis only; LOOP=langgraph|multi; PLATFORM=kind: on the kind cluster, saved to evidence/week6/kind/)
 	$(PY) -m klaxon.fault_runs run "$$FAULT" $${STEPS:+--steps "$$STEPS"} $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"} \
 		$${TIME_LIMIT:+--seconds "$$TIME_LIMIT"} $${NO_ACTIONS:+--no-actions} $${LOOP:+--loop "$$LOOP"} $${PLATFORM:+--platform "$$PLATFORM"}
 
@@ -169,7 +169,7 @@ grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, b
 eval-cases: ## the evaluation's eight cases, each with its right answer and the action that fits; calls nothing (week 5)
 	$(PY) -m klaxon.evaluation cases
 
-eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9 (LOOP=langgraph)
+eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9 (LOOP=langgraph|multi)
 	$(PY) -m klaxon.evaluation run $${MODEL:+--model "$$MODEL"} $${CASES:+--cases "$$CASES"} $${SEEDS:+--seeds "$$SEEDS"} \
 		$${LOOP:+--loop "$$LOOP"}
 

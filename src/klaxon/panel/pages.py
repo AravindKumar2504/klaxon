@@ -405,6 +405,14 @@ def _bar(steps: Sequence[Mapping]) -> Html | None:
     return el("svg", rects, viewBox="0 0 1000 26", preserveAspectRatio="none", class_="tbar", role="img")
 
 
+def _steps_of(used: object, steps: object, role_steps: object) -> str | None:
+    """A multi-agent run's steps (week 8): its investigator's budget and the other roles', together; None for the
+    single loops, whose budget is the run's steps alone."""
+    if not all(isinstance(n, int) and not isinstance(n, bool) for n in (steps, role_steps)):
+        return None
+    return f"{_plain(used)} of {steps + role_steps} ({steps} for the investigator, {role_steps} for the other roles)"
+
+
 def _steps(view: Mapping) -> Html:
     stop = view.get("stop") or {}
     totals = stop.get("totals") if isinstance(stop.get("totals"), Mapping) else {}
@@ -419,8 +427,9 @@ def _steps(view: Mapping) -> Html:
                 el(
                     "summary",
                     el("b", f"{step.get('step')}. "),
+                    f"{step['role']}: " if step.get("role") else None,
                     el("span", step.get("call_id") or "", class_="cid") if step.get("call_id") else None,
-                    " ",
+                    " " if step.get("call_id") or not step.get("role") else None,
                     what,
                     el("span", f" {_plain(step.get('step_seconds'))} s", class_="p"),
                     el("span", "" if ok else " sent back", class_="n"),
@@ -474,7 +483,11 @@ def _this_run(view: Mapping) -> Html:
         ("Platform", runs.PLATFORM_NAMES.get(str(view.get("platform")), view.get("platform") or "-")),
         ("Model", row.get("model") or ", ".join(used.get("models") or []) or "-"),
         ("Through", ", ".join(f"Claude Code {v}" for v in view.get("versions") or []) or "-"),
-        ("Steps", of(found.get("steps"), "steps")),
+        (
+            "Steps",
+            _steps_of(found.get("steps"), budgets.get("steps"), view.get("role_steps"))
+            or of(found.get("steps"), "steps"),
+        ),
         ("Tool calls", of(found.get("tool_calls"), "tool_calls")),
         ("Time", of(found.get("seconds"), "seconds", " s")),
         ("Model calls", f"{_plain(used.get('calls'))} ({_plain(used.get('failed'))} failed)"),

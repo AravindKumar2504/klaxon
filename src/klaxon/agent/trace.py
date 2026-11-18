@@ -150,6 +150,7 @@ class Trace:
         came_back: str | None = None,
         came_back_error: bool = False,
         tool_seconds: float | None = None,
+        role: str | None = None,
     ) -> dict:
         """One step. messages: the conversation the model saw. reply, or error when it gave none. proposed: what
         the loop read from the reply. allowed and why: the loop's decision. ran: the tool and its arguments
@@ -173,6 +174,8 @@ class Trace:
             raise TraceError("a reply's time is a finite number of seconds")
         hashes = [text_sha256(m.content) for m in messages]
         body: dict = {"step": self.steps + 1, "saw": self._saw(system, messages, hashes)}
+        if role is not None:  # whose step it is, in the multi-agent loop (week 8); the single loops name none
+            body["role"] = clean_text(role, 40)
         if reply is not None:
             body["reply"] = {
                 "source": reply.source,

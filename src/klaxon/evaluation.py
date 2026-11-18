@@ -53,7 +53,7 @@ rehearsal, then a probe of the tools through the case's own client: the two dock
 
 Run: python -m klaxon.evaluation cases                                      calls nothing
      python -m klaxon.evaluation run --model ID [--cases A,B] [--seeds 7,8,9]  live, with Aravind's OK for each batch
-         [--loop langgraph]                                                    week 6: on the LangGraph loop
+         [--loop langgraph|multi]                                              on the LangGraph loop (week 6), or the multi-agent one (week 8)
      python -m klaxon.evaluation report FOLDER [FOLDER ...]                   offline
      python -m klaxon.evaluation rehearse CASE [--seed N]                      the stack, no model; his OK first
 """
@@ -888,7 +888,7 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
     return out
 
 
-LOOP_NAMES = {loop.LANGGRAPH: "LangGraph loop"}
+LOOP_NAMES = {loop.LANGGRAPH: "LangGraph loop", loop.MULTI: "multi-agent loop"}  # week 6; week 8
 
 
 def mode_cell(entry: Mapping) -> str:

@@ -238,6 +238,7 @@ def steps(trace: Sequence[Mapping], tools: Sequence[Mapping], replies: Sequence[
         out.append(
             {
                 "step": record.get("step"),
+                "role": record.get("role"),  # the multi-agent loop's (week 8); else None
                 "at": record.get("at"),
                 "t": record.get("t"),
                 "action": proposed.get("action"),
@@ -408,6 +409,7 @@ def run(folder: Path, root: Path = EVIDENCE, show: bool = False, now: float | No
         "versions": versions,
         "usage": used,
         "budgets": _map(saved.get("budgets")) or _map(start.get("budgets")),
+        "role_steps": _map(start.get("extra")).get("role_steps"),  # the multi-agent loop's other roles (week 8)
         "gate": _map(saved.get("gate")),
         "request": request,
         "decision": decision,

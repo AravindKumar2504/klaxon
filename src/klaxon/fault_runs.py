@@ -46,7 +46,7 @@ run on it; `grade` compares a saved run's diagnosis with its fault's cause again
 
 Run: python -m klaxon.fault_runs run FAULT [--steps N --tool-calls N --seconds S]   live, with Aravind's OK each time
          [--no-actions]                                                               diagnosis only, as in week 3
-         [--loop langgraph]                                     week 6: the LangGraph loop (default: the plain one)
+         [--loop langgraph|multi]                               the LangGraph loop (week 6) or the multi-agent one (week 8); default: the plain one
          [--platform kind]       week 6: on the kind cluster; Klaxon's tools read it as klaxon-reader, and its
                                  rollback, after a typed approval, goes through klaxon-rollback (kind_parts)
      python -m klaxon.fault_runs quiet [--minutes M]                                  traffic only: injects nothing

@@ -33,7 +33,7 @@ from klaxon.agent.trace import read_trace
 from tests.agent.inprocess import InProcess
 
 
-@pytest.fixture(autouse=True, params=loop.LOOPS)
+@pytest.fixture(autouse=True, params=loop.SINGLE)
 def loop_kind(request, monkeypatch):
     """Each test, on each loop. Every run here goes through loop.investigate (directly, or through a replay or a live
     run's code), which is given the loop to use; a replay still uses the loop its run recorded, as it does for real.

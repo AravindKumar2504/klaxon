@@ -45,12 +45,13 @@ Two loops (week 6, item 2). The parts of a run are written once, in Investigatio
 step, the model call, the reading of its reply, the rollback check, the tool call. The plain loop runs them with a
 Python while loop; the LangGraph loop (klaxon.agent.graph) runs the same parts as the nodes of a graph, its stop rules
 as edges. A run's trace says which loop ran it. A replay uses that loop unless told otherwise, and either loop replays
-a run made on the other, exactly.
+a run made on the other, exactly. A third loop (week 8, item 1: klaxon.agent.team) shares a run among four agents with
+prompts of their own; its investigator runs these same parts, and its runs replay on it alone.
 
 Run: python -m klaxon.agent.loop prompt --alert TEXT   print the system prompt and the first turn; calls no model
      python -m klaxon.agent.loop run --alert TEXT      one live run on Aravind's seat, against this Mac's stack
      python -m klaxon.agent.loop replay FOLDER         replay a recorded run offline and check it reproduces
-         [--loop plain|langgraph]                      on this loop (default: the one that ran it)
+         [--loop plain|langgraph|multi]                on this loop (default: the one that ran it)
 """
 
 from __future__ import annotations
@@ -119,8 +120,10 @@ TRACE, RECORDING, TOOL_RESULTS = "trace.jsonl", "model-recording.jsonl", "tool-r
 # The two loops (week 6, item 2). Each runs the same parts of a run, written once in Investigation: the plain loop in
 # Python, the LangGraph loop as a graph (klaxon.agent.graph). A run records the one that ran it; the plain loop is the
 # default, and a replay uses the loop its run recorded unless told otherwise (Aravind's choices, 2026-11-10).
-PLAIN, LANGGRAPH = "plain", "langgraph"
-LOOPS = (PLAIN, LANGGRAPH)
+PLAIN, LANGGRAPH, MULTI = "plain", "langgraph", "multi"
+SINGLE = (PLAIN, LANGGRAPH)  # one agent each, with the same prompts: either replays a run made on the other
+# Week 8, item 1: the multi-agent loop (klaxon.agent.team), four agents with prompts of their own, in a LangGraph graph.
+LOOPS = (*SINGLE, MULTI)
 INSTALL_GRAPH = "make venv, or: .venv/bin/pip install -c requirements/graph.lock.txt -e '.[graph]'"
 
 
@@ -500,11 +503,16 @@ class Investigation:
             self._start([])  # so that the trace still says how the run ended: interrupted, or crashed
             raise
         self.schemas = {spec.name: spec.input_schema for spec in specs}
+        self._prepare(specs)
+        return None
+
+    def _prepare(self, specs: Sequence[ToolSpec]) -> None:
+        """The system prompt, the trace's start, then the alert as the first turn. (The multi-agent loop, week 8,
+        prepares its roles' prompts here instead.)"""
         self.system = system_prompt(specs, self.actions)
         self._start(specs)
         self.state.last_turn = first_turn(self.alert, self.budgets)
         self.state.conversation.append(Message("user", self.state.last_turn))
-        return None
 
     def _out_of_budget(self) -> RunResult | None:
         """The stop rules checked before each step: the run's time, then its steps."""
@@ -763,6 +771,8 @@ def runner(loop_kind: str) -> type[Investigation]:
     LangGraph loop where it cannot run (LoopUnavailable)."""
     if loop_kind == PLAIN:
         return Investigation
+    if loop_kind == MULTI:
+        return _team()
     if loop_kind != LANGGRAPH:
         raise ValueError(f"no loop {clean_text(str(loop_kind), 64)!r}; the loops are: {', '.join(LOOPS)}")
     try:
@@ -771,6 +781,16 @@ def runner(loop_kind: str) -> type[Investigation]:
         raise LoopUnavailable(f"the LangGraph loop needs LangGraph installed ({INSTALL_GRAPH}): {exc}") from None
     graph.check_ready()
     return graph.GraphInvestigation
+
+
+def _team() -> type[Investigation]:
+    """The multi-agent loop (week 8), refused as the LangGraph loop is: it runs in a LangGraph graph too."""
+    try:
+        from klaxon.agent import team
+    except ImportError as exc:
+        raise LoopUnavailable(f"the multi-agent loop needs LangGraph installed ({INSTALL_GRAPH}): {exc}") from None
+    team.check_ready()
+    return team.TeamInvestigation
 
 
 def loop_header(loop_kind: str) -> dict:
@@ -813,7 +833,7 @@ def _step_view(record: dict) -> dict:
     """What a replay must reproduce of one step: what the model saw, what it replied, what the loop decided."""
     reply = record.get("reply") or {}
     came_back = record.get("came_back") or {}
-    keys = ("proposed", "allowed", "why", "ran")
+    keys = ("role", "proposed", "allowed", "why", "ran")  # role: the multi-agent loop's (week 8); None in the others
     return {
         "saw": record.get("saw", {}).get("prompt_sha256"),
         "reply": reply.get("sha256"),
@@ -889,6 +909,13 @@ def recorded_loop(recorded: Mapping) -> str:
     return kind
 
 
+def other_family(made_on: str) -> str:
+    """Why a run replays only on loops of its own kind, in words (week 8)."""
+    if made_on == MULTI:
+        return "a run made on the multi-agent loop replays only on it"
+    return "a run made on a single loop replays on the plain or the LangGraph loop"
+
+
 def replay(folder: Path | str, out: Path | str, loop_kind: str | None = None) -> tuple[RunResult, bool, list[str]]:
     """Replay the run recorded in folder, writing the replay's trace to out. Returns the replay's result, whether
     the whole run could be compared, and how the two traces differ. loop_kind: the loop that replays it, by default
@@ -901,6 +928,9 @@ def replay(folder: Path | str, out: Path | str, loop_kind: str | None = None) ->
     offered = offered_actions(start["extra"].get("loop", {}))
     checks = recorded_checks(start["extra"].get("loop", {}))
     kind = recorded_loop(start["extra"].get("loop", {})) if loop_kind is None else loop_kind
+    made_on = recorded_loop(start["extra"].get("loop", {}))
+    if (kind == MULTI) != (made_on == MULTI):  # its prompts are not the single loops': no reply would match them
+        raise ValueError(f"a run made on the {made_on} loop cannot replay on the {kind} loop: {other_family(made_on)}")
     model, tools = ReplayModel(folder / RECORDING), ReplayTools(folder / TOOL_RESULTS)
     result = investigate(alert, model, tools, out, budgets, actions=offered, checks=checks, loop_kind=kind)
     whole = recorded[-1].get("reason") not in NOT_REPLAYABLE
@@ -1025,6 +1055,8 @@ def _live(alert: Alert, budgets: Budgets, model_id: str, evidence_dir: Path, arg
 def replayed_by(start: Mapping) -> str:
     """Which loop a trace's run was run by, in words, from its start record: as the trace says it, never assumed."""
     about = start.get("extra", {}).get("loop", {})
+    if about.get("kind") == MULTI:
+        return f"the multi-agent loop (LangGraph {clean_text(str(about.get('langgraph_version')), 40)})"
     if about.get("kind") == LANGGRAPH:
         return f"the LangGraph loop (LangGraph {clean_text(str(about.get('langgraph_version')), 40)})"
     return "the plain loop"

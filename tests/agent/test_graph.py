@@ -296,10 +296,10 @@ def record(folder, script, loop_kind, actions=()):
     return loop.investigate(ALERT, model, tools, folder / loop.TRACE, actions=actions, loop_kind=loop_kind)
 
 
-@pytest.mark.parametrize("made_on", loop.LOOPS)
+@pytest.mark.parametrize("made_on", loop.SINGLE)
 def test_a_replay_uses_the_loop_its_run_recorded_unless_told_and_either_loop_replays_the_other(tmp_path, made_on):
     record(tmp_path / "run", [tool(), diagnose("c1")], made_on)
-    for asked, used in [(None, made_on), *((kind, kind) for kind in loop.LOOPS)]:
+    for asked, used in [(None, made_on), *((kind, kind) for kind in loop.SINGLE)]:
         out = tmp_path / f"replay-{asked}.jsonl"
         result, whole, differences = loop.replay(tmp_path / "run", out, asked)
         assert (result.reason, whole, differences) == ("diagnosed", True, [])
