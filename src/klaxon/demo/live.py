@@ -53,8 +53,9 @@ HANDLERS = {
 }
 
 
-# What a run depends on: if any of these differ from the commit, the run's git_commit does not describe it.
-CODE_AND_STACK = ("src", "compose.yaml", "docker", "requirements", "Makefile", "pyproject.toml")
+# What a run depends on: if any of these differ from the commit, the run's git_commit does not describe it. go: the
+# webhook receiver's code, in Go since week 8.
+CODE_AND_STACK = ("src", "go", "compose.yaml", "docker", "requirements", "Makefile", "pyproject.toml")
 
 
 class DemoError(RuntimeError):
@@ -280,10 +281,12 @@ def render(run: LiveRun) -> str:
 
 
 def stack_fingerprint() -> str:
-    """SHA-256 over the files that define the stack, next to code_fingerprint() for the Python."""
+    """SHA-256 over the files that define the stack, the Go receiver's code among them (week 8), next to
+    code_fingerprint() for the Python."""
     digest = hashlib.sha256()
     files = [stack.REPO / "compose.yaml", stack.REPO / "Makefile"]
-    files += sorted(p for folder in ("docker", "requirements") for p in (stack.REPO / folder).rglob("*") if p.is_file())
+    folders = ("docker", "go", "requirements")
+    files += sorted(p for folder in folders for p in (stack.REPO / folder).rglob("*") if p.is_file())
     for path in files:
         digest.update(path.relative_to(stack.REPO).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
     return digest.hexdigest()

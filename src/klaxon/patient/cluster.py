@@ -1,7 +1,7 @@
 """The patient on a local kind cluster: Kubernetes in Docker, on this Mac (week 5, item 5).
 
 The same services as compose.yaml, from our own manifests in deploy/kind: the official images, the same settings, and
-our services' image, built here by Compose and loaded into the cluster, never pulled. kind maps the same ports as the
+our services' images, built here by Compose and loaded into the cluster, never pulled. kind maps the same ports as the
 Compose stack on 127.0.0.1 (Aravind's choice, 2026-11-08), so traffic, the money check and Grafana work unchanged:
 the two take turns, never both up. up() starts everything in compose.yaml's depends_on order and waits at each step.
 
@@ -45,7 +45,8 @@ NAME = "klaxon"
 CONTEXT = f"kind-{NAME}"
 NAMESPACE = "klaxon"
 KUBECONFIG = REPO / ".kind" / "kubeconfig"
-IMAGE = "klaxon-patient:dev"  # compose.yaml's name for our services' image
+IMAGE = "klaxon-patient:dev"  # compose.yaml's name for our Python services' image
+RECEIVER_IMAGE = "klaxon-receiver:dev"  # the webhook receiver's own image, in Go since week 8
 NODE = f"{NAME}-control-plane"  # the node's container, as kind names it
 EVIDENCE = REPO / "evidence" / "week6" / "kind"  # week 5's first run on kind: evidence/week5/kind
 # Any of these could aim docker, kind or kubectl at another host, cluster or file.
@@ -260,15 +261,19 @@ def configmaps() -> dict:
 SERVER_SIDE = ("apply", "--server-side", "--force-conflicts", f"--field-manager={FIELD_MANAGER}")
 
 
-def manifests(files: tuple[str, ...], image: str = IMAGE) -> str:
-    """These manifests as one stream, our image named as given: the same files, with klaxon-patient:dev replaced by
-    the tag of the image this kind-up built, so a code change rolls our workloads and none other changes."""
-    texts = [(DEPLOY / file).read_text(encoding="utf-8") for file in files]
+def manifests(files: tuple[str, ...], image: str = IMAGE, receiver_image: str = RECEIVER_IMAGE) -> str:
+    """These manifests as one stream, our images named as given: the same files, with klaxon-patient:dev and
+    klaxon-receiver:dev replaced by the tags of the images this kind-up built, so a code change rolls our workloads and
+    none other changes."""
+    texts = [
+        (DEPLOY / file).read_text(encoding="utf-8").replace(f"image: {RECEIVER_IMAGE}", f"image: {receiver_image}")
+        for file in files
+    ]
     return "\n---\n".join(text.replace(f"image: {IMAGE}", f"image: {image}") for text in texts)
 
 
-def apply(*files: str, image: str = IMAGE) -> None:
-    kubectl(*SERVER_SIDE, "--filename", "-", stdin=manifests(files, image))
+def apply(*files: str, image: str = IMAGE, receiver_image: str = RECEIVER_IMAGE) -> None:
+    kubectl(*SERVER_SIDE, "--filename", "-", stdin=manifests(files, image, receiver_image))
 
 
 def wait(workload: str, clock=time.monotonic, sleep=time.sleep) -> None:
@@ -304,17 +309,28 @@ def build_inputs() -> list[Path]:
     return [REPO / name for name in BUILD_FILES] + code
 
 
-def content_tag(inputs: list[Path] | None = None) -> str:
-    """Our image, tagged by what it is built from: klaxon-patient:<the first 12 hex digits of their SHA-256>. The same
-    files give the same tag, so up() rolls our workloads after a change to them and leaves them be otherwise. Not by
-    Docker's image id: on this Mac each build of the same files gave a new one (2026-11-10, six builds, six ids), so
-    every kind-up rolled everything. A newer base image under the same tag (python:3.12.15-slim) keeps the tag: the
-    pods keep the image they run until a change to our files."""
+# What the webhook receiver's image is built from (week 8): its Dockerfile, which copies go/receiver and nothing else.
+RECEIVER_BUILD_FILES = ("docker/receiver.Dockerfile",)
+
+
+def receiver_build_inputs() -> list[Path]:
+    """The files the receiver's image is built from, in a fixed order: its Dockerfile, then every file of the Go
+    module in go/receiver (go.mod, go.sum, the code, its tests and their data, all of which the Dockerfile copies)."""
+    module = sorted(path for path in (REPO / "go" / "receiver").rglob("*") if path.is_file())
+    return [REPO / name for name in RECEIVER_BUILD_FILES] + module
+
+
+def content_tag(inputs: list[Path] | None = None, image: str = IMAGE) -> str:
+    """Our image, tagged by what it is built from: klaxon-patient:<the first 12 hex digits of their SHA-256>, and the
+    receiver's likewise (klaxon-receiver:<...>). The same files give the same tag, so up() rolls our workloads after a
+    change to them and leaves them be otherwise. Not by Docker's image id: on this Mac each build of the same files
+    gave a new one (2026-11-10, six builds, six ids), so every kind-up rolled everything. A newer base image under the
+    same tag (python:3.12.15-slim) keeps the tag: the pods keep the image they run until a change to our files."""
     digest = hashlib.sha256()
     for path in build_inputs() if inputs is None else inputs:
         digest.update(path.relative_to(REPO).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
-    tagged = f"{IMAGE.split(':')[0]}:{digest.hexdigest()[:12]}"
-    stack._run(["tag", IMAGE, tagged])
+    tagged = f"{image.split(':')[0]}:{digest.hexdigest()[:12]}"
+    stack._run(["tag", image, tagged])
     return tagged
 
 
@@ -333,7 +349,7 @@ def _say(text: str) -> None:
 
 
 def up() -> None:
-    """Create the cluster if it is not there, build our image and load it, then apply the manifests in compose.yaml's
+    """Create the cluster if it is not there, build our images and load them, then apply the manifests in compose.yaml's
     order and wait at each step. The Compose stack must be down: the two use the same ports."""
     stack.ensure_local()
     running = compose_running()
@@ -347,11 +363,13 @@ def up() -> None:
     elif not KUBECONFIG.is_file():  # the cluster is there, its file is not (another checkout made it): write it again
         _run(kind_binary(), ["export", "kubeconfig", "--name", NAME, "--kubeconfig", str(KUBECONFIG)])
     ensure_cluster_local()
-    _say(f"Building our image, {IMAGE}, as compose.yaml builds it")
-    stack.compose("build", "fake-provider")  # one service's build makes the image all five of ours use
+    _say(f"Building our images, {IMAGE} and {RECEIVER_IMAGE}, as compose.yaml builds them")
+    # One Python service's build makes the image four of ours use; the webhook receiver's (Go, week 8) is its own.
+    stack.compose("build", "fake-provider", "webhook-receiver")
     image = content_tag()
-    _say(f"Loading it into the cluster as {image}, its own id (it is never pulled)")
-    _run(kind_binary(), ["load", "docker-image", image, "--name", NAME], timeout=600)
+    receiver_image = content_tag(receiver_build_inputs(), RECEIVER_IMAGE)
+    _say(f"Loading them into the cluster as {image} and {receiver_image}, their own ids (they are never pulled)")
+    _run(kind_binary(), ["load", "docker-image", image, receiver_image, "--name", NAME], timeout=600)
     _say(
         f"Applying {NAMESPACE_FILE}, {ACCESS_FILE}, {ROLLBACK_FILE} and the ConfigMaps of compose.yaml's mounted files"
     )
@@ -361,7 +379,7 @@ def up() -> None:
         for job in (workload for workload in waits if workload in JOBS):
             kubectl("delete", job, "--ignore-not-found", "--wait=true")  # made again, as Compose runs it at each up
         _say(f"Applying {', '.join(files)}")
-        apply(*files, image=image)
+        apply(*files, image=image, receiver_image=receiver_image)
         for workload in waits:
             _say(f"  waiting for {workload}")
             wait(workload)
@@ -450,11 +468,12 @@ def ready() -> None:
 
 
 def fingerprint() -> str:
-    """SHA-256 over the files that define the cluster and our image, beside the code's own fingerprint."""
+    """SHA-256 over the files that define the cluster and our images (the Go receiver's code too, since week 8),
+    beside the code's own fingerprint."""
     digest = hashlib.sha256()
     files = [REPO / "Makefile", REPO / "pyproject.toml"]
     files += sorted(
-        p for folder in ("deploy", "docker", "requirements") for p in (REPO / folder).rglob("*") if p.is_file()
+        p for folder in ("deploy", "docker", "go", "requirements") for p in (REPO / folder).rglob("*") if p.is_file()
     )
     for path in files:
         digest.update(path.relative_to(REPO).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
@@ -469,7 +488,9 @@ def provenance(command: str, now: datetime, cluster: dict) -> dict:
         done = subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, timeout=5)
         return done.stdout.strip() if done.returncode == 0 else None
 
-    status = git("status", "--porcelain", "--", "src", "deploy", "docker", "requirements", "Makefile", "pyproject.toml")
+    status = git(
+        "status", "--porcelain", "--", "src", "go", "deploy", "docker", "requirements", "Makefile", "pyproject.toml"
+    )
     return {
         "rerun_command": command,
         "ran_at_utc": now.astimezone(timezone.utc).isoformat(timespec="seconds"),
