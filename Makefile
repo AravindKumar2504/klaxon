@@ -24,7 +24,7 @@ unexport DOCKER_HOST DOCKER_CONTEXT COMPOSE_FILE COMPOSE_PROJECT_NAME COMPOSE_PR
 PY := .venv/bin/python
 COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 
-.PHONY: help venv test lint ci-linux up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
+.PHONY: help venv test test-go lint ci-linux up down reset ps logs test-integration e2e mutants check demo-live demo-lost-answer demo-lost-refund \
 	traffic check-under-traffic faults fault-inject fault-clear demo-fault local-docker-only tools tool \
 	claude-command claude-check loop-prompt loop-graph investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
@@ -41,6 +41,18 @@ venv: ## create .venv with Klaxon, its test tools, the service libraries and Lan
 test: ## offline tests, no Docker needed
 	$(PY) -m pytest -q
 
+# The webhook receiver in Go (week 8, item 2). Go is not installed on this Mac: every Go command runs in the official
+# golang image, pinned by digest, the one docker/receiver.Dockerfile builds in. go/receiver is mounted read-only, so
+# nothing is written to this folder; the modules and Go's build cache stay in a Docker volume, klaxon-go-cache
+# (docker volume rm klaxon-go-cache deletes them). The first run downloads the modules go.sum pins.
+GO_IMAGE := golang:1.27.3-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb
+test-go: local-docker-only ## the Go receiver's checks in the official golang image: gofmt, go vet, go test (needs Docker)
+	$(DOCKER) run --rm --mount type=bind,source="$(CURDIR)/go/receiver",target=/src,readonly \
+		--mount type=volume,source=klaxon-go-cache,target=/cache --env GOCACHE=/cache/build --env GOMODCACHE=/cache/mod \
+		--env CGO_ENABLED=0 --env GOFLAGS=-mod=readonly --workdir /src $(GO_IMAGE) sh -euc ' \
+		unformatted="$$(gofmt -l .)"; if [ -n "$$unformatted" ]; then echo "gofmt would change: $$unformatted"; exit 1; fi; \
+		go vet ./... && go test -count=1 ./...'
+
 lint: ## ruff: style and common mistakes
 	.venv/bin/ruff check src tests scripts
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
@@ -54,7 +66,7 @@ lint: ## ruff: style and common mistakes
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
 		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
-		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py tests/test_dev_lock.py
+		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py tests/test_dev_lock.py tests/test_go_receiver.py
 
 panel: ## the web panel on 127.0.0.1 (PORT=8090; ALSO=<folder>, such as make gate-demo's): it shows runs, changes nothing (week 7)
 	$(PY) -m klaxon.panel --port $(or $(PORT),8090) $(if $(ALSO),--also $(ALSO))
