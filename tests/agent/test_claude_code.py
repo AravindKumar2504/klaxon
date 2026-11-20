@@ -774,6 +774,68 @@ def test_nothing_left_out_says_so(fake, recording):
     assert records(recording)[-1]["details"]["left_out_of_raw"] == {}
 
 
+# Made up, in the form Claude Code wrote on 2026-11-18 when a pilot run hit the seat's limit (this time and zone are not
+# the real ones): the codes say what happened; rate_limit_info and the words say when it resets.
+AT_THE_LIMIT = {
+    "error": "rate_limit",
+    "is_api_error_message": True,
+    "api_error_status": 429,
+    "api_error": "usage_limit_reached",
+    "api_error_params": {
+        "rate_limit_info": {"status": "rejected", "resetsAt": 1, "rateLimitType": "five_hour", "isUsingOverage": False}
+    },
+    "api_error_type": "rate_limit_error",
+    "api_error_origin": "first_party",
+}
+SAID_AT_THE_LIMIT = "You've hit your 5-hour limit \u00b7 resets 3:00am (America/Chicago)"
+LIMIT_CODES = {key: AT_THE_LIMIT[key] for key in ("api_error", "api_error_type", "api_error_origin")}
+
+
+def test_a_call_refused_at_the_seats_limit_says_so_and_its_recording_keeps_no_reset_time(fake, recording):
+    fake.plan(
+        [
+            ("event", init()),
+            ("event", assistant(SAID_AT_THE_LIMIT) | AT_THE_LIMIT),
+            ("event", result(SAID_AT_THE_LIMIT, is_error=True, terminal_reason="api_error", **LIMIT_CODES)),
+        ],
+        exit=1,
+    )
+    with pytest.raises(m.ModelError) as refused:
+        live(fake, recording).ask(SYSTEM, ASK)
+    assert str(refused.value) == f"Claude Code reported an error (success): {cc.LIMIT_SAID}"
+    failure = records(recording)[-1]
+    assert [e["type"] for e in failure["raw"]] == ["system", "assistant", "result"]
+    said_by_the_model, its_result = failure["raw"][1], failure["raw"][2]
+    assert said_by_the_model["api_error"] == its_result["api_error"] == "usage_limit_reached"  # that it was: kept
+    assert said_by_the_model["api_error_status"] == 429 and "api_error_params" not in said_by_the_model
+    assert said_by_the_model["message"]["content"] == [{"type": "text", "text": cc.LIMIT_SAID}]
+    assert its_result["result"] == cc.LIMIT_SAID and failure["reason"] == str(refused.value)
+    assert failure["details"]["left_out_of_raw"] == {"api_error_params": 1, "limit_words": 2}  # said, not hidden
+    text = recording.path.read_text()
+    kept = [
+        word
+        for word in ("3:00am", "America/Chicago", "resets", "rate_limit_info", "resetsAt", "Overage")
+        if word in text
+    ]
+    assert kept == []
+
+
+def test_an_error_that_is_not_the_seats_limit_keeps_claude_codes_words(fake, recording):
+    said = "API Error: Repeated 529 Overloaded errors"
+    fake.plan([("event", init()), ("event", assistant(said)), ("event", result(said, is_error=True))], exit=1)
+    with pytest.raises(m.ModelError, match="Repeated 529 Overloaded errors"):
+        live(fake, recording).ask(SYSTEM, ASK)
+    failure = records(recording)[-1]
+    assert failure["raw"][2]["result"] == said and failure["details"]["left_out_of_raw"] == {}
+
+
+@pytest.mark.parametrize("mark", ["api_error", "api_error_type", "api_error_params"])
+def test_an_event_is_about_the_seats_limit_by_any_one_of_its_marks(mark):
+    assert cc._about_the_limit({mark: AT_THE_LIMIT[mark]}) is True
+    assert cc._about_the_limit({"api_error": "overloaded_error", "api_error_params": {"retry_after": 5}}) is False
+    assert cc._about_the_limit({"api_error_params": ["rate_limit_info"]}) is False
+
+
 # What a call refuses before it starts
 
 

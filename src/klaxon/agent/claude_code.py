@@ -26,7 +26,8 @@ Klaxon runs every tool itself, through its MCP server, so here Claude Code is se
 
 Every reply is recorded (klaxon.agent.model.Recording) before the loop sees it, and so is every failure. A
 reply that cannot be recorded is not returned. The recording leaves out Claude Code's rate-limit events, which
-describe the seat's usage, not the call.
+describe the seat's usage, not the call; of a call refused at the seat's usage limit, it keeps that it was, and
+leaves out the limit's state and Claude Code's words, which give the reset time (week 8).
 
 While KLAXON_NO_LIVE_MODEL is set (CI sets it, and so do the offline tests), every live call is refused before
 anything starts: Klaxon does not look for Claude Code, and no live adapter can be made.
@@ -363,11 +364,57 @@ HOME_SLUG = HOME.replace("/", "-")  # how Claude Code names a folder after a pat
 # Events a recording leaves out (Aravind's choice, 2026-10-17): the seat's usage state is about his account, and
 # no evidence needs it. The details count how many were left out.
 LEFT_OUT = ("rate_limit_event",)
+# A call refused at the seat's usage limit (his choice, 2026-11-20, after a pilot run hit it): its events also carry
+# the limit's state (rate_limit_info, in api_error_params: when it resets, its kind, any overage) and Claude Code's
+# own words, which give the reset time in his time zone. A recording keeps that the limit was reached, and the
+# codes that say so (api_error, api_error_type, the status); the details count what it left out.
+LIMIT_ERRORS, LIMIT_TYPES = ("usage_limit_reached",), ("rate_limit_error",)
+LIMIT_SAID = "the seat's usage limit was reached (its reset time and Claude Code's own words are left out)"
+
+
+def _about_the_limit(event: Mapping) -> bool:
+    """Whether an event is Claude Code's refusal at the seat's usage limit, by its codes or by its limit's state."""
+    params = event.get("api_error_params")
+    return (
+        event.get("api_error") in LIMIT_ERRORS
+        or event.get("api_error_type") in LIMIT_TYPES
+        or (isinstance(params, dict) and "rate_limit_info" in params)
+    )
+
+
+def _without_the_limit(event: dict) -> tuple[dict, int]:
+    """An event about the seat's limit as a recording keeps it: no api_error_params, and each of its texts said as
+    LIMIT_SAID. Also how many texts it replaced."""
+    kept = {key: value for key, value in event.items() if key != "api_error_params"}
+    replaced = 0
+    if isinstance(kept.get("result"), str):
+        kept["result"], replaced = LIMIT_SAID, 1
+    message = kept.get("message")
+    if isinstance(message, dict) and isinstance(message.get("content"), list):
+        parts = []
+        for part in message["content"]:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                part, replaced = part | {"text": LIMIT_SAID}, replaced + 1
+            parts.append(part)
+        kept["message"] = message | {"content": parts}
+    return kept, replaced
 
 
 def _for_the_record(events: list[dict]) -> list[dict]:
-    """Claude Code's events as a recording keeps them: without the left-out kinds, the home folder written as ~."""
-    return _home_as_tilde([e for e in events if e.get("type") not in LEFT_OUT])
+    """Claude Code's events as a recording keeps them: without the left-out kinds, an event about the seat's limit
+    without its state and words, and the home folder written as ~."""
+    kept = [e for e in events if e.get("type") not in LEFT_OUT]
+    return _home_as_tilde([_without_the_limit(e)[0] if _about_the_limit(e) else e for e in kept])
+
+
+def _left_out(events: list[dict]) -> dict:
+    """What a recording leaves out of Claude Code's events, by kind, said and not hidden: the left-out events, and
+    of the events about the seat's limit, their api_error_params and their texts."""
+    counts = {kind: sum(e.get("type") == kind for e in events) for kind in LEFT_OUT}
+    limited = [e for e in events if e.get("type") not in LEFT_OUT and _about_the_limit(e)]
+    counts["api_error_params"] = sum("api_error_params" in e for e in limited)
+    counts["limit_words"] = sum(_without_the_limit(e)[1] for e in limited)
+    return {kind: n for kind, n in counts.items() if n}
 
 
 def _home_as_tilde(value: object) -> object:
@@ -575,9 +622,10 @@ class ClaudeCode:
             )
         if result.get("is_error") is not False or result.get("subtype") != "success":
             subtype = clean_text(str(result.get("subtype")), 60)
-            raise ModelError(
-                f"Claude Code reported an error ({subtype}){_said(result.get('result') or result.get('errors'))}"
-            )
+            said = _said(result.get("result") or result.get("errors"))
+            if _about_the_limit(result):  # its words give the reset time (his choice, 2026-11-20)
+                said = f": {LIMIT_SAID}"
+            raise ModelError(f"Claude Code reported an error ({subtype}){said}")
         if run.exit_code != 0 and not run.lingered:  # a reply complete before Klaxon stopped it still counts
             raise ModelError(f"Claude Code exited with code {run.exit_code}{_said(stderr, last=True)}")
         if result.get("num_turns") != 1:
@@ -638,7 +686,7 @@ class ClaudeCode:
             "timed_out": run.timed_out,
             "stopped_after_its_reply": run.lingered,
             "unreadable_lines": run.unreadable_lines,
-            "left_out_of_raw": {kind: n for kind in LEFT_OUT if (n := sum(e.get("type") == kind for e in run.events))},
+            "left_out_of_raw": _left_out(run.events),
             "stderr": clean_text(run.stderr.decode("utf-8", "replace")[-2000:], 2000),
         }
         return _home_as_tilde(details)
