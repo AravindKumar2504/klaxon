@@ -1,0 +1,8 @@
+{
+  "label": "A decision on one approval request.",
+  "request_id": "r-7dee",
+  "request_sha256": "10b3f1f7d64c60bc8a94ffa7dc976316e38a7735b5b1b6c07a3b2ae1a89dd519",
+  "decision": "approved",
+  "at": "2026-11-18T05:56:02Z",
+  "how": "typed at a terminal"
+}

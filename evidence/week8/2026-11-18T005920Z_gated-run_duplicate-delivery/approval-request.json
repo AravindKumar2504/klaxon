@@ -1,0 +1,86 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-67c0",
+  "created_at": "2026-11-18T01:02:22Z",
+  "expires_at": "2026-11-18T01:12:22Z",
+  "run": "2026-11-18T005920Z_gated-run_duplicate-delivery",
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+    "fired_at": "2026-11-18T01:00:54Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    },
+    "service": "ledger-consumer",
+    "container": "67d2a25a536dc2fdf57e2068288291a3cac0819827f1c31760735d45177ccfa1",
+    "from_settings": {
+      "LEDGER_HANDLER": "naive",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "to_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "undoes": {
+      "seq": 129,
+      "at": "2026-11-18T01:00:39Z",
+      "by": "klaxon.faults",
+      "container": "67d2a25a536d"
+    },
+    "change": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "undo": "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "ledger-consumer was recreated at 01:00:37Z with LEDGER_HANDLER=naive, on the same image as every other service. Since then it books every provider-events message without checking whether the provider event id was already posted. The provider resends webhooks until they are acknowledged, and webhook-receiver publishes each resend as a new Kafka message at a new offset. So each redelivery is booked again. This breaks posted_exactly_once (7 events) and pushes provider_clearing away from the provider (matches_provider). The net of the extra postings is 3709+9533+4444+1827+5879+2×13193−2455 = 49323 cents, which is exactly the +$493.23 in the alert. The ledger is still balanced, and payments and refunds match the provider, so the damage is limited to extra ledger transactions.",
+    "confidence": 0.8,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "money_check",
+        "shows": "Run after settling, the check still fails. 7 events were posted 2–3 times: evt_000308 ($131.93) three times, one refund (evt_000288, $24.55) twice, and the rest twice each. matches_provider is off by +49323 cents on provider_clearing. The per-payment differences equal the duplicated amounts, with pay_000217 at −2455 from the doubled refund. The ledger is balanced, and payments and refunds agree with the provider."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "ledger-consumer is the only container recreated after startup: at 01:00:37Z, with LEDGER_HANDLER=naive and the same image (sha256:e19dccfc9399) as the other services. So a setting change, not new code. Every other service dates from 00:59:01Z."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "ledger-consumer logged 'posted' for evt_000308 three times, from provider-events/0＠100, ＠101 and ＠103, between 01:00:51.177Z and 01:00:52.691Z. None were skipped."
+      },
+      {
+        "call_id": "c4",
+        "tool": "search_logs",
+        "shows": "webhook-receiver queued evt_000308 three times, at offsets 100, 101 and 103, each with a trace id matching a posting in c3. Each redelivery became a separate Kafka message."
+      },
+      {
+        "call_id": "c5",
+        "tool": "search_logs",
+        "shows": "evt_000251 was posted at 01:00:37.798Z (2＠73) and again at 01:00:38.749Z (2＠76). The first is within a second of the redeploy, and both postings come after it."
+      },
+      {
+        "call_id": "c6",
+        "tool": "query_metrics",
+        "shows": "Before the redeploy, ledger already_processed ran about 8–10 per minute, which is the redelivery rate the old handler was skipping. It falls to about 4 after 01:00:37. That is consistent with roughly 7 duplicate postings in the ~30 s before the check. payment-confirmer keeps reporting already_confirmed and refund_already_confirmed."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer",
+      "summary": "Roll ledger-consumer back to the settings it had before the 01:00:37Z deploy, which should restore an event-id-deduplicating LEDGER_HANDLER. This stops new double-postings. Separately, after human review: repair the ledger by reversing the extra transactions (the later ids among 251/255, 262/265, 269/272, 270/273, 292/297, plus the duplicates for evt_000298 and two for evt_000308). Then rerun money_check."
+    },
+    "blast_radius": "ledger-consumer pauses while its container is recreated, and Kafka lag builds briefly on provider-events. Payments, refunds and payment-confirmer are untouched. If the earlier settings were not a deduplicating handler, duplicates continue; c2 does not show what the earlier settings were. Messages consumed during the switchover are deduplicated only if the restored handler checks event ids against the ledger. The rollback does not remove the existing $493.23 of extra postings: those need a separate, reviewed data repair.",
+    "rollback_plan": "Redeploy ledger-consumer with its current settings (LEDGER_HANDLER=naive, BAD_EVENTS=dead_letter) on image sha256:e19dccfc9399. This is not advisable, because those settings cause the duplicates. More practically, if the restored handler misbehaves (errors, a stalled consumer group), stop ledger-consumer so that it posts nothing. Its consumer-group offsets keep the backlog in Kafka until a correct handler is running."
+  },
+  "sha256": "acae84d7f22e3dd96719ca98e11440fe57456e450ffd78444d754db056118e71"
+}

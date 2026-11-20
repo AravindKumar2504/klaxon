@@ -11,11 +11,12 @@ loop; the graph and its guards; and how the harness and the report name the loop
 
 import json
 import time
+from dataclasses import asdict
 
 import pytest
 
-from klaxon import evaluation
-from klaxon.agent import catalog, loop, team
+from klaxon import evaluation, fault_runs, grading
+from klaxon.agent import catalog, gate, loop, postmortem, team, verify
 from klaxon.agent import mcp_client as mc
 from klaxon.agent.model import ModelError, ModelTimeout, ModelUnsafe, Recording, ScriptedModel
 from klaxon.agent.trace import read_trace
@@ -562,3 +563,112 @@ def test_make_loop_prompt_prints_each_roles_prompt_only_for_loop_multi(loop_valu
         cwd=loop.REPO, capture_output=True, text=True, env=env, check=True,
     )  # fmt: skip
     assert shown.stdout.startswith(f".venv/bin/python -m klaxon.agent.{module} prompt --alert ")
+
+
+# The pilot's live runs, replayed: regression tests from evidence (week 8, item 1)
+
+EVIDENCE = loop.REPO / "evidence"
+# Every saved live run made on the multi-agent loop. tests/agent/test_graph.py replays the single loops' runs; these
+# replay only on this loop, since their prompts are not the single loops'.
+SAVED_MULTI = sorted(
+    trace.parent
+    for trace in EVIDENCE.glob("week*/**/trace.jsonl")
+    if loop.recorded_loop(read_trace(trace)[0]["extra"].get("loop", {})) == loop.MULTI
+)
+# Item 1's pilot, 2026-11-18 UTC, on Opus 5.5. A first try of the false alarm stopped at once on the seat's usage
+# limit; at Aravind's choice (2026-11-20) it is not kept, so the pilot's false alarm is its retry.
+PILOT_SUITE = "week8/2026-11-18T051621Z_suite_claude-opus-5-5_multi"
+PILOT = {
+    "fault 1, unanswered": "week8/2026-11-18T005920Z_gated-run_duplicate-delivery",
+    "fault 1, sent back once, unanswered": "week8/2026-11-18T050028Z_gated-run_duplicate-delivery",
+    "fault 1, approved": "week8/2026-11-18T055057Z_gated-run_duplicate-delivery",
+    "false alarm, evaluation": f"{PILOT_SUITE}/2026-11-18T051636Z_false-alarm_seed7",
+}
+
+
+def shown(folder):
+    return str(folder.relative_to(EVIDENCE))
+
+
+def test_the_pilots_runs_are_saved_and_each_was_made_on_the_multi_agent_loop():
+    # So the replays below can never shrink unseen. Item 3's runs on this loop join them as they are saved.
+    assert set(PILOT.values()) <= {shown(folder) for folder in SAVED_MULTI}
+
+
+@pytest.mark.parametrize("folder", SAVED_MULTI, ids=shown)
+def test_each_saved_multi_agent_run_replays_exactly_role_by_role(folder, tmp_path):
+    """Replies received from Claude through Claude Code on Aravind's seat (week 8), and each run's tool results,
+    served again. Nothing is called: the same prompts, replies, decisions, tool results and stop, each step taken by
+    the role that took it, triage first."""
+    result, whole, differences = loop.replay(folder, tmp_path / "again.jsonl")
+    assert (whole, differences) == (True, [])
+    recorded = read_trace(folder / loop.TRACE)
+    assert roles(read_trace(tmp_path / "again.jsonl")) == roles(recorded)
+    assert set(roles(recorded)) <= set(team.ROLES) and roles(recorded)[:1] in ([], [team.TRIAGE])
+
+
+@pytest.mark.parametrize("name", sorted(name for name in PILOT if name.startswith("fault 1")))
+def test_each_gated_pilot_run_keeps_its_grade_its_gate_and_its_verification(name):
+    """The pilot's gated runs on fault 1: two requests expired unanswered, so nothing acted; Aravind approved the
+    third at his terminal. Worked out again from what each run kept: the rule's grade, the gate's files, and the
+    approved run's verification."""
+    folder = EVIDENCE / PILOT[name]
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    recorded = read_trace(folder / loop.TRACE)
+    assert saved["loop_kind"] == loop.MULTI and recorded[0]["model"] == "claude-opus-5-5"
+    assert recorded[0]["extra"]["loop"]["offered_actions"] == ["rollback_deploy"]
+    # The rule grades the kept diagnosis as the run did.
+    again = grading.compare(saved["fault"]["name"], recorded[-1]["diagnosis"], grading.version_of(saved["comparison"]))
+    kept = ("verdict", "elements", "proposed_fix", "fix_fits_the_remedy")
+    assert {key: again[key] for key in kept} == {key: saved["comparison"][key] for key in kept}
+    assert saved["comparison"]["verdict"] == "names the cause"
+    if "sent back" in name:  # the reviewer sent the diagnosis back once, and the fixer's revision was taken
+        assert roles(recorded)[-3:] == [team.FIXER, team.REVIEWER, team.FIXER]
+    # The gate: the request as sealed, a decision naming it whole, and what the run took.
+    request, decided = gate.read_request(folder), gate.read_decision(folder)
+    assert request["id"] == saved["gate"]["request_id"]
+    assert (decided["request_id"], decided["request_sha256"]) == (request["id"], request["sha256"])
+    if name.endswith("unanswered"):  # nobody answered: the run wrote the denial itself, and nothing ran
+        assert (
+            saved["gate"]["result"] == "expired" and decided["decision"] == "expired" and gate.decided(folder) is None
+        )
+        assert saved["verification"] is None and saved["removed_by"] == "the harness's clearing (klaxon.faults)"
+        return
+    assert saved["gate"]["result"] == "done" and request["plan"]["change"] == saved["gate"]["detail"]
+    assert decided["decision"] == "approved" and decided["how"] == gate.TYPED
+    assert gate.decided(folder)["written_by_make_approve"] is True  # a line of make approve names its SHA-256
+    # The verification, worked out again from what it kept.
+    kept_verification = saved["verification"]
+    at_action = verify.Reading.from_dict(kept_verification["at_action"])
+    after = verify.Reading.from_dict(kept_verification["after"])
+    money = verify.judge(at_action, after)
+    assert asdict(money) == kept_verification["money"] and money.cause_removed is True
+    assert money.right is False  # 36 events counted twice stay: a rollback repairs no money
+    health = kept_verification["health"]
+    assert (health["books"], health["what"]) == (True, "docker")  # the books rule read; on Compose
+    found = verify.Verification(
+        kept_verification["verdict"],
+        verify.Health(health["healthy"], health["why"], tuple(health["rounds"]), health["books"], health["what"]),
+        at_action,
+        after,
+        money,
+    )
+    assert list(found.said) == kept_verification["said"] and found.verdict == "passed"
+    assert [line["by"] for line in saved["deploys"]] == ["klaxon.faults", f"Klaxon, approved request {request['id']}"]
+
+
+def test_the_approved_pilot_runs_postmortem_replays_exactly():
+    # One recorded call (claude-opus-5-5, 2026-11-18 UTC). Nothing is called: the same facts, prompts, replies,
+    # checks and page as the recorded draft.
+    assert postmortem.replay(EVIDENCE / PILOT["fault 1, approved"]) == []
+
+
+def test_the_pilots_false_alarm_asks_for_nothing_and_the_rule_says_it_names_the_cause():
+    # The right answer to the false alarm: no real backlog, so no action (rubric v4, worked out again by the report).
+    folder = EVIDENCE / PILOT["false alarm, evaluation"]
+    saved = json.loads((folder / fault_runs.RUN_FILE).read_text())
+    assert saved["case"]["name"] == "false-alarm" and saved["loop_kind"] == loop.MULTI
+    assert saved["gate"]["result"] == "no action" and saved["evaluation_version"] == 2
+    [row] = evaluation.report([EVIDENCE / PILOT_SUITE])["summary"]
+    assert (row["case"], row["loop_kind"], row["ran"], row["diagnosed"]) == ("false-alarm", loop.MULTI, 1, 1)
+    assert (row["names_the_cause"], row["action_right"], row["not_run"]) == (1, 1, 0)

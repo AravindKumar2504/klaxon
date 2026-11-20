@@ -1,0 +1,2 @@
+{"at": "2026-11-18T01:02:22Z", "event": "requested", "request": "r-67c0", "action": {"name": "rollback_deploy", "arguments": {"service": "ledger-consumer"}}, "change": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)", "undo": "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand", "expires_at": "2026-11-18T01:12:22Z"}
+{"at": "2026-11-18T01:12:22Z", "event": "expired", "request": "r-67c0", "how": "no decision within 600 s"}
