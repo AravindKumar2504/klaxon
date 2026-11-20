@@ -1,0 +1,91 @@
+{
+  "label": "An approval request from Klaxon: a write action that runs only if a person approves it.",
+  "id": "r-7dee",
+  "created_at": "2026-11-18T05:54:09Z",
+  "expires_at": "2026-11-18T06:04:09Z",
+  "run": "2026-11-18T055057Z_gated-run_duplicate-delivery",
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (7 findings), matches_provider (8 findings). By its count, our ledger is $493.23 ahead of the provider's balance.",
+    "fired_at": "2026-11-18T05:52:31Z"
+  },
+  "action": {
+    "name": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    }
+  },
+  "plan": {
+    "action": "rollback_deploy",
+    "arguments": {
+      "service": "ledger-consumer"
+    },
+    "service": "ledger-consumer",
+    "container": "fc52ceec23a5b84a90f580cbe5ce6520584990bf1b8183db567c5dec4368e8ee",
+    "from_settings": {
+      "LEDGER_HANDLER": "naive",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "to_settings": {
+      "LEDGER_HANDLER": "idempotent",
+      "LEDGER_BAD_EVENTS": "dead_letter"
+    },
+    "undoes": {
+      "seq": 133,
+      "at": "2026-11-18T05:52:16Z",
+      "by": "klaxon.faults",
+      "container": "fc52ceec23a5"
+    },
+    "change": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "undo": "going back to LEDGER_HANDLER=naive would deploy a known-bad setting: Klaxon will not; a person can, by hand"
+  },
+  "diagnosis": {
+    "hypothesis": "At 05:52:14Z ledger-consumer was recreated with LEDGER_HANDLER=naive. It is the only service changed after the 05:50:43 stack start. Since then it has booked every Kafka copy of a provider event, with no deduplication on event_id. The provider resends webhooks, and webhook-receiver publishes each copy as a separate message, so each copy became a separate ledger transaction. Seven events were posted more than once: six payment.succeeded events, all twice except evt_000308 three times, and one refund.succeeded, evt_000288. The extra payment postings add $517.78 to provider_clearing and the extra refund posting takes away $24.55, which nets to the alert's +$493.23. The ledger still balances, and our payments and refunds rows match the provider. So the fault is in ledger posting only. payment-confirmer, which runs by_our_id, still deduplicates.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "call_id": "c1",
+        "tool": "money_check",
+        "shows": "The settled check fails posted_exactly_once with 7 events: evt_000308 three times, the rest twice, including refund evt_000288 on pay_000217. Duplicate extras $37.09+95.33+44.44+18.27+58.79+2×131.93 − 24.55 = $493.23, the ledger-vs-provider gap. ledger_balanced, payments_match_provider and refunds_match_provider pass. pay_000217 sits at 1 cent against the provider's $24.56."
+      },
+      {
+        "call_id": "c2",
+        "tool": "recent_deploys",
+        "shows": "ledger-consumer is the only container recreated after the 05:50:43 stack start, at 05:52:14Z, with LEDGER_HANDLER=naive. payment-confirmer runs CONFIRMER_HANDLER=by_our_id. The prior ledger settings are not shown."
+      },
+      {
+        "call_id": "c3",
+        "tool": "search_logs",
+        "shows": "ledger-consumer logged 'posted' for evt_000308 ($131.93) three times, 05:52:28-30, from provider-events/0 offsets 100, 101 and 103, each copy with its own trace."
+      },
+      {
+        "call_id": "c4",
+        "tool": "search_logs",
+        "shows": "webhook-receiver queued evt_000308 three times, at offsets 100, 101 and 103, with the same trace ids. These are separate webhook deliveries, not a consumer re-reading one offset."
+      },
+      {
+        "call_id": "c5",
+        "tool": "search_logs",
+        "shows": "evt_000251 was posted twice, at 05:52:15.133 and 05:52:15.757, from offsets 2＠73 and 2＠76. Both postings came after the 05:52:14 recreation."
+      },
+      {
+        "call_id": "c7",
+        "tool": "search_logs",
+        "shows": "webhook-receiver queued evt_000251 twice, at offsets 73 and 76, with the same pattern of redelivered copies."
+      },
+      {
+        "call_id": "c6",
+        "tool": "query_metrics",
+        "shows": "Ledger already_processed fell from about 11 per 1m window at 05:51:41 to 2 by 05:53:01, while posted stayed at about 190-213. payment-confirmer kept classifying most deliveries as already_confirmed or refund_already_confirmed. The old ledger handler deduplicated and the new one largely does not."
+      }
+    ],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer",
+      "summary": "Roll ledger-consumer back to the settings it ran before the 05:52:14Z deploy, using rollback_deploy. That should restore the event_id-deduplicating handler and stop new double postings. The wrong bookings need a separate data repair afterwards, which the rollback does not do. Reverse the extra transactions for the 7 events in c1. The ids seen so far are 255, 266, 272, 273 and 297; the rest, including evt_000298 and both extras for evt_000308, are not shown. Then rerun the money check."
+    },
+    "blast_radius": "Only ledger-consumer is touched. Its container is recreated, so ledger booking pauses briefly and Kafka lag builds, then drains. Payments, refunds and payment-confirmer are unaffected. Risk: the prior settings are not visible in the tool results. If the prior handler is not the deduplicating one, duplicates continue. Messages read again after the restart rely on that handler's dedup. Money already booked twice stays wrong until it is repaired.",
+    "rollback_plan": "If ledger-consumer misbehaves after the rollback (crash loop, stalled lag, new money-check failures), redeploy it with its current settings (LEDGER_HANDLER=naive, BAD_EVENTS=dead_letter) or stop it. Kafka holds the events, so stopping loses nothing. Booking resumes from committed offsets once a correct handler is in place."
+  },
+  "sha256": "10b3f1f7d64c60bc8a94ffa7dc976316e38a7735b5b1b6c07a3b2ae1a89dd519"
+}

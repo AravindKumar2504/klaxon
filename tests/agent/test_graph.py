@@ -29,7 +29,13 @@ from tests.agent.test_loop import ALERT, MADE_UP, MadeUpLive, RawTools, Served, 
 
 REPO = loop.REPO
 EVIDENCE = REPO / "evidence"
-SAVED = sorted(trace.parent for trace in EVIDENCE.glob("week*/**/trace.jsonl"))
+# Every saved live run made on a single loop. A run made on the multi-agent loop (week 8) replays only on it, since
+# its prompts are not the single loops': tests/agent/test_team.py replays each of those.
+SAVED = sorted(
+    trace.parent
+    for trace in EVIDENCE.glob("week*/**/trace.jsonl")
+    if loop.recorded_loop(read_trace(trace)[0]["extra"].get("loop", {})) != loop.MULTI
+)
 # The one saved run the plain loop cannot replay: week 3's first live run, whose system prompt changed after it (week 3,
 # item 4), so no recorded reply matches it; the plain loop's own test skips it. Each loop must fail it the same way.
 NOT_REPLAYED = {"week3/2026-10-18T112951Z_loop_ledgerlaghigh"}

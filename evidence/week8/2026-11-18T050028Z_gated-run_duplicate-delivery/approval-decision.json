@@ -1,0 +1,8 @@
+{
+  "label": "A decision on one approval request.",
+  "request_id": "r-39c0",
+  "request_sha256": "6135074a9a62858ffcaf19fdcbfcf3f44f71a1a266a3ae4aa94e339d1a193cc0",
+  "decision": "expired",
+  "at": "2026-11-18T05:14:09Z",
+  "how": "no decision within 600 s"
+}
