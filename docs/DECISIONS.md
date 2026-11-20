@@ -1040,3 +1040,19 @@ Planned in the session that ran week 7's review, at his word ("Do it here", on C
   - *The week.* Items 1 and 2 in two sessions at once (other files; both may touch the Makefile, the README and CI, so the review branch merges them, as before). Item 3's night after item 1's pilot. One stack at a time on this Mac: item 2's stack checks and item 4 after the night. Docker on only when needed, and stopped after. If the night slips, the review moves to Fri Nov 27; nothing else moves without his word.
 - **Where week 7's inputs go** (Claude). Known gap 16: (g), item 3; (a), (b), (e) and (f) stay as recorded; (c) and (d) are done. Known gap 15 (a) to (c): item 3. Known gap 14: week 9, as decided.
 - **PLAN.md** (Claude): the week 8 row names what this plan decided; the schedule's week 8 row, its new dates and his part; "After December" now holds the HolmesGPT comparison.
+
+## 2026-11-20 (week 8: items 1 to 3)
+
+In a session of its own, at his word ("can we continue with klaxon week 8 here?"). His four picks came as one set of multiple-choice questions; each was Claude's recommendation:
+- **The limit-hit try: "Leave it out, filter it"** (over keeping it once, or keeping everything as received). One false-alarm try in the pilot stopped at once on the seat's 5-hour limit. Its files held Claude Code's limit details, which his 10/17 rule keeps out of recordings. It was not committed, and was moved outside the repo. The adapter now leaves these details out of every recording (`e4376e9`).
+- **Item 3's defaults: "Keep them"** (over running all of one loop's runs before the next). For each case and seed, the loops in turn. A fresh stack for each run. A run that cannot run is recorded as not run, and runs the next night. `make label-pick` picks every disagreement, and every false-alarm and missing-deploys run.
+- **Item 2's Go checks: "Yes, now."** Docker was on only for them, then stopped.
+- **The 72 runs: "Tonight"** (over Saturday night), with his final OK at the time. Later that night he said he will start them when he gets home, at about 9 AM on Fri Nov 20, so they run by day.
+- **Item 1's test fix and these docs: "ok"** (2026-11-20), after a preview of each.
+- **The CSYE 7374 mini-project goes in `~/csye7374`** (Aravind). Its own repo and its own session. It reuses Klaxon and changes nothing in it.
+- **Claude's choices.**
+  - (a) Single-loop suites stay exactly as they were. The comparison is a path beside them.
+  - (b) A comparison suite's folder ends in its loops (`_plain-langgraph-multi`), and each run's folder ends in its loop.
+  - (c) `--not-run-of` keeps the earlier suite's model, version and order. It refuses anything else named with it.
+  - (d) The relabel, the side-by-side report, the label pick and the panel's folders wait until after the runs. The report works them out from saved fields, so no run depends on them.
+  - (e) The week's docs go on item 3's branch.

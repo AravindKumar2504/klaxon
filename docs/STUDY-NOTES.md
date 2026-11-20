@@ -1288,3 +1288,15 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 - *Why start Wednesday.* The night of runs is the week's biggest risk. A spare day absorbs a night that fails.
 
 **One idea to own before item 1: a fair comparison.** Change one thing at a time. Here the loop changes; the model, cases, seeds, tools, budgets, stack and night stay the same. Report cost beside accuracy: a loop that needs more calls must earn them. And read every miss, not only the score.
+
+## Week 8 so far (2026-11-17 to 20)
+
+**The multi-agent loop.** Four roles take turns, in an order code sets. Triage reads the alert and says where to look. The investigator runs the read-only tools, with the run's own budgets. The fixer writes the diagnosis from the investigator's report and the tool results. The reviewer checks each claim against the results it cites, and can send the diagnosis back once. The other roles share 4 more calls, so a run makes at most 14. Each step records its role. A run replays only on this loop, because its prompts are not the single loops'.
+
+**What the pilot showed.** All three fault 1 runs named the cause, at about 11 calls each (the plan assumed about 12). Two of the three requests expired unanswered: the gate did its job, and nothing acted. The approved run removed the cause, and the money stayed wrong, as it should. A rollback stops new damage; it repairs none.
+
+**The receiver in Go, and how we know it matches.** Same endpoints, settings, metric names and trace headers. One table of 36 cases runs against both receivers and checks the status, the body, the headers, the count and the Kafka message. If the Go one answers differently, a test fails. Its mutants are Go mutants, run in the official golang image.
+
+**Why the loops take turns.** The 72 runs last 6 to 7 hours, and things drift: the seat's limits, the Mac, Docker. If all 24 plain runs went first, a late problem would hit only the multi-agent loop and look like its fault. Taking turns spreads any drift over all three. If the suite stops early, `NOT_RUN_OF` runs exactly what is left, in the same order.
+
+**The limit filter.** A call refused at the limit now says only that the limit was reached. The reset time and the time zone are about your account, so they stay out of the public repo, like the rate-limit events since October 17.
