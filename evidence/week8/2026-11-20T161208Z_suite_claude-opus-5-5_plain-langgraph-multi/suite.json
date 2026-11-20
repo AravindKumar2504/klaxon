@@ -1,0 +1,1034 @@
+{
+  "label": "A suite of Klaxon's evaluation runs (evaluation, version 2): one model, its cases and seeds, and for each case and seed the loops in turn (plain loop, LangGraph loop, multi-agent loop), each run on a fresh stack (make reset, then make up), live through Claude Code on Aravind's seat. In each run code plans any action the diagnosis names, nobody is asked, and nothing runs.",
+  "evaluation_version": 2,
+  "loop_kinds": [
+    "plain",
+    "langgraph",
+    "multi"
+  ],
+  "langgraph_version": "1.2.18",
+  "model": "claude-opus-5-5",
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "rate": 3.0,
+  "planned": [
+    {
+      "case": "duplicate-delivery",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "poison-message",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "poison-message",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "poison-message",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "money-unit",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "money-unit",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "money-unit",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 7,
+      "loop": "plain"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 7,
+      "loop": "langgraph"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 7,
+      "loop": "multi"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "loop": "plain"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "loop": "langgraph"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "loop": "multi"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "poison-message",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "poison-message",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "poison-message",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "money-unit",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "money-unit",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "money-unit",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 9,
+      "loop": "multi"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 9,
+      "loop": "plain"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 9,
+      "loop": "langgraph"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 9,
+      "loop": "multi"
+    }
+  ],
+  "started_at_utc": "2026-11-20T16:12:08Z",
+  "runs": [
+    {
+      "case": "duplicate-delivery",
+      "seed": 7,
+      "folder": "2026-11-20T161222Z_duplicate-delivery_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 7,
+      "folder": "2026-11-20T161631Z_duplicate-delivery_seed7_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 7,
+      "folder": "2026-11-20T162033Z_duplicate-delivery_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "poison-message",
+      "seed": 7,
+      "folder": "2026-11-20T162544Z_poison-message_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "poison-message",
+      "seed": 7,
+      "folder": "2026-11-20T163045Z_poison-message_seed7_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "poison-message",
+      "seed": 7,
+      "folder": "2026-11-20T163549Z_poison-message_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 7,
+      "folder": "2026-11-20T164154Z_provider-outage_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 7,
+      "folder": "2026-11-20T164626Z_provider-outage_seed7_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 7,
+      "folder": "2026-11-20T165107Z_provider-outage_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "money-unit",
+      "seed": 7,
+      "folder": "2026-11-20T165642Z_money-unit_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "money-unit",
+      "seed": 7,
+      "folder": "2026-11-20T170024Z_money-unit_seed7_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "money-unit",
+      "seed": 7,
+      "folder": "2026-11-20T170414Z_money-unit_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 7,
+      "folder": "2026-11-20T170912Z_secret-rotation_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 7,
+      "folder": "2026-11-20T171417Z_secret-rotation_seed7_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 7,
+      "folder": "2026-11-20T171927Z_secret-rotation_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 7,
+      "folder": "2026-11-20T172506Z_pool-exhaustion_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 7,
+      "folder": "2026-11-20T172953Z_pool-exhaustion_seed7_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 7,
+      "folder": "2026-11-20T173428Z_pool-exhaustion_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 7,
+      "folder": "2026-11-20T173952Z_false-alarm_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 7,
+      "folder": "2026-11-20T174557Z_false-alarm_seed7_langgraph",
+      "stopped": "the loop stopped: step_budget",
+      "loop": "step_budget",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 7,
+      "folder": "2026-11-20T175210Z_false-alarm_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 7,
+      "folder": "2026-11-20T175922Z_missing-deploys_seed7_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 7,
+      "folder": "2026-11-20T180403Z_missing-deploys_seed7_langgraph",
+      "stopped": "the loop stopped: step_budget",
+      "loop": "step_budget",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 7,
+      "folder": "2026-11-20T180854Z_missing-deploys_seed7_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "folder": "2026-11-20T181513Z_duplicate-delivery_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "folder": "2026-11-20T181900Z_duplicate-delivery_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 8,
+      "folder": "2026-11-20T182250Z_duplicate-delivery_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "folder": "2026-11-20T182732Z_poison-message_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "folder": "2026-11-20T183228Z_poison-message_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "poison-message",
+      "seed": 8,
+      "folder": "2026-11-20T183745Z_poison-message_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "folder": "2026-11-20T184327Z_provider-outage_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "folder": "2026-11-20T184800Z_provider-outage_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 8,
+      "folder": "2026-11-20T185238Z_provider-outage_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "folder": "2026-11-20T185817Z_money-unit_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "folder": "2026-11-20T190202Z_money-unit_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "money-unit",
+      "seed": 8,
+      "folder": "2026-11-20T190549Z_money-unit_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "folder": "2026-11-20T191031Z_secret-rotation_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "folder": "2026-11-20T191555Z_secret-rotation_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 8,
+      "folder": "2026-11-20T192055Z_secret-rotation_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "folder": "2026-11-20T192712Z_pool-exhaustion_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "folder": "2026-11-20T193207Z_pool-exhaustion_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 8,
+      "folder": "2026-11-20T193706Z_pool-exhaustion_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "folder": "2026-11-20T194246Z_false-alarm_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "folder": "2026-11-20T194902Z_false-alarm_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 8,
+      "folder": "2026-11-20T195519Z_false-alarm_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "folder": "2026-11-20T200212Z_missing-deploys_seed8_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "folder": "2026-11-20T200638Z_missing-deploys_seed8_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 8,
+      "folder": "2026-11-20T201118Z_missing-deploys_seed8_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 9,
+      "folder": "2026-11-20T201710Z_duplicate-delivery_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 9,
+      "folder": "2026-11-20T202118Z_duplicate-delivery_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "duplicate-delivery",
+      "seed": 9,
+      "folder": "2026-11-20T202520Z_duplicate-delivery_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "poison-message",
+      "seed": 9,
+      "folder": "2026-11-20T203004Z_poison-message_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "poison-message",
+      "seed": 9,
+      "folder": "2026-11-20T203500Z_poison-message_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "poison-message",
+      "seed": 9,
+      "folder": "2026-11-20T204005Z_poison-message_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 9,
+      "folder": "2026-11-20T204600Z_provider-outage_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 9,
+      "folder": "2026-11-20T205042Z_provider-outage_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "provider-outage",
+      "seed": 9,
+      "folder": "2026-11-20T205511Z_provider-outage_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "money-unit",
+      "seed": 9,
+      "folder": "2026-11-20T210050Z_money-unit_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "money-unit",
+      "seed": 9,
+      "folder": "2026-11-20T210458Z_money-unit_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "money-unit",
+      "seed": 9,
+      "folder": "2026-11-20T210848Z_money-unit_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 9,
+      "folder": "2026-11-20T211342Z_secret-rotation_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 9,
+      "folder": "2026-11-20T211845Z_secret-rotation_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "secret-rotation",
+      "seed": 9,
+      "folder": "2026-11-20T212351Z_secret-rotation_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 9,
+      "folder": "2026-11-20T213011Z_pool-exhaustion_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 9,
+      "folder": "2026-11-20T213536Z_pool-exhaustion_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "pool-exhaustion",
+      "seed": 9,
+      "folder": "2026-11-20T214108Z_pool-exhaustion_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 9,
+      "folder": "2026-11-20T214717Z_false-alarm_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 9,
+      "folder": "2026-11-20T215327Z_false-alarm_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "false-alarm",
+      "seed": 9,
+      "folder": "2026-11-20T215942Z_false-alarm_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 9,
+      "folder": "2026-11-20T220635Z_missing-deploys_seed9_plain",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "plain"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 9,
+      "folder": "2026-11-20T221128Z_missing-deploys_seed9_langgraph",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "langgraph"
+    },
+    {
+      "case": "missing-deploys",
+      "seed": 9,
+      "folder": "2026-11-20T221632Z_missing-deploys_seed9_multi",
+      "stopped": "the loop stopped: diagnosed",
+      "loop": "diagnosed",
+      "interrupted": false,
+      "loop_kind": "multi"
+    }
+  ],
+  "not_run": [],
+  "stopped": null
+}

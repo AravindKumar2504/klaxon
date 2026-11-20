@@ -1,0 +1,846 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, duplicate-delivery, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 5 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+  "case": {
+    "name": "duplicate-delivery",
+    "kind": "fault",
+    "title": "Payments counted twice in the books",
+    "right_answer": "The fault's recorded cause: a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time.",
+    "right_action": [
+      "rollback_deploy",
+      "ledger-consumer"
+    ],
+    "fault": "duplicate-delivery",
+    "withheld": {},
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)",
+    "seed": 8,
+    "model": "claude-opus-5-5"
+  },
+  "seed": 8,
+  "model": "claude-opus-5-5",
+  "fault_name": "duplicate-delivery",
+  "evaluation_version": 2,
+  "loop_kind": "langgraph",
+  "langgraph_version": "1.2.18",
+  "rerun_command": "python -m klaxon.evaluation run --model claude-opus-5-5 --cases duplicate-delivery --seeds 8 --steps 10 --tool-calls 8 --rate 3 --loop langgraph",
+  "ran_at_utc": "2026-11-20T18:19:00+00:00",
+  "ran_at_local": "2026-11-20T13:19:00-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "c710b329fa966d7dfa7ddde38cbb243d529702b5cdf92bbf21c79da0b18687e9",
+  "stack_files_sha256": "c50f39ddfaeed89736ac276568c891089145d2059f98e3a84f49bd02640e2112",
+  "git_commit": "ab32d53c784e9670849d58b2f34124ad83c0f3df",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d80f2b4347add091fdeb0be9f7be5889e4ee5603f06b1e3b145f7a5ae9db815d"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d80f2b4347add091fdeb0be9f7be5889e4ee5603f06b1e3b145f7a5ae9db815d"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d80f2b4347add091fdeb0be9f7be5889e4ee5603f06b1e3b145f7a5ae9db815d"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d80f2b4347add091fdeb0be9f7be5889e4ee5603f06b1e3b145f7a5ae9db815d"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d80f2b4347add091fdeb0be9f7be5889e4ee5603f06b1e3b145f7a5ae9db815d"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      }
+    ]
+  },
+  "fault": {
+    "name": "duplicate-delivery",
+    "title": "Payments counted twice in the books",
+    "cause": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "expected_symptoms": [
+      "the money check fails: events counted twice, the books ahead of the provider by their amounts",
+      "the webhook dashboard stays green, and consumer lag stays at 0",
+      "the ledger stops reporting 'already processed' while the confirmer still sees the same duplicates"
+    ],
+    "expected_money": {
+      "during": "failed",
+      "after": "failed",
+      "quiet": "failed"
+    },
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 8,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "017946d0"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 76.3,
+    "injection_took": 2.7,
+    "alert_evaluation_began": 94.0,
+    "loop_started_at": 94.3,
+    "loop_ended_at": 121.6,
+    "gate_began_at": 121.6,
+    "gate_ended_at": 122.4,
+    "cleared_at": 124.5
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 0.3,
+      "at_utc": "2026-11-20T18:20:00Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.192
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.15,
+            "requests_per_second": 3.139,
+            "share": 0.048
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 75.3,
+      "took": 1.0,
+      "at_utc": "2026-11-20T18:20:16Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.1,
+            "requests_per_second": 3.538,
+            "share": 0.028
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 94.0,
+      "took": 0.3,
+      "at_utc": "2026-11-20T18:20:34Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.08,
+            "requests_per_second": 3.738,
+            "share": 0.021
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 1,
+              "matches_provider": 2
+            },
+            "money_off_cents": 15718
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+        "fired_at": "2026-11-20T18:20:34Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 214.5,
+      "took": 0.8,
+      "at_utc": "2026-11-20T18:22:35Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.02,
+            "requests_per_second": 3.177,
+            "share": 0.006
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 4,
+              "matches_provider": 5
+            },
+            "money_off_cents": 8594
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (4 findings), matches_provider (5 findings). By its count, our ledger is $85.94 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (4 findings), matches_provider (5 findings). By its count, our ledger is $85.94 ahead of the provider's balance.",
+        "fired_at": "2026-11-20T18:22:35Z"
+      }
+    }
+  ],
+  "injected": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "naive"
+  },
+  "cleared": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "idempotent",
+    "LEDGER_BAD_EVENTS": "dead_letter"
+  },
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+    "fired_at": "2026-11-20T18:20:34Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.8",
+    "steps": 5,
+    "tool_calls": 4,
+    "seconds": 27.31,
+    "diagnosis": {
+      "hypothesis": "ledger-consumer was redeployed at 18:20:17Z with LEDGER_HANDLER=naive, and that handler does not deduplicate events by event_id. The provider delivers webhooks at least once. It sent evt_000281 (payment.succeeded, pay_000259, $157.18) twice, about 0.5 s apart, at 18:20:22.567Z and 18:20:23.073Z. webhook-receiver correctly checked and queued both copies, at provider-events partition 1, offsets 120 and 121. The naive ledger handler then booked each copy as a new transaction (281 and 282). The ledger stays balanced, but provider_clearing for pay_000259 is $157.18 above the provider's figure. That is exactly the failure of posted_exactly_once and matches_provider. The 6-second gap between the deploy and the first duplicate points to the new handler setting as the cause. Two things are open. First, I did not see the handler setting from before the deploy, so I am assuming it was an idempotent one. Second, the check found only one duplicate so far, and more redeliveries would add more.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "money_check",
+          "arguments": {
+            "wait": true,
+            "timeout_seconds": 60
+          },
+          "shows": "The money check (settled) fails. evt_000281 was posted 2 times (transactions 281 and 282). The ledger is +$157.18 against the provider overall and on pay_000259. The ledger is still balanced, and payments and refunds match the provider."
+        },
+        {
+          "call_id": "c2",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "ledger-consumer was redeployed at 18:20:17Z, about 3 minutes after the other services, with LEDGER_HANDLER=naive. This came just before the duplicate and the alert at 18:20:34Z."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"ledger-consumer\"} | event_id = \"evt_000281\"",
+            "minutes": 15,
+            "limit": 20
+          },
+          "shows": "ledger-consumer logged 'posted' for evt_000281 twice: from provider-events/1\uff20120 at 18:20:22.570Z and from \uff20121 at 18:20:23.078Z, under different trace ids. It made no idempotency check on event_id."
+        },
+        {
+          "call_id": "c4",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"webhook-receiver\"} | event_id = \"evt_000281\"",
+            "minutes": 15,
+            "limit": 20
+          },
+          "shows": "webhook-receiver queued evt_000281 twice, at offsets 120 and 121. The provider redelivered the webhook, which is expected at-least-once behavior, so the consumer must deduplicate."
+        }
+      ],
+      "confidence": 0.8,
+      "proposed_fix": {
+        "kind": "rollback",
+        "target": "ledger-consumer",
+        "summary": "Roll ledger-consumer back to its settings from before the 18:20:17Z deploy, so that ledger posting is idempotent on event_id again. After that, repair the data: reverse the duplicate transaction 282 for evt_000281/pay_000259 with a compensating entry, and look for other duplicates booked since 18:20:17Z. Then rerun the money check.",
+        "applied": false
+      },
+      "blast_radius": "ledger-consumer pauses while its container is recreated. Kafka buffers events in its consumer group, so ledger posting is only delayed. payment-confirmer, payments-api and webhook-receiver are not touched. The rollback does not fix transaction 282 or any other duplicate already booked. If the earlier setting was not idempotent either, duplicates would keep happening.",
+      "rollback_plan": "Redeploy ledger-consumer with LEDGER_HANDLER=naive, its current setting, to return to today's state. After any change, watch the money check's posted_exactly_once invariant.",
+      "fix_action": {
+        "name": "rollback_deploy",
+        "arguments": {
+          "service": "ledger-consumer"
+        },
+        "applied": false
+      }
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "rubric": {
+      "version": 4,
+      "sha256": "88e724b0e5915247a6c9fab35b00d26b2720e5818ee5b7be955feacb3c70112c"
+    },
+    "fault": "duplicate-delivery",
+    "recorded_cause": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)",
+    "verdict": "names the cause",
+    "hypothesis": "ledger-consumer was redeployed at 18:20:17Z with LEDGER_HANDLER=naive, and that handler does not deduplicate events by event_id. The provider delivers webhooks at least once. It sent evt_000281 (payment.succeeded, pay_000259, $157.18) twice, about 0.5 s apart, at 18:20:22.567Z and 18:20:23.073Z. webhook-receiver correctly checked and queued both copies, at provider-events partition 1, offsets 120 and 121. The naive ledger handler then booked each copy as a new transaction (281 and 282). The ledger stays balanced, but provider_clearing for pay_000259 is $157.18 above the provider's figure. That is exactly the failure of posted_exactly_once and matches_provider. The 6-second gap between the deploy and the first duplicate points to the new handler setting as the cause. Two things are open. First, I did not see the handler setting from before the deploy, so I am assuming it was an idempotent one. Second, the check found only one duplicate so far, and more redeliveries would add more.",
+    "elements": [
+      {
+        "element": "where: the ledger consumer",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "what: its dedupe is gone",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "how: the provider sends some webhooks again",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "the deploy that brought it",
+        "required": false,
+        "named": true,
+        "cancelled": false
+      }
+    ],
+    "wrong_causes": [],
+    "wrong_causes_offered": [],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "ledger-consumer"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "rollback",
+        "config_change"
+      ],
+      "target_matches": "ledger"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 4,
+      "double_clicks.ran_first": 9,
+      "double_clicks.sent": 13,
+      "not_sent.refunds": 1,
+      "payments.arrived": 682,
+      "payments.succeeded": 682,
+      "refunds.succeeded": 67,
+      "retries": 27,
+      "retries.after_409": 9,
+      "retries.after_503": 18
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": true,
+  "rehearsal": false,
+  "gate": {
+    "result": "not asked",
+    "detail": "redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "request_id": null,
+    "deploy": null,
+    "decided": null
+  },
+  "verification": null,
+  "undo": null,
+  "damage": {
+    "at_alert": {
+      "source": "the alert's own evaluation of the rules",
+      "at_utc": "2026-11-20T18:20:34Z",
+      "began": 94.0,
+      "money_check": {
+        "outcome": "failed",
+        "invariants": 5,
+        "failed": {
+          "posted_exactly_once": 1,
+          "matches_provider": 2
+        },
+        "money_off_cents": 15718
+      },
+      "lag": {
+        "ledger": 0.0,
+        "payment-confirmer": 0.0
+      }
+    },
+    "at_diagnosis": {
+      "at_utc": "2026-11-20T18:21:02Z",
+      "outcome": "failed",
+      "cutoff": 1795198862,
+      "findings": [
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000281 posted 2 times",
+          "created": 1795198822,
+          "payment": "pay_000259"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000368 posted 2 times",
+          "created": 1795198845,
+          "payment": "pay_000324"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000408 posted 2 times",
+          "created": 1795198856,
+          "payment": "pay_000307"
+        },
+        {
+          "invariant": "posted_exactly_once",
+          "kind": "counted more than once",
+          "key": "event evt_000411 posted 2 times",
+          "created": 1795198857,
+          "payment": "pay_000375"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "total differs",
+          "key": "all payments: books off by 8594 cents",
+          "created": null,
+          "payment": null
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000259: books off by 15718 cents",
+          "created": null,
+          "payment": "pay_000259"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000307: books off by -8321 cents",
+          "created": null,
+          "payment": "pay_000307"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000324: books off by -1825 cents",
+          "created": null,
+          "payment": "pay_000324"
+        },
+        {
+          "invariant": "matches_provider",
+          "kind": "books differ",
+          "key": "payment pay_000375: books off by 3022 cents",
+          "created": null,
+          "payment": "pay_000375"
+        }
+      ],
+      "money_off_cents": 8594,
+      "behind": null,
+      "why": null,
+      "counts": {
+        "counted more than once": 4,
+        "total differs": 1,
+        "books differ": 4
+      }
+    }
+  },
+  "deploys": [
+    {
+      "seq": 173,
+      "at": "2026-11-20T18:20:19Z",
+      "service": "ledger-consumer",
+      "by": "klaxon.faults",
+      "container": "f3daf89344d4",
+      "settings": {
+        "LEDGER_HANDLER": "naive",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      },
+      "replaced_settings": {
+        "LEDGER_HANDLER": "idempotent",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      }
+    },
+    {
+      "seq": 174,
+      "at": "2026-11-20T18:21:05Z",
+      "service": "ledger-consumer",
+      "by": "klaxon.faults",
+      "container": "a53365ad66af",
+      "settings": {
+        "LEDGER_HANDLER": "idempotent",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      },
+      "replaced_settings": {
+        "LEDGER_HANDLER": "naive",
+        "LEDGER_BAD_EVENTS": "dead_letter"
+      }
+    }
+  ],
+  "removed_by": "the harness's clearing (klaxon.faults)",
+  "platform": "compose",
+  "printed_output": [
+    "Klaxon: an evaluation run on case duplicate-delivery, seed 8, a fault, on Docker Compose: duplicate-delivery",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, duplicate-delivery, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 5 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "The fault: Payments counted twice in the books",
+    "  recorded cause: a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.192 s; 5xx share 0.048; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  75.3 s  p95 0.025 s; 5xx share 0.028; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  94.0 s  p95 0.024 s; 5xx share 0.021; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  after  t= 214.5 s  p95 0.024 s; 5xx share 0.006; lag ledger 0.0, payment-confirmer 0.0; money check failed; firing: MoneyCheckFailed (money check)",
+    "  the fault was injected at t=76.3 s: {\"redeployed\": \"ledger-consumer\", \"LEDGER_HANDLER\": \"naive\"}",
+    "",
+    "Alert MoneyCheckFailed, fired at 2026-11-20T18:20:34Z: The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+    "",
+    "The loop stopped on diagnosed after 5 steps, 4 tool calls and 27.3 s.",
+    "  hypothesis: ledger-consumer was redeployed at 18:20:17Z with LEDGER_HANDLER=naive, and that handler does not deduplicate events by event_id. The provider delivers webhooks at least once. It sent evt_000281 (payment.succeeded, pay_000259, $157.18) twice, about 0.5 s apart, at 18:20:22.567Z and 18:20:23.073Z. webhook-receiver correctly checked and queued both copies, at provider-events partition 1, offsets 120 and 121. The naive ledger handler then booked each copy as a new transaction (281 and 282). The ledger stays balanced, but provider_clearing for pay_000259 is $157.18 above the provider's figure. That is exactly the failure of posted_exactly_once and matches_provider. The 6-second gap between the deploy and the first duplicate points to the new handler setting as the cause. Two things are open. First, I did not see the handler setting from before the deploy, so I am assuming it was an idempotent one. Second, the check found only one duplicate so far, and more redeliveries would add more.",
+    "  confidence: 0.8",
+    "  proposed fix (the model's words): rollback ledger-consumer: Roll ledger-consumer back to its settings from before the 18:20:17Z deploy, so that ledger posting is idempotent on event_id again. After that, repair the data: reverse the duplicate transaction 282 for evt_000281/pay_000259 with a compensating entry, and look for other duplicates booked since 18:20:17Z. Then rerun the money check.",
+    "  action it names: rollback_deploy {\"service\": \"ledger-consumer\"} (an evaluation run: planned by code, never run)",
+    "",
+    "Compared by a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "  hypothesis: ledger-consumer was redeployed at 18:20:17Z with LEDGER_HANDLER=naive, and that handler does not deduplicate events by event_id. The provider delivers webhooks at least once. It sent evt_000281 (payment.succeeded, pay_000259, $157.18) twice, about 0.5 s apart, at 18:20:22.567Z and 18:20:23.073Z. webhook-receiver correctly checked and queued both copies, at provider-events partition 1, offsets 120 and 121. The naive ledger handler then booked each copy as a new transaction (281 and 282). The ledger stays balanced, but provider_clearing for pay_000259 is $157.18 above the provider's figure. That is exactly the failure of posted_exactly_once and matches_provider. The 6-second gap between the deploy and the first duplicate points to the new handler setting as the cause. Two things are open. First, I did not see the handler setting from before the deploy, so I am assuming it was an idempotent one. Second, the check found only one duplicate so far, and more redeliveries would add more.",
+    "  named    (required) where: the ledger consumer",
+    "  named    (required) what: its dedupe is gone",
+    "  named    (required) how: the provider sends some webhooks again",
+    "  named    (optional) the deploy that brought it",
+    "  proposed fix: rollback on ledger-consumer; fits the remedy: True",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "The gate: not asked: redeploy ledger-consumer: LEDGER_HANDLER naive -> idempotent, LEDGER_BAD_EVENTS dead_letter (unchanged)",
+    "",
+    "The damage, by the money check:",
+    "  at the alert    2026-11-20T18:20:34Z  money check failed: posted_exactly_once 1, matches_provider 2; our books $157.18 ahead of the provider's; lag ledger 0, payment-confirmer 0",
+    "  at the diagnosis 2026-11-20T18:21:02Z  4 events counted more than once, 4 payments whose books differ from the provider's; our books $85.94 ahead of the provider's balance",
+    "",
+    "Deploys during the run (the deploy log):",
+    "  173 2026-11-20T18:20:19Z ledger-consumer by klaxon.faults: LEDGER_HANDLER=naive, LEDGER_BAD_EVENTS=dead_letter",
+    "  174 2026-11-20T18:21:05Z ledger-consumer by klaxon.faults: LEDGER_HANDLER=idempotent, LEDGER_BAD_EVENTS=dead_letter",
+    "",
+    "The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "Cleared at t=124.5 s: {\"redeployed\": \"ledger-consumer\", \"LEDGER_HANDLER\": \"idempotent\", \"LEDGER_BAD_EVENTS\": \"dead_letter\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}

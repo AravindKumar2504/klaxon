@@ -1,0 +1,1073 @@
+{
+  "label": "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, pool-exhaustion, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 8 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+  "case": {
+    "name": "pool-exhaustion",
+    "kind": "fault",
+    "title": "Payments fail: the payments API's database pool runs dry",
+    "right_answer": "The fault's recorded cause: a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500.",
+    "right_action": [
+      "rollback_deploy",
+      "payments-api"
+    ],
+    "fault": "pool-exhaustion",
+    "withheld": {},
+    "remedy": "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool",
+    "seed": 8,
+    "model": "claude-opus-5-5"
+  },
+  "seed": 8,
+  "model": "claude-opus-5-5",
+  "fault_name": "pool-exhaustion",
+  "evaluation_version": 2,
+  "loop_kind": "plain",
+  "rerun_command": "python -m klaxon.evaluation run --model claude-opus-5-5 --cases pool-exhaustion --seeds 8 --steps 10 --tool-calls 8 --rate 3",
+  "ran_at_utc": "2026-11-20T19:27:12+00:00",
+  "ran_at_local": "2026-11-20T14:27:12-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "c710b329fa966d7dfa7ddde38cbb243d529702b5cdf92bbf21c79da0b18687e9",
+  "stack_files_sha256": "c50f39ddfaeed89736ac276568c891089145d2059f98e3a84f49bd02640e2112",
+  "git_commit": "ab32d53c784e9670849d58b2f34124ad83c0f3df",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d184fc5a8068178411d511ed3c15b272a31d08d309bc0d4f4326605dbb8b3d4d"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d184fc5a8068178411d511ed3c15b272a31d08d309bc0d4f4326605dbb8b3d4d"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d184fc5a8068178411d511ed3c15b272a31d08d309bc0d4f4326605dbb8b3d4d"
+      },
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d184fc5a8068178411d511ed3c15b272a31d08d309bc0d4f4326605dbb8b3d4d"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:d184fc5a8068178411d511ed3c15b272a31d08d309bc0d4f4326605dbb8b3d4d"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      }
+    ]
+  },
+  "fault": {
+    "name": "pool-exhaustion",
+    "title": "Payments fail: the payments API's database pool runs dry",
+    "cause": "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500",
+    "expected_symptoms": [
+      "the pool runs dry about 40 to 50 s after the deploy; then POST /payments takes 5 to 8 s (a worker thread, then the pool's 5 s wait) and fails with a 500: the p95 latency passes 7 s, and the 5xx share passes 70% within a minute",
+      "the payments API logs 'unhandled error' with PoolTimeout: no connection within 5 s",
+      "its health check fails too, so docker marks it unhealthy, while PostgreSQL itself is up",
+      "the traffic's clients retry and give up: many payments end with their outcome unknown, and arrivals past 64 in flight are shed",
+      "the money check passes: a payment that never got a connection was never charged, and one charged before its answer was lost is confirmed by its webhook"
+    ],
+    "expected_money": {
+      "during": "passed",
+      "after": "passed",
+      "quiet": "passed"
+    },
+    "remedy": "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 8,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "c01eafe3"
+  },
+  "budgets": {
+    "steps": 10,
+    "tool_calls": 8,
+    "seconds": 600.0,
+    "retries": 2,
+    "model_retries": 1
+  },
+  "stopped": "the loop stopped: diagnosed",
+  "timings": {
+    "injected_at": 76.3,
+    "injection_took": 2.4,
+    "alert_evaluation_began": 141.4,
+    "loop_started_at": 142.4,
+    "loop_ended_at": 183.3,
+    "gate_began_at": 183.3,
+    "gate_ended_at": 184.5,
+    "cleared_at": 189.6
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 0.3,
+      "at_utc": "2026-11-20T19:28:12Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.089
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.149,
+            "requests_per_second": 3.141,
+            "share": 0.047
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 1.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 75.3,
+      "took": 1.0,
+      "at_utc": "2026-11-20T19:28:28Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.1,
+            "requests_per_second": 3.518,
+            "share": 0.028
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 93.7,
+      "took": 0.7,
+      "at_utc": "2026-11-20T19:28:46Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.094,
+            "requests_per_second": 3.801,
+            "share": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 109.4,
+      "took": 0.9,
+      "at_utc": "2026-11-20T19:29:02Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.075,
+            "requests_per_second": 3.308,
+            "share": 0.023
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 125.3,
+      "took": 1.1,
+      "at_utc": "2026-11-20T19:29:18Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 7.217
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.2 s, above the threshold of 2 s.",
+          "in_a_row": 1,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 1.538,
+            "requests_per_second": 3.352,
+            "share": 0.459
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are failing: over the last minute, 46% of the answers to POST /payments on payments-api were 5xx (1.54 per second), above the threshold of 20%.",
+          "in_a_row": 1,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 141.4,
+      "took": 1.0,
+      "at_utc": "2026-11-20T19:29:34Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 7.352
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.4 s, above the threshold of 2 s.",
+          "in_a_row": 2,
+          "firing": true
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 3.402,
+            "requests_per_second": 4.776,
+            "share": 0.712
+          },
+          "breached": true,
+          "needed": 2,
+          "sentence": "Payments are failing: over the last minute, 71% of the answers to POST /payments on payments-api were 5xx (3.40 per second), above the threshold of 20%.",
+          "in_a_row": 2,
+          "firing": true
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "PaymentsErrorsHigh",
+        "summary": "Payments are failing: over the last minute, 71% of the answers to POST /payments on payments-api were 5xx (3.40 per second), above the threshold of 20%. Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.4 s, above the threshold of 2 s.",
+        "fired_at": "2026-11-20T19:29:34Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 279.6,
+      "took": 0.8,
+      "at_utc": "2026-11-20T19:31:52Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.02,
+            "requests_per_second": 3.357,
+            "share": 0.006
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    }
+  ],
+  "injected": {
+    "redeployed": "payments-api",
+    "REFUND_CONNECTION": "kept"
+  },
+  "cleared": {
+    "redeployed": "payments-api",
+    "PROVIDER_BREAKER": "on",
+    "CHARGE_AMOUNT_UNIT": "cents",
+    "REFUND_CONNECTION": "returned"
+  },
+  "alert": {
+    "name": "PaymentsErrorsHigh",
+    "summary": "Payments are failing: over the last minute, 71% of the answers to POST /payments on payments-api were 5xx (3.40 per second), above the threshold of 20%. Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.4 s, above the threshold of 2 s.",
+    "fired_at": "2026-11-20T19:29:34Z"
+  },
+  "loop": {
+    "reason": "diagnosed",
+    "detail": "confidence 0.55",
+    "steps": 8,
+    "tool_calls": 7,
+    "seconds": 40.894,
+    "diagnosis": {
+      "hypothesis": "payments-api's PostgreSQL connection pool (psycopg_pool) is exhausted. Since about 19:29:00, requests wait for a connection and fail with PoolTimeout, which gives 500s on POST /payments and p95 latency above 7 s. The exhaustion began about 30 s after payments-api was redeployed at 19:28:29, and the refund route was the first to go slow (p95 jumped at 19:29:04, POST /payments followed at 19:29:19). Provider calls stay fast at about 5 ms, so the provider is not what holds connections. The most likely cause is the refund path holding or leaking DB connections (REFUND_CONNECTION=kept). Under rising refund traffic, these held connections starve the pool. The evidence leaves open whether REFUND_CONNECTION, or any setting, actually changed in that deploy: the deploy log shows only current settings. Request rate also rose steadily, from about 0.45/s to 5.3/s, so plain load growth against a small pool is an alternative I could not rule out. Pool-usage metrics were not checked.",
+      "evidence": [
+        {
+          "call_id": "c1",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{service_name=\"payments-api\"}[1m]))",
+            "minutes": 20
+          },
+          "shows": "500s on payments-api appear only at 19:29:37, at 3.4/s. Before that, POST /payments returned mostly 201, so the alert is real."
+        },
+        {
+          "call_id": "c2",
+          "tool": "recent_deploys",
+          "arguments": {},
+          "shows": "payments-api was redeployed at 19:28:29, about 1 min before the failures, with REFUND_CONNECTION=kept, PROVIDER_BREAKER=on and CHARGE_AMOUNT_UNIT=cents. The other services were created together at 19:27:03."
+        },
+        {
+          "call_id": "c3",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"payments-api\"} | severity_text = \"ERROR\"",
+            "minutes": 5,
+            "limit": 20
+          },
+          "shows": "Every recent payments-api error is psycopg_pool PoolTimeout on POST /payments."
+        },
+        {
+          "call_id": "c4",
+          "tool": "get_trace",
+          "arguments": {
+            "trace_id": "9a49cb5fe9c5cc79d706342580db2dbe"
+          },
+          "shows": "A failing POST /payments trace spends about 5.8 s waiting and then returns 500 with error.type psycopg_pool.PoolTimeout. It makes no provider call and no DB query, so the request never got a connection."
+        },
+        {
+          "call_id": "c5",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "sum by (http_route, http_request_method) (rate(http_server_request_duration_seconds_count{service_name=\"payments-api\"}[1m])) or histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{service_name=\"payments-api\"}[1m])))",
+            "minutes": 5
+          },
+          "shows": "Refund p95 jumped from about 0.04 s to 6.7 s at 19:29:04, before POST /payments p95 jumped to 7.2 s at 19:29:19. Request rates rose steadily over the same period."
+        },
+        {
+          "call_id": "c6",
+          "tool": "query_metrics",
+          "arguments": {
+            "query": "histogram_quantile(0.95, sum by (le, http_request_method, server_address) (rate(http_client_request_duration_seconds_bucket{service_name=\"payments-api\"}[1m])))",
+            "minutes": 5
+          },
+          "shows": "The p95 of payments-api calls to fake-provider is about 5 ms throughout, so a slow provider is not holding connections."
+        },
+        {
+          "call_id": "c7",
+          "tool": "search_logs",
+          "arguments": {
+            "query": "{service_name=\"payments-api\"} | severity_text = \"WARNING\"",
+            "minutes": 5,
+            "limit": 10
+          },
+          "shows": "From 19:29:02 on, the pending-payments counter cannot get a DB connection within 2 s, which confirms the pool is exhausted."
+        }
+      ],
+      "confidence": 0.55,
+      "proposed_fix": {
+        "kind": "rollback",
+        "target": "payments-api",
+        "summary": "Roll payments-api back to the settings it ran before the 19:28:29 deploy, aiming to restore a refund path that releases its DB connection. Afterwards, check that PoolTimeout errors stop and that the latency of POST /payments and refunds returns to tens of ms. If the errors continue, investigate load against pool size instead. Then run money_check to confirm no payment or refund was left half-recorded.",
+        "applied": false
+      },
+      "blast_radius": "payments-api pauses while its container is recreated, so payment and refund requests fail briefly. Clients should retry with their idempotency keys. If the previous settings differ in other ways (for example PROVIDER_BREAKER or CHARGE_AMOUNT_UNIT), those behaviors change too. The rollback stops new damage but repairs nothing already booked wrong.",
+      "rollback_plan": "Redeploy payments-api with the current settings (PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=kept), as recorded in the deploy log.",
+      "fix_action": {
+        "name": "rollback_deploy",
+        "arguments": {
+          "service": "payments-api"
+        },
+        "applied": false
+      }
+    },
+    "trace": "trace.jsonl"
+  },
+  "comparison": {
+    "by": "a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "rubric": {
+      "version": 4,
+      "sha256": "88e724b0e5915247a6c9fab35b00d26b2720e5818ee5b7be955feacb3c70112c"
+    },
+    "fault": "pool-exhaustion",
+    "recorded_cause": "a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500",
+    "remedy": "roll the payments API back to REFUND_CONNECTION=returned: its new container starts with a full pool",
+    "verdict": "names the cause",
+    "hypothesis": "payments-api's PostgreSQL connection pool (psycopg_pool) is exhausted. Since about 19:29:00, requests wait for a connection and fail with PoolTimeout, which gives 500s on POST /payments and p95 latency above 7 s. The exhaustion began about 30 s after payments-api was redeployed at 19:28:29, and the refund route was the first to go slow (p95 jumped at 19:29:04, POST /payments followed at 19:29:19). Provider calls stay fast at about 5 ms, so the provider is not what holds connections. The most likely cause is the refund path holding or leaking DB connections (REFUND_CONNECTION=kept). Under rising refund traffic, these held connections starve the pool. The evidence leaves open whether REFUND_CONNECTION, or any setting, actually changed in that deploy: the deploy log shows only current settings. Request rate also rose steadily, from about 0.45/s to 5.3/s, so plain load growth against a small pool is an alternative I could not rule out. Pool-usage metrics were not checked.",
+    "elements": [
+      {
+        "element": "where: the payments API's database pool",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "what: its connections are never given back",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "how: with none left, requests wait for a connection and fail",
+        "required": true,
+        "named": true,
+        "cancelled": false
+      },
+      {
+        "element": "the deploy that brought it",
+        "required": false,
+        "named": true,
+        "cancelled": false
+      }
+    ],
+    "wrong_causes": [],
+    "wrong_causes_offered": [],
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "payments-api"
+    },
+    "fix_fits_the_remedy": true,
+    "fitting_fixes": {
+      "kinds": [
+        "rollback",
+        "config_change"
+      ],
+      "target_matches": "payments"
+    }
+  },
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 9,
+      "double_clicks.other": 2,
+      "double_clicks.ran_first": 6,
+      "double_clicks.sent": 17,
+      "not_sent.refunds": 5,
+      "payments.arrived": 894,
+      "payments.succeeded": 655,
+      "payments.unknown": 172,
+      "refunds.succeeded": 61,
+      "refunds.unknown": 7,
+      "retries": 623,
+      "retries.after_409": 26,
+      "retries.after_500": 482,
+      "retries.after_503": 18,
+      "retries.after_no_answer": 97,
+      "shed": 67
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": true,
+  "rehearsal": false,
+  "gate": {
+    "result": "not asked",
+    "detail": "redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned",
+    "request_id": null,
+    "deploy": null,
+    "decided": null
+  },
+  "verification": null,
+  "undo": null,
+  "damage": {
+    "at_alert": {
+      "source": "the alert's own evaluation of the rules",
+      "at_utc": "2026-11-20T19:29:34Z",
+      "began": 141.4,
+      "money_check": {
+        "outcome": "passed",
+        "invariants": 5,
+        "failed": {},
+        "money_off_cents": 0
+      },
+      "lag": {
+        "ledger": 0.0,
+        "payment-confirmer": 0.0
+      }
+    },
+    "at_diagnosis": {
+      "at_utc": "2026-11-20T19:30:16Z",
+      "outcome": "passed",
+      "cutoff": 1795203016,
+      "findings": [],
+      "money_off_cents": 0,
+      "behind": null,
+      "why": null,
+      "counts": {}
+    }
+  },
+  "deploys": [
+    {
+      "seq": 195,
+      "at": "2026-11-20T19:28:31Z",
+      "service": "payments-api",
+      "by": "klaxon.faults",
+      "container": "d2d2eaae453e",
+      "settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "cents",
+        "REFUND_CONNECTION": "kept"
+      },
+      "replaced_settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "cents",
+        "REFUND_CONNECTION": "returned"
+      }
+    },
+    {
+      "seq": 196,
+      "at": "2026-11-20T19:30:22Z",
+      "service": "payments-api",
+      "by": "klaxon.faults",
+      "container": "de42d7b0093d",
+      "settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "cents",
+        "REFUND_CONNECTION": "returned"
+      },
+      "replaced_settings": {
+        "PROVIDER_BREAKER": "on",
+        "CHARGE_AMOUNT_UNIT": "cents",
+        "REFUND_CONNECTION": "kept"
+      }
+    }
+  ],
+  "removed_by": "the harness's clearing (klaxon.faults)",
+  "platform": "compose",
+  "printed_output": [
+    "Klaxon: an evaluation run on case pool-exhaustion, seed 8, a fault, on Docker Compose: pool-exhaustion",
+    "Real run on this Mac's Docker Compose stack, with synthetic traffic from klaxon.traffic: synthetic data, a simulated provider, no real money. One fault from klaxon.faults, pool-exhaustion, was injected on purpose. The alert was raised by klaxon.alerts from what the stack showed. Klaxon's loop ran live on it, through Claude Code on Aravind's seat, and stopped on diagnosed after 8 steps; any reply it got is a recorded response, not a simulation. It was offered one write action (rollback_deploy), as in week 4; in an evaluation run its gate only plans an action the diagnosis names: nobody is asked, and nothing runs. The diagnosis was compared with the fault's recorded cause by a rule (klaxon.grading), not by a person or a model. Code planned the action its diagnosis named (redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned); in an evaluation run nobody is asked, and nothing ran. The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "The fault: Payments fail: the payments API's database pool runs dry",
+    "  recorded cause: a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500",
+    "",
+    "The alert rules (t: when each evaluation began, from the start of the traffic; rates and p95 are over the last minute)",
+    "  before t=  60.0 s  p95 0.089 s; 5xx share 0.047; lag ledger 1.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  before t=  75.3 s  p95 0.025 s; 5xx share 0.028; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t=  93.7 s  p95 0.025 s; 5xx share 0.025; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t= 109.4 s  p95 0.024 s; 5xx share 0.023; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t= 125.3 s  p95 7.217 s; 5xx share 0.459; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  during t= 141.4 s  p95 7.352 s; 5xx share 0.712; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: PaymentsLatencyHigh (payments-api), PaymentsErrorsHigh (payments-api)",
+    "  after  t= 279.6 s  p95 0.024 s; 5xx share 0.006; lag ledger 0.0, payment-confirmer 0.0; money check passed; firing: none",
+    "  the fault was injected at t=76.3 s: {\"redeployed\": \"payments-api\", \"REFUND_CONNECTION\": \"kept\"}",
+    "",
+    "Alert PaymentsErrorsHigh, fired at 2026-11-20T19:29:34Z: Payments are failing: over the last minute, 71% of the answers to POST /payments on payments-api were 5xx (3.40 per second), above the threshold of 20%. Payments are slow: over the last minute, the p95 latency of POST /payments on payments-api was 7.4 s, above the threshold of 2 s.",
+    "",
+    "The loop stopped on diagnosed after 8 steps, 7 tool calls and 40.9 s.",
+    "  hypothesis: payments-api's PostgreSQL connection pool (psycopg_pool) is exhausted. Since about 19:29:00, requests wait for a connection and fail with PoolTimeout, which gives 500s on POST /payments and p95 latency above 7 s. The exhaustion began about 30 s after payments-api was redeployed at 19:28:29, and the refund route was the first to go slow (p95 jumped at 19:29:04, POST /payments followed at 19:29:19). Provider calls stay fast at about 5 ms, so the provider is not what holds connections. The most likely cause is the refund path holding or leaking DB connections (REFUND_CONNECTION=kept). Under rising refund traffic, these held connections starve the pool. The evidence leaves open whether REFUND_CONNECTION, or any setting, actually changed in that deploy: the deploy log shows only current settings. Request rate also rose steadily, from about 0.45/s to 5.3/s, so plain load growth against a small pool is an alternative I could not rule out. Pool-usage metrics were not checked.",
+    "  confidence: 0.55",
+    "  proposed fix (the model's words): rollback payments-api: Roll payments-api back to the settings it ran before the 19:28:29 deploy, aiming to restore a refund path that releases its DB connection. Afterwards, check that PoolTimeout errors stop and that the latency of POST /payments and refunds returns to tens of ms. If the errors continue, investigate load against pool size instead. Then run money_check to confirm no payment or refund was left half-recorded.",
+    "  action it names: rollback_deploy {\"service\": \"payments-api\"} (an evaluation run: planned by code, never run)",
+    "",
+    "Compared by a rule (klaxon.grading, rubric version 4, committed before any week 5 live run): keyword patterns per element of the right answer (a fault's recorded cause, or an evaluation case's). Not a person and not a model: it reads words, not meaning.",
+    "  recorded cause: a deploy of the payments API with a connection leak (REFUND_CONNECTION=kept): reading a payment's refunds takes a connection from its database pool of 10 and never gives it back, so after about ten refunds the pool is empty, and every request waits for a connection until the pool's 5 s timeout, then fails with a 500",
+    "  hypothesis: payments-api's PostgreSQL connection pool (psycopg_pool) is exhausted. Since about 19:29:00, requests wait for a connection and fail with PoolTimeout, which gives 500s on POST /payments and p95 latency above 7 s. The exhaustion began about 30 s after payments-api was redeployed at 19:28:29, and the refund route was the first to go slow (p95 jumped at 19:29:04, POST /payments followed at 19:29:19). Provider calls stay fast at about 5 ms, so the provider is not what holds connections. The most likely cause is the refund path holding or leaking DB connections (REFUND_CONNECTION=kept). Under rising refund traffic, these held connections starve the pool. The evidence leaves open whether REFUND_CONNECTION, or any setting, actually changed in that deploy: the deploy log shows only current settings. Request rate also rose steadily, from about 0.45/s to 5.3/s, so plain load growth against a small pool is an alternative I could not rule out. Pool-usage metrics were not checked.",
+    "  named    (required) where: the payments API's database pool",
+    "  named    (required) what: its connections are never given back",
+    "  named    (required) how: with none left, requests wait for a connection and fail",
+    "  named    (optional) the deploy that brought it",
+    "  proposed fix: rollback on payments-api; fits the remedy: True",
+    "  verdict: NAMES THE CAUSE",
+    "",
+    "The gate: not asked: redeploy payments-api: PROVIDER_BREAKER on (unchanged), CHARGE_AMOUNT_UNIT cents (unchanged), REFUND_CONNECTION kept -> returned",
+    "",
+    "The damage, by the money check:",
+    "  at the alert    2026-11-20T19:29:34Z  money check passed; lag ledger 0, payment-confirmer 0",
+    "  at the diagnosis 2026-11-20T19:30:16Z  no damage: the money check passed",
+    "",
+    "Deploys during the run (the deploy log):",
+    "  195 2026-11-20T19:28:31Z payments-api by klaxon.faults: PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=kept",
+    "  196 2026-11-20T19:30:22Z payments-api by klaxon.faults: PROVIDER_BREAKER=on, CHARGE_AMOUNT_UNIT=cents, REFUND_CONNECTION=returned",
+    "",
+    "The fault's cause was removed by the harness's clearing (klaxon.faults).",
+    "",
+    "Cleared at t=189.6 s: {\"redeployed\": \"payments-api\", \"PROVIDER_BREAKER\": \"on\", \"CHARGE_AMOUNT_UNIT\": \"cents\", \"REFUND_CONNECTION\": \"returned\"}",
+    "",
+    "Stopped: the loop stopped: diagnosed"
+  ]
+}
