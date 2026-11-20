@@ -54,7 +54,7 @@ lint: ## ruff: style and common mistakes
 		tests/test_mutation_check.py src/klaxon/evaluation.py tests/test_evaluation.py src/klaxon/judge.py \
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
 		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
-		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py tests/test_dev_lock.py
+		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py tests/test_dev_lock.py tests/test_comparison.py
 
 panel: ## the web panel on 127.0.0.1 (PORT=8090; ALSO=<folder>, such as make gate-demo's): it shows runs, changes nothing (week 7)
 	$(PY) -m klaxon.panel --port $(or $(PORT),8090) $(if $(ALSO),--also $(ALSO))
@@ -169,14 +169,14 @@ grade-run: ## compare a fault run's diagnosis with the fault's recorded cause, b
 eval-cases: ## the evaluation's eight cases, each with its right answer and the action that fits; calls nothing (week 5)
 	$(PY) -m klaxon.evaluation cases
 
-eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9 (LOOP=langgraph|multi)
+eval: ## live evaluation runs, each on a fresh stack: nobody is asked, nothing acts (his OK first): make eval MODEL=claude-opus-5-5 CASES=all SEEDS=7,8,9 (LOOP=langgraph|multi; LOOPS=plain,langgraph,multi: for each case and seed, the loops in turn; NOT_RUN_OF=<suite folder>: only what it left not run), saved to evidence/week8/
 	$(PY) -m klaxon.evaluation run $${MODEL:+--model "$$MODEL"} $${CASES:+--cases "$$CASES"} $${SEEDS:+--seeds "$$SEEDS"} \
-		$${LOOP:+--loop "$$LOOP"}
+		$${LOOP:+--loop "$$LOOP"} $${LOOPS:+--loops "$$LOOPS"} $${NOT_RUN_OF:+--not-run-of "$$NOT_RUN_OF"}
 
 eval-report: ## the evaluation's report, worked out offline from saved runs: make eval-report RUNS='evidence/week5/<suite folder> evidence/week4' (SHOW_JUDGE=1: the judge's verdicts on runs not labeled yet too)
 	$(PY) -m klaxon.evaluation report $$RUNS $${SHOW_JUDGE:+--show-judge}
 
-rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week6/ (his OK first): make rehearse-case CASE=false-alarm
+rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week8/ (his OK first): make rehearse-case CASE=false-alarm
 	$(PY) -m klaxon.evaluation rehearse "$$CASE" $${SEED:+--seed "$$SEED"}
 
 # The graders (week 5, item 2). RUN may name several folders, or a folder of runs: it is split on spaces, never pasted

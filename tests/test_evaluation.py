@@ -1371,14 +1371,15 @@ def test_the_false_alarm_warms_up_five_minutes_and_the_faults_keep_one():
 
 
 def test_a_suite_and_each_of_its_runs_record_version_2_and_the_report_says_week_6(monkeypatch, tmp_path):
-    assert evaluation.VERSION == 2 and evaluation.EVIDENCE == evaluation.REPO / "evidence" / "week6"
+    # Week 8: a suite goes to evidence/week8/ (tests/test_comparison.py), and its label names the version.
+    assert evaluation.VERSION == 2 and evaluation.EVIDENCE == evaluation.REPO / "evidence" / "week8"
     world = DockerStack()
     patch_suite(monkeypatch, world)
     argv = ["run", "--cases", "duplicate-delivery,false-alarm", "--seeds", "7", "--evidence-dir", str(tmp_path)]
     assert evaluation.main(argv) == 0
     [suite_folder] = tmp_path.iterdir()
     suite = json.loads((suite_folder / evaluation.SUITE_FILE).read_text())
-    assert suite["evaluation_version"] == 2 and "(evaluation, week 6)" in suite["label"]
+    assert suite["evaluation_version"] == 2 and "(evaluation, version 2)" in suite["label"]
     runs = [suite_folder / run["folder"] for run in suite["runs"]]
     assert [json.loads((run / fault_runs.RUN_FILE).read_text())["evaluation_version"] for run in runs] == [2, 2]
     made = evaluation.report([suite_folder])

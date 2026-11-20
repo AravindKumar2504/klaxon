@@ -25,8 +25,9 @@ the end, as in every fault run.
 A suite is one model and a list of cases and seeds, run one after another, seed by seed: a suite stopped early has the
 first seed of every case. It stops at the first run whose loop stopped in a way that says nothing of Klaxon's judgment
 and would likely happen again (the model could not answer, a seat's limit for one; the tools could not start; a
-crash), and at an interrupt. The runs left are said as not run, and nothing is run again on its own. Each run's evidence
-goes into the suite's folder in evidence/week6/ (week 5's runs: evidence/week5/), as a fault run's does; the suite's
+crash), and at an interrupt. The runs left are said as not run, and nothing is run again on its own: `--not-run-of`
+runs only what an earlier suite left not run, in its order (week 8). Each run's evidence goes into the suite's folder
+in evidence/week8/ (week 5's runs: evidence/week5/; week 6's: evidence/week6/), as a fault run's does; the suite's
 own file says what was planned and what came of each run, and the report is written there at the end.
 
 Version 2 of how the runs are made (week 6, after Aravind's review of week 5): the false alarm's stack runs 5 minutes
@@ -37,7 +38,8 @@ records its version (week 5's say nothing: version 1), and the report never coun
 Two loops (week 6, item 2): `--loop langgraph` runs a suite on the LangGraph loop (klaxon.agent.graph), the same loop
 as a graph; the plain loop is the default. Each run and suite records its loop and LangGraph's version (runs saved
 before name none: the plain loop), a LangGraph suite's folder ends in _langgraph, and the report never counts two
-loops in one row.
+loops in one row. A comparison (week 8): `--loops plain,langgraph,multi` runs, for each case and seed, each loop in
+turn, so anything that changes during a suite, such as the seat's limits, touches each loop alike.
 
 The report is worked out from saved runs, offline, so a grader can change and every result be graded again without a
 new run: per run, the verdict, the fix and the action, the gate, the times, the model calls, the cost, the damage; per
@@ -54,6 +56,8 @@ rehearsal, then a probe of the tools through the case's own client: the two dock
 Run: python -m klaxon.evaluation cases                                      calls nothing
      python -m klaxon.evaluation run --model ID [--cases A,B] [--seeds 7,8,9]  live, with Aravind's OK for each batch
          [--loop langgraph|multi]                                              on the LangGraph loop (week 6), or the multi-agent one (week 8)
+         [--loops plain,langgraph,multi]                                       week 8: for each case and seed, the loops in turn
+         [--not-run-of SUITE_FOLDER]                                           week 8: only what that suite left not run
      python -m klaxon.evaluation report FOLDER [FOLDER ...]                   offline
      python -m klaxon.evaluation rehearse CASE [--seed N]                      the stack, no model; his OK first
 """
@@ -95,7 +99,8 @@ VERSION = 2
 MODES = {1: "evaluation", 2: "evaluation, week 6"}
 # Week 6, item 5: a fault run on kind never shares a row with a Compose run (the review's finding 8).
 KIND_MODES = ("diagnosis only, week 6, on kind", "gated, week 6, on kind")
-EVIDENCE = REPO / "evidence" / "week6"
+# Where a suite goes: week 8's comparison. Week 5's runs are in evidence/week5/, week 6's in evidence/week6/.
+EVIDENCE = REPO / "evidence" / "week8"
 # Before the false alarm's quiet readings: 5 minutes of traffic (Aravind's choice, 2026-11-09; week 5: 60 s, so the
 # alert came 80 to 100 s after a fresh stack started, and most runs blamed a backlog from the restart). The faults keep
 # fault_runs.WARMUP_SECONDS, so their runs still compare with week 5's.
@@ -477,10 +482,11 @@ def run_case(
     parent: Path,
     binary: Path,
     loop_kind: str = loop.PLAIN,
+    name_loop: bool = False,
 ) -> dict:
     """One case with one seed and one model, live, on the stack as it is (the suite has made it fresh). Its evidence
     goes into a folder of its own in parent. Returns what came of it, for the suite's own file. loop_kind: the loop
-    that runs it (week 6), recorded with it."""
+    that runs it (week 6), recorded with it; name_loop: in a comparison, its folder's name ends in it (week 8)."""
     settings = traffic.Settings(rate=rate, seed=seed)
     argv = ["run", "--model", model, "--cases", case.name, "--seeds", str(seed)]
     argv += ["--steps", str(budgets.steps), "--tool-calls", str(budgets.tool_calls), "--rate", f"{rate:g}"]
@@ -490,7 +496,7 @@ def run_case(
     header = {"case": case.name, "seed": seed, "model": model, "fault_name": case.fault, "evaluation_version": VERSION}
     header |= loop.loop_header(loop_kind) | fault_runs._provenance(command)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-    folder = loop._new_folder(parent, f"{stamp}_{case.name}_seed{seed}")
+    folder = loop._new_folder(parent, f"{stamp}_{case.name}_seed{seed}" + (f"_{loop_kind}" if name_loop else ""))
     described = case.describe() | {"seed": seed, "model": model}
     fault = None if case.fault is None else faults.get(case.fault)
     record = fault_runs.Record(
@@ -533,7 +539,7 @@ def run_case(
         "stopped": record.stopped,
         "loop": None if record.loop is None else record.loop["reason"],
         "interrupted": interrupted,
-    }
+    } | ({"loop_kind": loop_kind} if name_loop else {})
 
 
 # A suite: one model, its cases and seeds, one run after another.
@@ -542,6 +548,24 @@ def run_case(
 def plan(cases: Sequence[Case], seeds: Sequence[int]) -> list[tuple[Case, int]]:
     """Seed by seed: every case with the first seed, then every case with the next."""
     return [(case, seed) for seed in seeds for case in cases]
+
+
+def plan_loops(cases: Sequence[Case], seeds: Sequence[int], loops: Sequence[str]) -> list[tuple[Case, int, str]]:
+    """A comparison (week 8): seed by seed and case by case, as plan does, and for each case and seed the loops in
+    turn, in the order given, so anything that changes during the suite, such as the seat's limits, touches each loop
+    alike (Aravind's choice, 2026-11-20)."""
+    return [(case, seed, loop_kind) for case, seed in plan(cases, seeds) for loop_kind in loops]
+
+
+def _named(case: Case, seed: int, on_loop: Sequence[str] = ()) -> str:
+    """A planned run, as a suite says it: its case and seed, and in a comparison its loop."""
+    return f"{case.name}, seed {seed}" + "".join(f", the {LOOP_WORDS[kind]}" for kind in on_loop)
+
+
+def _entry(planned: Sequence) -> dict:
+    """A planned run, as a suite's file lists it: its case and seed, and in a comparison its loop (week 8)."""
+    case, seed, *on_loop = planned
+    return {"case": case.name, "seed": seed} | ({"loop": on_loop[0]} if on_loop else {})
 
 
 def ends_the_suite(outcome: Mapping) -> str | None:
@@ -572,27 +596,26 @@ def run_suite(
     where = "before the first run"
     try:
         write(suite)
-        for case, seed in planned:
-            where = f"while the stack was made fresh for {case.name}, seed {seed}"
+        for case, seed, *on_loop in planned:  # in a comparison, each planned run names its loop (week 8)
+            named = _named(case, seed, on_loop)
+            where = f"while the stack was made fresh for {named}"
             try:
                 fresh_stack()
             except Exception as exc:  # docker gone, or a compose command that timed out: no run of it
                 suite["stopped"] = (
-                    f"the stack could not be made fresh for {case.name}, seed {seed}: {type(exc).__name__}:"
-                    f" {clean_text(str(exc), 300)}"
+                    f"the stack could not be made fresh for {named}: {type(exc).__name__}: {clean_text(str(exc), 300)}"
                 )
                 break
-            where = f"while {case.name}, seed {seed}, ran"
+            where = f"while {named}, ran"
             try:
-                outcome = run_one(case, seed)
+                outcome = run_one(case, seed, *on_loop)
             except Exception as exc:  # outside the run's own handling: its setup, or the saving of its evidence
                 suite["stopped"] = (
-                    f"{case.name}, seed {seed}, broke off outside its run: {type(exc).__name__}:"
-                    f" {clean_text(str(exc), 300)}"
+                    f"{named}, broke off outside its run: {type(exc).__name__}: {clean_text(str(exc), 300)}"
                 )
                 break
             suite["runs"].append(outcome)
-            where = f"after {case.name}, seed {seed}"
+            where = f"after {named}"
             why = ends_the_suite(outcome)
             if why is not None:
                 suite["stopped"] = f"after {outcome['folder']}, because {why}"
@@ -602,7 +625,7 @@ def run_suite(
         suite["stopped"] = f"interrupted {where}"
     finally:
         if suite["stopped"] is not None:
-            suite["not_run"] = [{"case": c.name, "seed": s} for c, s in planned[len(suite["runs"]) :]]
+            suite["not_run"] = [_entry(item) for item in planned[len(suite["runs"]) :]]
         write(suite)
     return suite
 
@@ -889,6 +912,7 @@ def summarize(rows: Sequence[Mapping]) -> list[dict]:
 
 
 LOOP_NAMES = {loop.LANGGRAPH: "LangGraph loop", loop.MULTI: "multi-agent loop"}  # week 6; week 8
+LOOP_WORDS = {loop.PLAIN: "plain loop", **LOOP_NAMES}  # each loop, as a comparison names it (week 8)
 
 
 def mode_cell(entry: Mapping) -> str:
@@ -1186,34 +1210,93 @@ def _cases() -> int:
     return 0
 
 
+def _loops(text: str) -> tuple[str, ...]:
+    """--loops (week 8): two loops or more, each once, in the order they take turns."""
+    named = tuple(part.strip() for part in text.split(","))
+    unknown = [name for name in named if name not in loop.LOOPS]
+    if unknown:
+        raise ValueError(f"no such loop: {', '.join(unknown)}; the loops are: {', '.join(loop.LOOPS)}")
+    if len(named) < 2 or len(set(named)) != len(named):
+        raise ValueError("--loops names two loops or more, each once, such as plain,langgraph,multi")
+    return named
+
+
+def rest_of(folder: Path) -> tuple[dict, list[tuple[Case, int, str]]]:
+    """An earlier suite, and what it left not run (week 8): its cases, seeds and loops, in its order, for a suite that
+    runs only those. Refused when its runs were made another way than this version's, or it left nothing."""
+    saved = json.loads((folder / SUITE_FILE).read_text())
+    if not isinstance(saved, dict) or not isinstance(saved.get("not_run"), list):
+        raise ValueError(f"{folder.name}'s {SUITE_FILE} does not list what it did not run")
+    version = saved.get("evaluation_version", 1)
+    if version != VERSION:
+        raise ValueError(f"{folder.name} ran version {version} of the evaluation, not version {VERSION}")
+    made_on = saved.get("loop_kind", loop.PLAIN)
+    planned = []
+    for entry in saved["not_run"]:
+        kind = entry.get("loop", made_on) if isinstance(entry, dict) else None
+        seed = entry.get("seed") if isinstance(entry, dict) else None
+        if kind not in loop.LOOPS or not isinstance(seed, int) or isinstance(seed, bool) or seed < 0:
+            raise ValueError(
+                f"{folder.name}'s {SUITE_FILE} lists a run Klaxon cannot plan: {clean_text(str(entry), 200)}"
+            )
+        planned.append((get_case(str(entry.get("case"))), seed, kind))
+    if not planned:
+        raise ValueError(f"{folder.name} left nothing not run")
+    return saved, planned
+
+
 def _run(args: argparse.Namespace) -> int:
     try:  # before any folder is made: a suite that cannot start leaves nothing behind, and touches nothing
-        cases, seeds = _names(args.cases), _seeds(args.seeds)
+        earlier = None
+        if args.not_run_of is not None:  # week 8: only what an earlier suite left not run, in its order
+            if any(value is not None for value in (args.cases, args.seeds, args.loop, args.loops)):
+                raise ValueError("--not-run-of plans its own cases, seeds and loops: name none of them with it")
+            earlier, planned = rest_of(args.not_run_of)
+            if args.model is not None and args.model != earlier.get("model"):
+                raise ValueError(f"{args.not_run_of.name} ran {earlier.get('model')}, not {args.model}")
+            model, loops = str(earlier.get("model")), tuple(dict.fromkeys(kind for _, _, kind in planned))
+        else:
+            cases = _names(args.cases if args.cases is not None else "all")
+            seeds = _seeds(args.seeds if args.seeds is not None else ",".join(str(seed) for seed in SEEDS))
+            model = args.model or DEFAULT_MODEL
+            loops = _loops(args.loops) if args.loops is not None else (args.loop or loop.PLAIN,)
+            planned = plan(cases, seeds) if args.loops is None else plan_loops(cases, seeds, loops)
         budgets = Budgets(steps=args.steps, tool_calls=args.tool_calls)
-        traffic.Settings(rate=args.rate, seed=seeds[0])
-        ran_by = loop.loop_header(args.loop)  # week 6: the loop that will run them, refused here if it cannot
-        binary = fault_runs.preflight(args.model)
+        traffic.Settings(rate=args.rate, seed=planned[0][1])
+        headers = [loop.loop_header(kind) for kind in loops]  # each loop that will run them, refused here if it cannot
+        binary = fault_runs.preflight(model)
     except (ValueError, ModelError, McpError, loop.ToolsRefused, StackError) as exc:
         print(f"Not started, and nothing was touched: {clean_text(str(exc), 300)}", file=sys.stderr)
         return 2
-    planned = plan(cases, seeds)
+    comparison = len(planned[0]) == 3  # each planned run names its loop (week 8)
+    if comparison:
+        ran_by = {"loop_kinds": list(loops)} | {k: v for h in headers for k, v in h.items() if k != "loop_kind"}
+    else:
+        ran_by = headers[0]
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-    named = "" if args.loop == loop.PLAIN else f"_{args.loop}"
-    folder = loop._new_folder(args.evidence_dir, f"{stamp}_suite_{args.model}{named}")
+    named = ("" if loops == (loop.PLAIN,) else "_" + "-".join(loops)) + ("_rest" if earlier else "")
+    folder = loop._new_folder(args.evidence_dir, f"{stamp}_suite_{model}{named}")
+    turns = (
+        f", and for each case and seed the loops in turn ({', '.join(LOOP_WORDS[k] for k in loops)})"
+        if comparison
+        else ""
+    )
     suite = {
         "label": (
-            f"A suite of Klaxon's evaluation runs ({MODES[VERSION]}): one model, its cases and seeds, each run on a"
-            " fresh stack (make reset, then make up), live through Claude Code on Aravind's seat. In each run code plans"
-            " any action the diagnosis names, nobody is asked, and nothing runs."
+            f"A suite of Klaxon's evaluation runs (evaluation, version {VERSION}): one model, its cases and seeds{turns},"
+            " each run on a fresh stack (make reset, then make up), live through Claude Code on Aravind's seat. In each"
+            " run code plans any action the diagnosis names, nobody is asked, and nothing runs."
         ),
         "evaluation_version": VERSION,
         **ran_by,
-        "model": args.model,
+        "model": model,
         "budgets": asdict(budgets),
         "rate": args.rate,
-        "planned": [{"case": case.name, "seed": seed} for case, seed in planned],
+        "planned": [_entry(item) for item in planned],
         "started_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
+    if earlier is not None:
+        suite["rest_of"] = clean_text(str(args.not_run_of), 300)
     print(f"The suite's folder: {clean_text(str(folder))}; {len(planned)} runs planned", flush=True)
 
     def write(value: dict) -> None:  # whole or not at all: a temporary file, then moved into place
@@ -1221,9 +1304,10 @@ def _run(args: argparse.Namespace) -> int:
         temporary.write_text(json.dumps(value, indent=2, default=str) + "\n")
         os.replace(temporary, folder / SUITE_FILE)
 
-    def run_one(case: Case, seed: int) -> dict:
-        print(f"\n== {case.name}, seed {seed} ==", flush=True)
-        return run_case(case, seed, args.model, budgets, args.rate, folder, binary, args.loop)
+    def run_one(case: Case, seed: int, *on_loop: str) -> dict:
+        print(f"\n== {_named(case, seed, on_loop)} ==", flush=True)
+        kind = on_loop[0] if on_loop else loops[0]
+        return run_case(case, seed, model, budgets, args.rate, folder, binary, kind, name_loop=bool(on_loop))
 
     with fault_runs.stops_as_interrupts():  # a stop signal between runs stops the suite as Ctrl-C does
         done = run_suite(planned, suite, write, fresh_stack, run_one)
@@ -1291,12 +1375,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     actions = parser.add_subparsers(dest="action", required=True)
     actions.add_parser("cases", help="the cases, each with its right answer and the action that fits; calls nothing")
     live_ = actions.add_parser("run", help="a suite of live runs, each on a fresh stack; Claude on Aravind's seat")
-    live_.add_argument("--model", default=DEFAULT_MODEL)
-    live_.add_argument("--cases", default="all", help="all, or names separated by commas")
-    live_.add_argument("--seeds", default=",".join(str(seed) for seed in SEEDS))
+    live_.add_argument("--model", help=f"the model (default {DEFAULT_MODEL}; with --not-run-of, the suite's)")
+    live_.add_argument("--cases", help="all (the default), or names separated by commas")
+    live_.add_argument("--seeds", help="seeds separated by commas (default " + ",".join(map(str, SEEDS)) + ")")
     live_.add_argument("--steps", type=int, default=STEPS)
     live_.add_argument("--tool-calls", type=int, default=TOOL_CALLS)
-    live_.add_argument("--loop", choices=loop.LOOPS, default=loop.PLAIN, help="the loop that runs them (week 6)")
+    loops = live_.add_mutually_exclusive_group()
+    loops.add_argument("--loop", choices=loop.LOOPS, help="the loop that runs them (week 6; default: the plain one)")
+    loops.add_argument("--loops", help="week 8: two loops or more, such as plain,langgraph,multi, in turn for each run")
+    live_.add_argument("--not-run-of", type=Path, help="week 8: run only what this suite's folder left not run")
     again = actions.add_parser("report", help="the report, from saved runs; offline")
     again.add_argument("folders", type=Path, nargs="+", help="run folders, or folders of them (a suite's, a week's)")
     again.add_argument("--write", type=Path, help="also write report.json and report.md into this folder")
