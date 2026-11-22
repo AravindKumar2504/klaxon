@@ -3213,7 +3213,16 @@ MUTANTS = [
      "        unseen = not (folder / labels.LABEL_FILE).exists()", False),
     # Week 5, item 3: the pick for his next labels.
     ("a pick takes no disagreement first", "src/klaxon/evaluation.py",
-     '    must = [folder for folder, row in rows if row["graders_disagree"]]', "    must = []", False),
+     '    must = [folder for folder, row in rows if row["graders_disagree"] or row["case"] in ALWAYS_PICKED]',
+     '    must = [folder for folder, row in rows if row["case"] in ALWAYS_PICKED]', False),
+    # Week 8, item 3: every false-alarm and missing-deploys run is his to label (his default, kept 2026-11-20).
+    ("a pick takes no false-alarm or missing-deploys run first", "src/klaxon/evaluation.py",
+     'ALWAYS_PICKED = ("false-alarm", "missing-deploys")', "ALWAYS_PICKED = ()", False),
+    ("a pick takes the false-alarm runs, not the missing-deploys ones", "src/klaxon/evaluation.py",
+     'ALWAYS_PICKED = ("false-alarm", "missing-deploys")', 'ALWAYS_PICKED = ("false-alarm",)', False),
+    ("a pick may draw a run it takes anyway", "src/klaxon/evaluation.py",
+     '    rest = [folder for folder, row in rows if not (row["graders_disagree"] or row["case"] in ALWAYS_PICKED)]',
+     '    rest = [folder for folder, row in rows if not row["graders_disagree"]]', False),
     ("a pick may take a run he has labeled", "src/klaxon/evaluation.py",
      '        if row["verdict"] is None or row["aravind"] is not None:', '        if row["verdict"] is None:', False),
     ("a pick goes ahead with runs not judged", "src/klaxon/evaluation.py",

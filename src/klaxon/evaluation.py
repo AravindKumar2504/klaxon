@@ -986,10 +986,12 @@ def _cell(text: object) -> str:
     return clean_text(str(text), 300).replace("|", "/")
 
 
-# Aravind's next labels (week 5, item 3): every run the graders disagree on, and runs drawn at random
+# Aravind's next labels (week 5, item 3): every run the graders disagree on, and runs drawn at random. Since week 8,
+# item 3, also every false-alarm and missing-deploys run.
 
 PICK_SEED = 11  # the seed of the random part of each pick (week 5, item 3)
-MIN_DRAWN = 3  # at least this many drawn at random, so a pick is never only the runs the graders disagree on
+MIN_DRAWN = 3  # at least this many drawn at random, so a pick is never only the runs it must take
+ALWAYS_PICKED = ("false-alarm", "missing-deploys")  # week 8, item 3 (his default, kept 2026-11-20): each such run
 
 
 class NotJudged(ValueError):
@@ -997,10 +999,11 @@ class NotJudged(ValueError):
 
 
 def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED, passed_over: list[str] | None = None) -> list[Path]:
-    """The runs Aravind labels next: every run where the rule and the judge give different verdicts on the cause, then
-    runs drawn at random (a fixed seed) from his other runs, up to total, and never fewer than MIN_DRAWN. Only runs
-    that ended in a diagnosis and that he has not labeled. Sorted by folder, so the list says nothing of which runs
-    disagree. NotJudged when such a run has no judgment a report would count."""
+    """The runs Aravind labels next: every run where the rule and the judge give different verdicts on the cause, and
+    every run of a case in ALWAYS_PICKED (week 8), then runs drawn at random (a fixed seed) from his other runs, up to
+    total, and never fewer than MIN_DRAWN. Only runs that ended in a diagnosis and that he has not labeled. Sorted by
+    folder, so the list says nothing of which runs disagree. NotJudged when such a run has no judgment a report would
+    count."""
     rows = []
     for folder in grading.run_folders(paths):
         try:
@@ -1015,8 +1018,8 @@ def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED, passed_over: 
     unjudged = [folder.name for folder, row in rows if row["judge"] is None]
     if unjudged:
         raise NotJudged(f"{len(unjudged)} runs are not judged yet (make judge first), such as {unjudged[0]}")
-    must = [folder for folder, row in rows if row["graders_disagree"]]
-    rest = [folder for folder, row in rows if not row["graders_disagree"]]
+    must = [folder for folder, row in rows if row["graders_disagree"] or row["case"] in ALWAYS_PICKED]
+    rest = [folder for folder, row in rows if not (row["graders_disagree"] or row["case"] in ALWAYS_PICKED)]
     random.Random(seed).shuffle(rest)
     return sorted(must + rest[: max(total - len(must), MIN_DRAWN)])
 
@@ -1335,8 +1338,8 @@ def _pick(args: argparse.Namespace) -> int:
         return 2
     print(
         f"Picked {len(chosen)} runs, sorted by folder: every run where the rule and the judge give different verdicts"
-        f" on the cause, and runs drawn at random (seed {PICK_SEED}). Which is which is not said. In your own"
-        " terminal:\n"
+        f" on the cause, every {' and '.join(ALWAYS_PICKED)} run, and runs drawn at random (seed {PICK_SEED})."
+        " Which runs the graders disagree on is not said. In your own terminal:\n"
     )
     print("make label RUN=" + shlex.quote(" ".join(typed(path) for path in chosen)))
     return 0
@@ -1390,7 +1393,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     again.add_argument(
         "--show-judge", action="store_true", help="show the judge's verdicts on runs Aravind has not labeled too"
     )
-    chosen = actions.add_parser("pick", help="the runs for his next make label: every disagreement, and a draw")
+    chosen = actions.add_parser(
+        "pick", help="his next make label's runs: every disagreement, every false-alarm and missing-deploys run, a draw"
+    )
     chosen.add_argument("folders", type=Path, nargs="+", help="run folders, or folders of them")
     chosen.add_argument("--total", type=int, default=17, help="how many to pick, at least (default 17)")
     rehearsal = actions.add_parser("rehearse", help="one case under traffic, with the rules and no model")

@@ -1277,6 +1277,24 @@ def test_a_pick_takes_every_disagreement_then_a_seeded_draw_sorted_and_never_a_l
     assert [folder.name for folder in evaluation.pick([tmp_path], total=40)] == list("abcdefg")  # every one but h
 
 
+def test_a_pick_takes_every_false_alarm_and_missing_deploys_run_and_still_draws(tmp_path, monkeypatch):
+    # Week 8, item 3 (his default, kept 2026-11-20): every run of those two cases is his to label, even where the
+    # graders agree. The draw still takes at least MIN_DRAWN of his other runs, and no run comes twice. Made-up rows.
+    cases = {"a": "false-alarm", "b": "missing-deploys", "c": "false-alarm"}
+    cases |= dict.fromkeys("defghij", "duplicate-delivery")
+    agree = {"verdict": "names the cause", "judge": "names the cause", "aravind": None, "graders_disagree": False}
+    rows = {name: {"case": case, **agree} for name, case in cases.items()}
+    rows["e"]["graders_disagree"] = True  # e: the graders disagree
+    rows["c"]["aravind"] = "partly"  # c: he has labeled it already
+    monkeypatch.setattr(evaluation.grading, "run_folders", lambda paths: [tmp_path / name for name in rows])
+    monkeypatch.setattr(evaluation, "run_row", lambda folder: rows[folder.name])
+    picked = [folder.name for folder in evaluation.pick([tmp_path], total=1)]
+    assert {"a", "b", "e"} <= set(picked) and "c" not in picked  # both cases and the disagreement; never a labeled run
+    assert len(picked) == len(set(picked)) == 3 + evaluation.MIN_DRAWN and picked == sorted(picked)
+    assert [folder.name for folder in evaluation.pick([tmp_path], total=40)] == list("abdefghij")  # each once, but c
+    assert set(evaluation.ALWAYS_PICKED) == {"false-alarm", "missing-deploys"}
+
+
 def test_make_label_pick_prints_the_command_never_a_verdict_and_refuses_runs_not_judged(tmp_path, capsys):
     runs = [saved_run(tmp_path / name) for name in ("run-a", "run-b", "run-c", "run-d")]
     assert evaluation.main(["pick", str(tmp_path)]) == 2  # none judged: a disagreement could be missed

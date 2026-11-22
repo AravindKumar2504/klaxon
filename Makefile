@@ -197,7 +197,7 @@ label: ## your own verdict on a run's diagnosis, typed in your terminal (refused
 	@test -n "$$RUN" || { echo "make label RUN=<saved runs, or folders of them>: RUN is missing" >&2; exit 2; }
 	$(PY) -m klaxon.labels $$RUN
 
-label-pick: ## the runs for your next make label: every run the graders disagree on, and a random draw (TOTAL=17); prints the command, never a verdict
+label-pick: ## the runs for your next make label: every run the graders disagree on, every false-alarm and missing-deploys run, and a random draw (TOTAL=17); prints the command, never a verdict
 	$(PY) -m klaxon.evaluation pick $${RUNS:-evidence/week5} $${TOTAL:+--total "$$TOTAL"}
 
 review-postmortem: ## your marks on a postmortem draft, paragraph by paragraph, typed in your terminal (refused without one), saved beside it once: make review-postmortem RUN=evidence/week4
