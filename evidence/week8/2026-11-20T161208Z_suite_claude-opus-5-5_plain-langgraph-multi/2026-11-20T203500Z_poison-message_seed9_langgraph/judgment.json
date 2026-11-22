@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "poison-message",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "a deploy of the ledger consumer that retries unreadable messages forever (BAD_EVENTS=retry), then one unreadable event from the provider (a payment.updated with its amount as a decimal string): the ledger consumer is stuck on it, and books nothing behind it",
+    "remedy": "roll the ledger consumer back to dead-lettering: the poison goes to the dead-letter topic, the backlog drains, and the money check passes again"
+  },
+  "diagnosis_sha256": "276175c1435cd2fec288fbe2739ecb09a7b931703d6b15894447c57acd40a56d",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It names the ledger-consumer deploy with BAD_EVENTS=retry and the one malformed-amount provider event at provider-events/1@129 that it retries forever, so nothing behind it gets booked; it does not say the amount was a decimal string.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-20T23:02:18.825Z",
+      "sha256": "33a2a5614657fd5c42c31d28ad3fab67f58ced40403f48b960a454e6da1fff24"
+    },
+    "call": {
+      "reply_sha256": "33a2a5614657fd5c42c31d28ad3fab67f58ced40403f48b960a454e6da1fff24",
+      "problems": []
+    }
+  }
+}

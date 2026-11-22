@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "The ledger consumer books a second time every webhook the provider sends again: its dedupe is gone (fault 1's recorded cause, which a deploy brought). Docker did not answer the two tools that read it, so the deploy list and the containers' health could not be read: a right diagnosis says what it could not check, and claims no deploy it has no evidence for. Rolling the ledger consumer back still fits the remedy: code plans a rollback from the deploy log, not from the tools.",
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "diagnosis_sha256": "3c5815e5a11359326d169776a5c05f45eda08f1ebf7771be4dc924b9d83bffdf",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It finds that ledger-consumer's duplicate check no longer stops redelivered webhooks, so they are booked twice; it says the deploy history could not be read and claims no deploy, and its rollback plus reversal of transactions 282 and 370 carries out the remedy.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-20T23:01:59.683Z",
+      "sha256": "30a83d3a3d1882d5436dcb42028b981afd2ac0c84e378bf72ac7e8df70682a29"
+    },
+    "call": {
+      "reply_sha256": "30a83d3a3d1882d5436dcb42028b981afd2ac0c84e378bf72ac7e8df70682a29",
+      "problems": []
+    }
+  }
+}

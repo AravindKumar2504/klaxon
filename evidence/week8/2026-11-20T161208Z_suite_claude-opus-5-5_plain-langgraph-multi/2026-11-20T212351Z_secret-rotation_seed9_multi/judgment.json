@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "secret-rotation",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "a deploy of the webhook receiver with a rotated secret the provider does not sign with (WEBHOOK_SECRET_VERSION=v2, while the provider signs with v1): every webhook fails its signature check and is refused with a 400, so no event reaches Kafka, and the provider keeps sending them again, with backoff",
+    "remedy": "roll the webhook receiver back to v1 (or accept both versions until the provider signs with v2): the provider sends every refused webhook again, and the books catch up by themselves"
+  },
+  "diagnosis_sha256": "2b6e4f35eb61c85f87170bd812ca0aa3ce6d7bdedb2df9daf4fdc5b89e3f7d3b",
+  "judgment": {
+    "verdict": "names the cause",
+    "fix_fits": true,
+    "why": "It names the webhook-receiver redeploy with WEBHOOK_SECRET_VERSION=v2 while the provider still signs with the old secret, so every webhook fails its signature check, nothing reaches provider-events, and the provider keeps resending; it also states plainly what it could not check.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-20T23:03:03.070Z",
+      "sha256": "fa4244463fc0f8698479b9bc7d8510f398fc921cfa92ed209ab871da5606aed4"
+    },
+    "call": {
+      "reply_sha256": "fa4244463fc0f8698479b9bc7d8510f398fc921cfa92ed209ab871da5606aed4",
+      "problems": []
+    }
+  }
+}

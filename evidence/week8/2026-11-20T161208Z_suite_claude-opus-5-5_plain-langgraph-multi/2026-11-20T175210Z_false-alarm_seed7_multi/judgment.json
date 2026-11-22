@@ -1,0 +1,32 @@
+{
+  "label": "A judgment of one diagnosis by Claude as a judge (klaxon.judge): a model's, not a rule's or a person's. It saw the right answer and the remedy of the system the diagnosis was made on, and the whole diagnosis; never which model wrote it, nor the rule's verdict. A recorded response, in judge-recording.jsonl.",
+  "judge": {
+    "model": "claude-opus-5-5",
+    "version": 1,
+    "sha256": "c0640972af7ad2f3f551bf6494fb285e2f822c37208a88b3cca22c5d0d940200"
+  },
+  "graded": {
+    "name": "false-alarm",
+    "rubric_version": 4
+  },
+  "right_answer": {
+    "cause": "Nothing is wrong: the ledger consumer group is not behind (under traffic its lag stays near 0), so the alert is false. A right diagnosis says so, from a tool that read the lag, proposes no fix (kind none) and names no action.",
+    "remedy": "nothing to fix: the alert was false, so no fix (of kind none) and no action"
+  },
+  "diagnosis_sha256": "c704a748caac8c0d8b470b370901bf2c091644aff841997dfdaa8c13456aac48",
+  "judgment": {
+    "verdict": "partly",
+    "fix_fits": true,
+    "why": "It reads the ledger lag as 0 around the firing and proposes no service change, but it does not firmly call the alert false (it leaves a real spike open) and it names actions, such as correcting the rule and checking Kafka offsets.",
+    "problems": [],
+    "reply": {
+      "model": "claude-opus-5-5",
+      "received_at": "2026-11-20T23:00:12.679Z",
+      "sha256": "3c92d41bbfa593691db0a18c80eb15986e57629fba771742d47ec98dc1e6d0f3"
+    },
+    "call": {
+      "reply_sha256": "3c92d41bbfa593691db0a18c80eb15986e57629fba771742d47ec98dc1e6d0f3",
+      "problems": []
+    }
+  }
+}
