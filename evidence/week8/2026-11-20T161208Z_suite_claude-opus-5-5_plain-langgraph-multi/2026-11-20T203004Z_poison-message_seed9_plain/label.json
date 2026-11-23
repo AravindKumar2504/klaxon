@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "poison-message",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "9fed6f8602339860e40f73ddc2bba11566f124ad4323c294612a546e39caea2f",
+  "diagnosis_sha256": "1b7285f9b95f3a29997fbeca07b33b885be3089e3590f5597a4b2efc352b2dcd",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Rolling back to the previous dead-lettering configuration lets the consumer skip the poison message and drain the backlog, followed by the money check.",
+  "at": "2026-11-23T03:54:42Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "15f1d2ff3e2644939168a42a828438cfe813c9eb56fe9f3b47878738207296fb",
+  "verdict": "partly",
+  "fix_fits": true,
+  "why": "It recommends rolling back the ledger consumer to restore idempotency and separately reversing duplicate postings, which addresses both future and existing damage.",
+  "at": "2026-11-23T03:47:02Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "c256eee5bc438ae932ec2139a7c22be2ede430e733463575a545f571c0c4dfe4",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Rolling back restores the idempotent handler, and reversing the duplicate transactions repairs the existing ledger damage separately.",
+  "at": "2026-11-23T03:48:59Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "poison-message",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "9fed6f8602339860e40f73ddc2bba11566f124ad4323c294612a546e39caea2f",
+  "diagnosis_sha256": "3f7b6d6140e34fdeb7ce294c80e5c4b0ec03fc5ff5568046dc9321c15724fb7a",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "It changes BAD_EVENTS back to dead_letter while preserving the idempotent handler, allowing the poison event to be skipped and the backlog to drain.",
+  "at": "2026-11-23T03:50:15Z",
+  "how": "typed at a terminal"
+}

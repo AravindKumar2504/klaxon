@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "d6705561657b01f9d96340da9c3b2eebb5ffaaeffa671b0f77642dae713f232e",
+  "verdict": "partly",
+  "fix_fits": true,
+  "why": "Because it proposes repairing the duplicate transaction and restoring reliable deduplication, while acknowledging that the rollback depends on confirming a previous deploy and that Docker checks were unavailable.",
+  "at": "2026-11-23T03:40:54Z",
+  "how": "typed at a terminal"
+}

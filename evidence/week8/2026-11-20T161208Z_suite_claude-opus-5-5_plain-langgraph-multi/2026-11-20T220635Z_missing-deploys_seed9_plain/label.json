@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "f94e1681ee7969360c44c4ec302bf96e554cf02d7fb14f4e51da2b8737b5552f",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Rolling back restores deduplication, while reversing transaction 275 repairs the duplicate posting separately and preserves ledger balance.",
+  "at": "2026-11-23T03:44:21Z",
+  "how": "typed at a terminal"
+}

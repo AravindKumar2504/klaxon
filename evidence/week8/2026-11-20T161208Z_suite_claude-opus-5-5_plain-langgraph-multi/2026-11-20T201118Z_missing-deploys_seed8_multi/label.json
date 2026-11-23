@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "missing-deploys",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "a1cbae171c623974f719e798bed55d85cc614a6611e96f752eb76e06b375ce1e",
+  "diagnosis_sha256": "3c5815e5a11359326d169776a5c05f45eda08f1ebf7771be4dc924b9d83bffdf",
+  "verdict": "partly",
+  "fix_fits": true,
+  "why": "It recommends rolling back to restore deduplication and reversing transactions 282 and 370 separately to repair the existing duplicate postings.",
+  "at": "2026-11-23T03:49:24Z",
+  "how": "typed at a terminal"
+}

@@ -1,0 +1,14 @@
+{
+  "label": "A person's verdict on one run's diagnosis (klaxon.labels), typed at a terminal by make label: a person's, not a rule's or a model's. Shown the right answer and the remedy of the system the run was made on, and the whole diagnosis; never a grader's verdict, nor which model wrote it.",
+  "graded": {
+    "name": "secret-rotation",
+    "rubric_version": 4
+  },
+  "right_answer_sha256": "d7ff1e8d3e74adaea562fe14069079d785336b9f80abb32f9c609382317abec0",
+  "diagnosis_sha256": "75ebd7653c1142809f63b72d2bc66b17ecb1ac840415aa14b32e2842c2c1e8d1",
+  "verdict": "names the cause",
+  "fix_fits": true,
+  "why": "Rolling back the receiver to v1 restores signature verification, allowing the provider's retries to be accepted and the backlog to drain without losing events.",
+  "at": "2026-11-23T03:43:20Z",
+  "how": "typed at a terminal"
+}
