@@ -4282,6 +4282,43 @@ MUTANTS = [
      False),
     ("a run's stack fingerprint leaves out the Go receiver", "src/klaxon/demo/live.py",
      '    folders = ("docker", "go", "requirements")', '    folders = ("docker", "requirements")', False),
+    # Week 8, item 4 (CSYE 7374 only): OpenHands on fault 1, Klaxon's side of it and the runner's fixed parts.
+    ("openhands: a service name of any characters reaches LogQL", "src/klaxon/openhands_task.py",
+     "        if isinstance(name, str) and SERVICE.fullmatch(name):", "        if isinstance(name, str):", False),
+    ("openhands: a metric name of any characters reaches PromQL", "src/klaxon/openhands_task.py",
+     "and METRIC.fullmatch(name)][:METRICS_KEPT]", "][:METRICS_KEPT]", False),
+    ("openhands: a trace two searches found is asked for twice", "src/klaxon/openhands_task.py",
+     "TRACE_ID.fullmatch(trace) and trace not in found:", "TRACE_ID.fullmatch(trace):", False),
+    ("openhands: a question with no answer is saved as answered", "src/klaxon/openhands_task.py",
+     '        saved |= {"result": answer} if error is None else {"error": error}',
+     '        saved |= {"result": answer}', False),
+    ("openhands: an answer read from words around its JSON is said to be read strictly",
+     "src/klaxon/openhands_task.py", "calls, offered)), LAST_BLOCK", "calls, offered)), STRICT", False),
+    ("openhands: a tool call it asks for passes as its answer", "src/klaxon/openhands_task.py",
+     "    return contract.Reading(reading.value, (ASKED_FOR_A_TOOL,)) if reading.call is not None else reading",
+     "    return reading", False),
+    ("openhands: a run at its step limit reads as a bad reply", "src/klaxon/openhands_task.py",
+     '    if "iteration" in said:', '    if "no such stop" in said:', False),
+    ("openhands: a run with no diagnosis counts as not run", "src/klaxon/openhands_task.py",
+     '    return "invalid_replies"', '    return "model_error"', False),
+    ("openhands: a run is saved over an earlier one", "src/klaxon/openhands_task.py",
+     "    if (folder / fault_runs.RUN_FILE).exists():", "    if False:", False),
+    ("openhands: its label leaves out that it is not Claude", "src/klaxon/openhands_task.py",
+     "\"A local model's run, not Claude's (week 8,", "\"A local model's run (week 8,", False),
+    ("openhands: Ollama is asked for off this Mac", "src/klaxon/openhands_task.py",
+     'OLLAMA = "http://127.0.0.1:11434"', 'OLLAMA = "http://0.0.0.0:11434"', False),
+    ("openhands: the sandbox mounts the data writable", "experiments/openhands/run_openhands.py",
+     'volumes=[f"{data}:{MOUNT}:ro"]', 'volumes=[f"{data}:{MOUNT}"]', False),
+    ("openhands: the agent gets a terminal", "experiments/openhands/run_openhands.py",
+     'TOOLS = ("glob", "grep", "planning_file_editor")',
+     'TOOLS = ("glob", "grep", "planning_file_editor", "terminal")', False),
+    ("openhands: the sandbox image is not pinned", "experiments/openhands/run_openhands.py",
+     'IMAGE = f"ghcr.io/openhands/agent-server:{SDK}-python"',
+     'IMAGE = "ghcr.io/openhands/agent-server:latest-python"', False),
+    ("openhands: the hook lets every tool through", "experiments/openhands/run_openhands.py",
+     "else 2)' || exit 2\"", "else 0)' || exit 2\"", False),
+    ("openhands: the hook lets a tool through when it cannot tell", "experiments/openhands/run_openhands.py",
+     "else 2)' || exit 2\"", "else 2)'\"", False),
 ]
 
 
@@ -4396,8 +4433,9 @@ def main() -> int:
     # requirements/ since week 6, items 2 and 3: a test reads the LangGraph lock, and some mutants break it; and
     # kind-up's image tag reads the lock file, as its tests do. Week 8: go/, the Go receiver (its mutants, its shared
     # table of cases, which a Python test reads too, and kind-up's second tag), and .github/, which a test reads.
+    # Week 8, item 4: experiments/, OpenHands' runner and its pins, which tests read and some mutants break.
     for item in ("src", "tests", "docker", "deploy", "evidence", "requirements", "scripts", "compose.yaml",
-                 "pyproject.toml", "Makefile", ".gitignore", "go", ".github"):
+                 "pyproject.toml", "Makefile", ".gitignore", "go", ".github", "experiments"):
         src = repo / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
 

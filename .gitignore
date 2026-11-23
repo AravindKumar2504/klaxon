@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-openhands/
 venv/
 .pytest_cache/
 .mypy_cache/

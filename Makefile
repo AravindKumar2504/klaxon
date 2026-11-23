@@ -29,7 +29,8 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 	claude-command claude-check loop-prompt loop-graph investigate replay-run alerts alerts-under-traffic investigate-fault grade-run \
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
 	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration \
-	kind-up kind-down kind-ps kind-check kind-reader panel
+	kind-up kind-down kind-ps kind-check kind-reader panel \
+	openhands-venv openhands-snapshot openhands-run openhands-task openhands-compare
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -54,7 +55,7 @@ test-go: local-docker-only ## the Go receiver's checks in the official golang im
 		go vet ./... && go test -count=1 ./...'
 
 lint: ## ruff: style and common mistakes
-	.venv/bin/ruff check src tests scripts
+	.venv/bin/ruff check src tests scripts experiments
 	.venv/bin/ruff format --check src/klaxon/patient/services src/klaxon/patient/stack.py src/klaxon/checks/live.py \
 		src/klaxon/demo/live.py src/klaxon/demo/lost_answer.py src/klaxon/demo/under_traffic.py src/klaxon/traffic.py \
 		tests/services tests/integration tests/e2e tests/test_live_check.py tests/test_payments_match_provider.py \
@@ -67,7 +68,7 @@ lint: ## ruff: style and common mistakes
 		src/klaxon/labels.py src/klaxon/calibration.py tests/test_judge.py tests/test_labels.py tests/test_calibration.py \
 		src/klaxon/patient/cluster.py tests/test_cluster.py tests/test_rollback_on_kind.py tests/test_loop_choice.py \
 		src/klaxon/panel tests/test_panel.py tests/test_panel_live.py tests/test_dev_lock.py tests/test_comparison.py \
-		tests/test_go_receiver.py
+		tests/test_go_receiver.py src/klaxon/openhands_task.py tests/test_openhands_task.py experiments/openhands
 
 panel: ## the web panel on 127.0.0.1 (PORT=8090; ALSO=<folder>, such as make gate-demo's): it shows runs, changes nothing (week 7)
 	$(PY) -m klaxon.panel --port $(or $(PORT),8090) $(if $(ALSO),--also $(ALSO))
@@ -191,6 +192,25 @@ eval-report: ## the evaluation's report, worked out offline from saved runs: mak
 
 rehearse-case: ## one evaluation case under traffic, with the rules and no model, saved to evidence/week8/ (his OK first): make rehearse-case CASE=false-alarm
 	$(PY) -m klaxon.evaluation rehearse "$$CASE" $${SEED:+--seed "$$SEED"}
+
+# OpenHands on fault 1 (week 8, item 4; for CSYE 7374 only): its own agent, on qwen3:8b in Ollama on this Mac, with no
+# money and no key. Its SDK lives in a venv of its own, so Klaxon's dependencies do not change. Each step but the last
+# two needs his OK first. OpenHands never touches the stack: it reads what the read-only tools answered at the alert.
+openhands-venv: ## OpenHands' SDK in a venv of its own, .venv-openhands: four packages, each pinned at 1.60.1 (his OK first)
+	python3.12 -m venv .venv-openhands
+	.venv-openhands/bin/pip install --disable-pip-version-check -r experiments/openhands/requirements.txt
+
+openhands-snapshot: local-docker-only ## fault 1 on a fresh stack; at its alert, the read-only tools' answers saved for OpenHands, then the stack stopped; no model (his OK first): make openhands-snapshot SEED=7
+	$(PY) -m klaxon.openhands_task snapshot $${SEED:+--seed "$$SEED"}
+
+openhands-run: local-docker-only ## OpenHands on a saved snapshot, in its sandbox, on qwen3:8b (OLLAMA_CONTEXT_LENGTH=24576 ollama serve first; his OK first): make openhands-run RUN=evidence/week8/openhands/<folder>
+	$(PY) -m klaxon.openhands_task run "$$RUN"
+
+openhands-task: ## the exact task OpenHands gets for a saved snapshot; calls nothing: make openhands-task RUN=evidence/week8/openhands/<folder>
+	$(PY) -m klaxon.openhands_task task "$$RUN"
+
+openhands-compare: ## OpenHands' runs beside the night's 9 on fault 1: the rule, the judge, his labels; calls nothing
+	$(PY) -m klaxon.openhands_task compare
 
 # The graders (week 5, item 2). RUN may name several folders, or a folder of runs: it is split on spaces, never pasted
 # into the shell's text.

@@ -1,0 +1,8 @@
+# OpenHands' Software Agent SDK, for week 8's item 4 (CSYE 7374 only), in a venv of its own: make openhands-venv.
+# Klaxon's own dependencies do not change. All four at 1.60.1 (on PyPI since 2026-11-05), the release of the sandbox
+# image the runner uses, ghcr.io/openhands/agent-server:1.60.1-python. openhands-agent-server is pinned too: left
+# out, pip takes the newest, which need not match the image.
+openhands-sdk==1.60.1
+openhands-tools==1.60.1
+openhands-workspace==1.60.1
+openhands-agent-server==1.60.1
