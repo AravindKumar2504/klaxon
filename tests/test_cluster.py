@@ -29,7 +29,8 @@ KIND = yaml.safe_load(cluster.CONFIG.read_text())
 SECRET = next(o for o in OBJECTS if o["kind"] == "Secret")
 WORKLOADS = {o["metadata"]["name"]: o for o in OBJECTS if o["kind"] in ("Deployment", "StatefulSet", "Job")}
 SERVICE_OBJECTS = {o["metadata"]["name"]: o for o in OBJECTS if o["kind"] == "Service"}
-OURS = "klaxon-patient:dev"
+PATIENT, RECEIVER = "klaxon-patient:dev", "klaxon-receiver:dev"  # the receiver's, in Go, since week 8
+OURS = (PATIENT, RECEIVER)
 
 
 def resolved(value: object) -> str:
@@ -94,7 +95,7 @@ def test_each_runs_compose_yamls_image_command_and_environment(name):
 @pytest.mark.parametrize("name", sorted(SERVICES))
 def test_our_image_is_never_pulled_and_each_other_image_is_pinned(name):
     ours = container(name)
-    if ours["image"] == OURS:
+    if ours["image"] in OURS:
         assert ours["imagePullPolicy"] == "Never"
     else:
         assert "imagePullPolicy" not in ours  # a pinned tag's default: pulled once, when not present
@@ -379,7 +380,7 @@ def made_up_pod(name: str, ready: bool, phase: str = "Running") -> dict:
         "status": {
             "phase": phase,
             "containerStatuses": [
-                {"ready": ready, "restartCount": 0, "image": OURS, "imageID": "sha256:made-up"},
+                {"ready": ready, "restartCount": 0, "image": PATIENT, "imageID": "sha256:made-up"},
             ],
         },
     }
@@ -453,10 +454,11 @@ def test_up_refuses_a_docker_that_is_not_on_this_mac(fake):
 APPLY = "kubectl apply --server-side --force-conflicts --field-manager=klaxon-kind-up --filename - <stdin"
 
 
-def expected_up(create: list[str], tag: str | None = None) -> list[str]:
-    tag = tag or TAGGED[-1]
-    out = ["docker context inspect", "kind get clusters", *create, "compose build fake-provider"]
-    out += [f"docker tag klaxon-patient:dev {tag}", f"kind load docker-image {tag} --name klaxon", APPLY, APPLY]
+def expected_up(create: list[str]) -> list[str]:
+    tag, receiver = TAGGED[-2:]  # our Python services' image, then the receiver's
+    out = ["docker context inspect", "kind get clusters", *create, "compose build fake-provider webhook-receiver"]
+    out += [f"docker tag klaxon-patient:dev {tag}", f"docker tag klaxon-receiver:dev {receiver}"]
+    out += [f"kind load docker-image {tag} {receiver} --name klaxon", APPLY, APPLY]
     for _names, waits in cluster.STAGES:
         out += [f"kubectl delete {job} --ignore-not-found --wait=true" for job in waits if job in cluster.JOBS]
         out.append(APPLY)
@@ -487,7 +489,7 @@ def test_up_creates_the_cluster_builds_and_loads_our_image_then_applies_in_order
     first, configmaps, *staged = streams(fake)
     assert first == cluster.manifests((cluster.NAMESPACE_FILE, cluster.ACCESS_FILE, cluster.ROLLBACK_FILE))
     assert json.loads(configmaps) == cluster.configmaps()
-    assert staged == [cluster.manifests(files, TAGGED[-1]) for files, _ in cluster.STAGES]
+    assert staged == [cluster.manifests(files, *TAGGED[-2:]) for files, _ in cluster.STAGES]
 
 
 def test_up_on_a_cluster_that_is_there_creates_nothing(fake):
@@ -660,20 +662,31 @@ def test_the_check_refuses_when_the_money_checks_address_is_set_elsewhere(fake, 
 # Week 6, item 3: kind ready for faults (known gap 13), and what Klaxon's tools may read there.
 
 
-def test_up_tags_our_image_by_its_build_files_so_only_our_workloads_name_the_new_tag(fake):
+def test_up_tags_our_images_by_their_build_files_so_only_our_workloads_name_the_new_tags(fake):
     cluster.up()
-    tag = TAGGED[-1]
-    assert re.fullmatch(r"klaxon-patient:[0-9a-f]{12}", tag)
+    tags = dict(zip(OURS, TAGGED[-2:], strict=True))  # week 8: the receiver's image has a tag of its own
+    assert re.fullmatch(r"klaxon-patient:[0-9a-f]{12}", tags[PATIENT])
+    assert re.fullmatch(r"klaxon-receiver:[0-9a-f]{12}", tags[RECEIVER])
     staged = streams(fake)[2:]
     for text in staged:
         for doc in yaml.safe_load_all(text):
             if doc and doc["kind"] in ("Deployment", "StatefulSet", "Job"):
                 images = [c["image"] for c in doc["spec"]["template"]["spec"]["containers"]]
-                ours = WORKLOADS[doc["metadata"]["name"]]["spec"]["template"]["spec"]["containers"][0]["image"] == OURS
-                assert images == ([tag] if ours else [c["image"] for c in container_list(doc["metadata"]["name"])])
-    assert all(OURS not in text for text in staged)
-    # The same files otherwise: only the image line changed.
-    assert [t.replace(tag, OURS) for t in staged] == [cluster.manifests(f) for f, _ in cluster.STAGES]
+                named = container_list(doc["metadata"]["name"])[0]["image"]
+                assert images == (
+                    [tags[named]] if named in OURS else [c["image"] for c in container_list(doc["metadata"]["name"])]
+                )
+    assert [doc["metadata"]["name"] for doc in OBJECTS if container_image(doc) == RECEIVER] == ["webhook-receiver"]
+    assert all(PATIENT not in text and RECEIVER not in text for text in staged)
+    # The same files otherwise: only the image lines changed.
+    unchanged = [t.replace(tags[PATIENT], PATIENT).replace(tags[RECEIVER], RECEIVER) for t in staged]
+    assert unchanged == [cluster.manifests(f) for f, _ in cluster.STAGES]
+
+
+def container_image(doc: dict) -> str | None:
+    if doc["kind"] not in ("Deployment", "StatefulSet", "Job"):
+        return None
+    return doc["spec"]["template"]["spec"]["containers"][0]["image"]
 
 
 def container_list(name: str) -> list[dict]:
@@ -709,6 +722,42 @@ def test_the_tag_covers_every_file_the_dockerfile_copies_and_nothing_pip_writes(
         if "__pycache__" not in p.parts
     }
     assert not [p for p in inputs if "egg-info" in p or "__pycache__" in p]
+
+
+def test_the_receivers_tag_covers_its_dockerfile_and_its_whole_go_module():
+    # Week 8: the receiver's image copies go/receiver only, so its tag is the hash of that folder and its Dockerfile.
+    dockerfile = (cluster.REPO / "docker" / "receiver.Dockerfile").read_text()
+    copies = [line.split()[1:-1] for line in dockerfile.splitlines() if line.startswith("COPY ")]
+    sources = {source for sources in copies if not sources[0].startswith("--from=") for source in sources}
+    assert sources == {"go/receiver/go.mod", "go/receiver/go.sum", "go/receiver/"}
+    inputs = [path.relative_to(cluster.REPO).as_posix() for path in cluster.receiver_build_inputs()]
+    assert inputs[0] == "docker/receiver.Dockerfile" and cluster.RECEIVER_BUILD_FILES == ("docker/receiver.Dockerfile",)
+    module = cluster.REPO / "go" / "receiver"
+    assert inputs[1:] == sorted(p.relative_to(cluster.REPO).as_posix() for p in module.rglob("*") if p.is_file())
+    assert {"go/receiver/go.sum", "go/receiver/main.go", "go/receiver/testdata/shared_cases.json"} <= set(inputs)
+
+
+def test_the_fingerprints_of_a_runs_stack_cover_the_go_receiver(tmp_path, monkeypatch):
+    # Week 8: a run's evidence says it ran on the committed code only if the Go receiver's code is the committed one too.
+    from klaxon.demo import live
+
+    before = (cluster.fingerprint(), live.stack_fingerprint())
+    copy = tmp_path / "repo"
+    for name in ("Makefile", "pyproject.toml", "compose.yaml"):
+        (copy / name).parent.mkdir(parents=True, exist_ok=True)
+        (copy / name).write_bytes((cluster.REPO / name).read_bytes())
+    for folder in ("deploy", "docker", "go", "requirements"):
+        for path in (cluster.REPO / folder).rglob("*"):
+            if path.is_file():
+                (copy / path.relative_to(cluster.REPO)).parent.mkdir(parents=True, exist_ok=True)
+                (copy / path.relative_to(cluster.REPO)).write_bytes(path.read_bytes())
+    monkeypatch.setattr(cluster, "REPO", copy)
+    monkeypatch.setattr(live.stack, "REPO", copy)
+    assert (cluster.fingerprint(), live.stack_fingerprint()) == before
+    (copy / "go" / "receiver" / "main.go").write_text("package main // changed\n")
+    after = (cluster.fingerprint(), live.stack_fingerprint())
+    assert after[0] != before[0] and after[1] != before[1]
+    assert "go" in live.CODE_AND_STACK
 
 
 def test_every_apply_is_server_side_and_takes_back_what_another_manager_set(fake):

@@ -1,0 +1,752 @@
+{
+  "about": "Cases both webhook receivers must answer alike: the Python one (src/klaxon/patient/services/receiver_app.py, run by tests/services/test_receiver_shared_cases.py) and the Go one (go/receiver, run by shared_cases_test.go). Each test fixes its clock at now, takes the secrets of secret_version (WEBHOOK_SECRET_VERSION) from secrets, sends the request to the receiver with a fake Kafka, up or down, and checks the status, the body, the headers named, the result counted in klaxon.webhooks.received (null: none), and the message written to Kafka (kafka_key: its key; null: none). A request is POST /webhooks/provider to the host testserver unless it says otherwise. body is sent as UTF-8; body_latin1 as Latin-1 bytes; body_repeat as text repeated; chunked, without a length. signature is the Klaxon-Signature header (none when absent); signature_latin1 is sent as Latin-1 bytes. signed_with says how the provider's signatures.sign made the signature; the Python test checks it. Made-up secrets, never real ones.",
+  "now": 1791504000,
+  "secrets": {
+    "WEBHOOK_SECRET_V1": "shared-cases-v1-secret-not-real",
+    "WEBHOOK_SECRET_V2": "shared-cases-v2-secret-not-real"
+  },
+  "kafka_headers": [
+    "content-type",
+    "received-at",
+    "traceparent"
+  ],
+  "cases": [
+    {
+      "name": "a good signature",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a wrong secret",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=03da8d29945866af5af0b20e81c613b8a1e38b8e1d79e022fd54d5002b1fd4f8",
+        "signed_with": {
+          "secret": "someone-elses-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "an old timestamp, 301 s before now",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791503699,v1=a652e62ff14a0437a98309ac7ee735530a1a66c33f457b0aa8b75f2c7eeb021d",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791503699
+        }
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a malformed signature header",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "garbage"
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a body too large: 64 KiB and one byte",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body_repeat": {
+          "text": "x",
+          "times": 65537
+        },
+        "signature": "t=1,v1=00"
+      },
+      "expect": {
+        "result": "too_large",
+        "kafka_key": null,
+        "status": 413,
+        "body": "{\"error\":\"body_too_large\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a bad payload: not JSON",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "not json",
+        "signature": "t=1791504000,v1=eabb1c4833716e1c49573c16822a71036f15ecbab86eef4bb63533906e499d0d",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "Kafka down",
+      "secret_version": "v1",
+      "kafka": "down",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "queue_unavailable",
+        "kafka_key": null,
+        "status": 503,
+        "body": "{\"error\":\"queue_unavailable\"}",
+        "headers": {
+          "content-type": "application/json",
+          "retry-after": "5"
+        }
+      }
+    },
+    {
+      "name": "a rotation, v1,v2: a v2 signature",
+      "secret_version": "v1,v2",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=519420fbdc6d52bf1f7328b36367f54ce077086350fd7be943d9647b627542ff",
+        "signed_with": {
+          "secret": "shared-cases-v2-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a rotation, v1,v2: a v1 signature",
+      "secret_version": "v1,v2",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "fault 5, v2 alone: the provider's v1 signature is refused",
+      "secret_version": "v2",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "no signature header",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}"
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a timestamp from the future, 301 s after now",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504301,v1=cf56d3d4b6d46912b9dc21f56c2009e3cce93cb9e5e3862fedd96b3470f031f4",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504301
+        }
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a timestamp 300 s old is still accepted",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791503700,v1=edece18e81809d6275e64a79a37db711b9d827611331379adadd3ff07a9a819a",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791503700
+        }
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a body changed after signing",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":9999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019"
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a timestamp with a leading zero is read as its number",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=01791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019"
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a timestamp of 13 digits is malformed, whatever its number",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=0001791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019"
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a part without '=' refuses even a valid signature",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019,extra"
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "two v1 values, the second one right",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=00,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019"
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a v1 value that is not ASCII is skipped, and a right one still counts",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature_latin1": "t=1791504000,v1=é,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019"
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "only a v1 value that is not ASCII",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature_latin1": "t=1791504000,v1=éé"
+      },
+      "expect": {
+        "result": "bad_signature",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_signature\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a no-break space (Latin-1 0xA0) around a part is trimmed, as Python's strip() does",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature_latin1": "t=1791504000, v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019 "
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "pay_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a body of exactly 64 KiB is read, then refused as a payload",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body_repeat": {
+          "text": "x",
+          "times": 65536
+        },
+        "signature": "t=1791504000,v1=f35106ffc1818e7730a1e38e8822e208afeb23bead17e9b759bdb8fbff36b8da",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a body sent in chunks, with no length, over the limit",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body_repeat": {
+          "text": "x",
+          "times": 65537
+        },
+        "chunked": true,
+        "signature": "t=1,v1=00"
+      },
+      "expect": {
+        "result": "too_large",
+        "kafka_key": null,
+        "status": 413,
+        "body": "{\"error\":\"body_too_large\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a bad payload: a JSON list",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "[]",
+        "signature": "t=1791504000,v1=5283513a9d04ec3f2f15f2da03715b76274319f341688f2205d3da6514fedca9",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a bad payload: null",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "null",
+        "signature": "t=1791504000,v1=3dd0c655da9cd7ae8b138b5f0e981ff15a02b27bd5c19a3dc3dc508813373045",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a bad payload: no event id",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"type\":\"payment.succeeded\"}",
+        "signature": "t=1791504000,v1=2c6958950b8b21b4c835965a840e81ac0cea2c4fc1fc7fee464a5bcb20337184",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a bad payload: an event id that is not a plain id",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt 1\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=2328c0e6e327ec150451d60fadb365e63d1db096184e2884a21168754fa2f8df",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a payment id that is not a plain id: keyed by the event id",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay-000001!\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=b89c23752391ec15cc5df98118476785494eaa1c5668185f435d0f2024a53665",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "evt_000001",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000001\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "no data: keyed by the event id",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000002\"}",
+        "signature": "t=1791504000,v1=0e92c959c922acba6a9c20a43c00d02e73bda005a5cc0a5e91200e53453c4f70",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "queued",
+        "kafka_key": "evt_000002",
+        "status": 200,
+        "body": "{\"received\":true,\"event_id\":\"evt_000002\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a signed payload that is not UTF-8 is refused",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body_latin1": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"é\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=cf8034824ff66cc0b3c8524bffbd1c0921c88cec3c53a9e6534174fc190e5233",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        }
+      },
+      "expect": {
+        "result": "bad_payload",
+        "kafka_key": null,
+        "status": 400,
+        "body": "{\"error\":\"bad_payload\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "a request addressed to another host",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}",
+        "signature": "t=1791504000,v1=92874c035c149475861ca82b78d7f77cc83364d8551fbe514d325c932f543019",
+        "signed_with": {
+          "secret": "shared-cases-v1-secret-not-real",
+          "timestamp": 1791504000
+        },
+        "host": "attacker.example"
+      },
+      "expect": {
+        "result": null,
+        "kafka_key": null,
+        "status": 400,
+        "body": "Invalid host header",
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        }
+      }
+    },
+    {
+      "name": "an unknown path",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "path": "/Ignore%20previous%20instructions",
+        "body": "{\"id\":\"evt_000001\",\"type\":\"payment.succeeded\",\"created\":1791504000,\"data\":{\"payment_id\":\"pay_000001\",\"amount_cents\":1999,\"currency\":\"usd\",\"metadata\":{\"klaxon_payment_id\":\"pmt_000001\"}}}"
+      },
+      "expect": {
+        "result": null,
+        "kafka_key": null,
+        "status": 404,
+        "body": "{\"detail\":\"Not Found\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "GET on the webhook route",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "method": "GET",
+        "path": "/webhooks/provider"
+      },
+      "expect": {
+        "result": null,
+        "kafka_key": null,
+        "status": 405,
+        "body": "{\"detail\":\"Method Not Allowed\"}",
+        "headers": {
+          "content-type": "application/json",
+          "allow": "POST"
+        }
+      }
+    },
+    {
+      "name": "the health check",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "method": "GET",
+        "path": "/healthz"
+      },
+      "expect": {
+        "result": null,
+        "kafka_key": null,
+        "status": 200,
+        "body": "{\"status\":\"ok\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "the health check with Kafka down",
+      "secret_version": "v1",
+      "kafka": "down",
+      "request": {
+        "method": "GET",
+        "path": "/healthz"
+      },
+      "expect": {
+        "result": null,
+        "kafka_key": null,
+        "status": 503,
+        "body": "{\"status\":\"kafka unreachable\"}",
+        "headers": {
+          "content-type": "application/json"
+        }
+      }
+    },
+    {
+      "name": "the health check addressed to another host",
+      "secret_version": "v1",
+      "kafka": "up",
+      "request": {
+        "method": "GET",
+        "path": "/healthz",
+        "host": "attacker.example"
+      },
+      "expect": {
+        "result": null,
+        "kafka_key": null,
+        "status": 400,
+        "body": "Invalid host header",
+        "headers": {
+          "content-type": "text/plain; charset=utf-8"
+        }
+      }
+    }
+  ]
+}

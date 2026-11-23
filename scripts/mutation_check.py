@@ -12,6 +12,9 @@ those alone. --shard K/N runs part K of N of what is picked: mutant i, counted f
 i % N == K - 1. So N runs side by side, as in CI, run each mutant once (week 7).
 --only, last, runs just the mutants of the files named, as the list names them
 (src/klaxon/agent/model.py).
+The Go receiver's mutants (week 8: files ending in .go) run make test-go on the copy instead: gofmt, go vet and go
+test in the official golang image, so they need Docker. Only a failing Go test catches one: a Go mutant that does not
+build, or that gofmt or go vet refuses, is a broken mutant, and the run stops with exit 2.
 Exit 0 when every mutant is caught, 1 when one survives, 2 when the unbroken copy fails.
 """
 
@@ -25,6 +28,7 @@ S = "src/klaxon/patient/services/"
 A = "src/klaxon/agent/"
 E8 = "src/klaxon/"  # week 8, item 3
 P = "src/klaxon/panel/"
+G = "go/receiver/"  # week 8: the webhook receiver in Go
 
 # (name, file, old, new, needs_stack)
 MUTANTS = [
@@ -4119,6 +4123,165 @@ MUTANTS = [
     ('the panel names no role', P + 'pages.py',
      'f"{step[\'role\']}: " if step.get("role") else None,',
      'None,', False),
+    # Week 8, item 2: the webhook receiver in Go. Each is checked with make test-go (gofmt, go vet, go test).
+    ("Go: the receiver answers 200 when Kafka did not confirm", G + "receiver.go",
+     '\t\treturn result("queue_unavailable", unavailable)',
+     '\t\treturn result("queued", reply{status: http.StatusOK, contentType: jsonType, body: unavailable.body})', False),
+    ("Go: the receiver skips the signature check", G + "receiver.go",
+     "\terr = verifyAny(r.Header.Get(signatureHeader), body, rc.secrets, rc.now().Unix(), rc.tolerance)",
+     "\terr = nil", False),
+    ("Go: the receiver accepts any timestamp", G + "receiver.go",
+     "rc.now().Unix(), rc.tolerance)", "rc.now().Unix(), 1000000000000)", False),
+    ("Go: the receiver checks only the first secret", G + "signature.go",
+     "\tfor _, secret := range secrets {", "\tfor _, secret := range secrets[:1] {", False),
+    ("Go: the receiver writes a re-encoded body, not the signed bytes", G + "receiver.go",
+     "\tpartition, offset, err := rc.publisher.Publish(rc.topic, key, body, headers)",
+     "\tpartition, offset, err := rc.publisher.Publish(rc.topic, key, append(body[:len(body):len(body)], '\\n'), headers)",
+     False),
+    ("Go: the receiver does not pass the trace on to Kafka", G + "receiver.go",
+     "\theaders = append(headers, traceparent(ctx)...)",
+     "\theaders = append(headers, traceparent(context.Background())...)", False),
+    ("Go: the consumers' spans would not hang under the Kafka write", G + "receiver.go",
+     '\tctx, span := rc.tel.tracer.Start(ctx, "send "+rc.topic, trace.WithSpanKind(trace.SpanKindProducer),',
+     '\tctx, span := rc.tel.tracer.Start(ctx, "send "+rc.topic, trace.WithNewRoot(), trace.WithSpanKind(trace.SpanKindProducer),',
+     False),
+    ("Go: webhook results are not counted", G + "receiver.go",
+     '\t\trc.tel.webhooks.Add(ctx, 1, metric.WithAttributes(attribute.String("result", name)))\n', "", False),
+    ("Go: the result is not recorded on the request's span", G + "receiver.go",
+     '\t\tserver.SetAttributes(attribute.String("klaxon.webhook.result", name))\n', "", False),
+    ("Go: the receiver answers any Host", G + "receiver.go",
+     "\tif trustedHost(r.Host) {\n\t\tanswer, route = rc.handle(ctx, r, span, name)",
+     "\tif true {\n\t\tanswer, route = rc.handle(ctx, r, span, name)", False),
+    ("Go: the health check answers any Host", G + "receiver.go",
+     "\tcase !trustedHost(r.Host):\n\t\treturn badHost", "\tcase false:\n\t\treturn badHost", False),
+    ("Go: the health check ignores Kafka", G + "receiver.go",
+     "\tcase !rc.publisher.Healthy():", "\tcase false:", False),
+    ("Go: a 503 without Retry-After", G + "receiver.go",
+     '\t\tunavailable.retryAfter = "5"', '\t\tunavailable.retryAfter = ""', False),
+    ("Go: a payload that cannot be read is queued", G + "receiver.go",
+     "\tid, key, err := idAndKey(body)\n\tif err != nil {", "\tid, key, err := idAndKey(body)\n\tif err != nil && false {",
+     False),
+    ("Go: a body of exactly 64 KiB is refused", G + "receiver.go",
+     "\tif int64(len(body)) > limit {", "\tif int64(len(body)) >= limit {", False),
+    ("Go: a body declared too large is read anyway", G + "receiver.go",
+     "\tif r.ContentLength > limit {", "\tif r.ContentLength > limit*1000 {", False),
+    ("Go: the webhook route takes any method", G + "receiver.go",
+     "\tif r.Method == http.MethodPost {", '\tif r.Method != "" {', False),
+    ("Go: the request's span keeps the raw path", G + "receiver.go",
+     '\tspanOnly = []attribute.KeyValue{attribute.String("url.path", "redacted")}',
+     '\tspanOnly = []attribute.KeyValue{attribute.String("url.path", r.URL.Path)}', False),
+    ("Go: a caller's trace context is taken", G + "receiver.go",
+     "\tctx, span := rc.tel.tracer.Start(context.WithoutCancel(r.Context()), name, trace.WithNewRoot(),",
+     "\tctx, span := rc.tel.tracer.Start(propagation.TraceContext{}.Extract(r.Context(), propagation.HeaderCarrier(r.Header)), name,",
+     False),
+    ("Go: the health check goes through the traced path", G + "receiver.go",
+     "\tif r.URL.Path == healthRoute { // Docker calls it every 10 s: no trace, no metrics, no log line",
+     '\tif r.URL.Path == healthRoute+"/" { // Docker calls it every 10 s: no trace, no metrics, no log line', False),
+    ("Go: a 5xx answer is not marked as failed", G + "receiver.go",
+     "\tif answer.status >= 500 {", "\tif answer.status > 503 {", False),
+    ("Go: the request's duration has no route", G + "receiver.go",
+     '\t\tfinished = append(finished, attribute.String("http.route", route))',
+     '\t\tfinished = append(finished, attribute.String("http.route", ""))', False),
+    ("Go: a timestamp of any length is read", G + "signature.go",
+     'if value == "" || len(value) > maxTimestampDigits || !allDigits(value) {',
+     'if value == "" || !allDigits(value) {', False),
+    ("Go: a part without '=' is skipped", G + "signature.go",
+     "\t\tif !ok {\n\t\t\treturn errMalformedHeader\n\t\t}", "\t\tif !ok {\n\t\t\tcontinue\n\t\t}", False),
+    ("Go: a timestamp from the future is accepted", G + "signature.go",
+     "\tif now-timestamp > tolerance || timestamp-now > tolerance {", "\tif now-timestamp > tolerance {", False),
+    ("Go: the tolerance stops short of 300 s", G + "signature.go",
+     "\tif now-timestamp > tolerance || timestamp-now > tolerance {",
+     "\tif now-timestamp >= tolerance || timestamp-now >= tolerance {", False),
+    ("Go: the signed text leaves out the '.'", G + "signature.go",
+     'mac.Write([]byte(strconv.FormatInt(timestamp, 10) + "."))', "mac.Write([]byte(strconv.FormatInt(timestamp, 10)))",
+     False),
+    ("Go: a v1 value that is not ASCII is a candidate", G + "signature.go",
+     '\t\t} else if key == "v1" && isASCII(value) {', '\t\t} else if key == "v1" {', False),
+    ("Go: header parts are trimmed with Go's TrimSpace, not Python's strip()", G + "signature.go",
+     '\t\tkey, value, ok := strings.Cut(trimPythonSpace(part), "=")',
+     '\t\tkey, value, ok := strings.Cut(strings.TrimSpace(part), "=")', False),
+    ("Go: with no secret configured, any signature passes", G + "signature.go",
+     "\tif len(secrets) == 0 {\n\t\treturn errNoSecret\n\t}", "\tif len(secrets) == 0 {\n\t\treturn nil\n\t}", False),
+    ("Go: the event id is not checked", G + "event.go",
+     '\tif json.Unmarshal(event["id"], &id) != nil || !isID(id) {', '\tif json.Unmarshal(event["id"], &id) != nil {',
+     False),
+    ("Go: the key is always the event id", G + "event.go", "\t\treturn id, paymentID, nil", "\t\treturn id, id, nil", False),
+    ("Go: a payment id that is not a plain id is the key", G + "event.go",
+     "\t\tisID(paymentID) {", '\t\tpaymentID != "" {', False),
+    ("Go: a body that is not UTF-8 is read", G + "event.go",
+     "\tif !utf8.Valid(body) {", "\tif !utf8.Valid(body) && false {", False),
+    ("Go: null is read as an event", G + "event.go",
+     "err != nil || event == nil { // null, a list, a string, a number",
+     "err != nil { // null, a list, a string, a number", False),
+    ("Go: an id may be 65 characters", G + "event.go",
+     "\tif len(s) < 1 || len(s) > 64 {", "\tif len(s) < 1 || len(s) > 65 {", False),
+    ("Go: a payment's events go where librdkafka would not put them", G + "kafka.go",
+     "\treturn int(crc32.ChecksumIEEE(key) % uint32(partitions))",
+     "\treturn int(crc32.Checksum(key, crc32.MakeTable(crc32.Castagnoli)) % uint32(partitions))", False),
+    ("Go: the producer never gives up on a record", G + "kafka.go",
+     "\t\tkgo.RecordDeliveryTimeout(3*time.Second),", "\t\tkgo.RecordDeliveryTimeout(0),", False),
+    ("Go: the publisher reports Kafka's error as success", G + "kafka.go",
+     "\t\tif err != nil {\n\t\t\treturn 0, 0, publishError(err.Error())\n\t\t}",
+     "\t\tif err != nil && false {\n\t\t\treturn 0, 0, publishError(err.Error())\n\t\t}", False),
+    ("Go: the producer's answer drops Kafka's error", G + "kafka.go",
+     "func(_ *kgo.Record, err error) { done <- err })", "func(_ *kgo.Record, err error) { done <- nil })", False),
+    ("Go: the message loses its headers", G + "kafka.go",
+     "\t\trecord.Headers = append(record.Headers, kgo.RecordHeader{Key: h.name, Value: []byte(h.value)})",
+     "\t\t_ = h", False),
+    ("Go: the message has no key", G + "kafka.go",
+     "\trecord := &kgo.Record{Topic: topic, Key: []byte(key), Value: value}",
+     "\trecord := &kgo.Record{Topic: topic, Value: value}", False),
+    ("Go: Kafka's health is always good", G + "kafka.go",
+     "\treturn p.client.Ping(ctx) == nil", "\treturn p.client.Ping(ctx) == nil || true", False),
+    ("Go: lag counts from offset 0 when nothing was committed", G + "kafka.go",
+     "\t\tplace := start[partition]", "\t\tplace := start[partition] * 0", False),
+    ("Go: lag reads a committed -1 as a place in the log", G + "kafka.go", "ok && commit.At >= 0 {", "ok {", False),
+    ("Go: lag measuring keeps going after Kafka fails", G + "kafka.go",
+     "\t\t\treturn out\n\t\t}\n\t\tpartitions :=", "\t\t\tcontinue\n\t\t}\n\t\tpartitions :=", False),
+    ("Go: the lag gauge names the group so the alert rule cannot read it", G + "kafka.go",
+     'attribute.String("consumer", v.group)', 'attribute.String("group", v.group)', False),
+    ("Go: a topic with no partitions is measured as nothing behind", G + "kafka.go",
+     '\tif len(out) == 0 {\n\t\treturn nil, fmt.Errorf("topic %s not found", topic)',
+     '\tif len(out) == 0 && false {\n\t\treturn nil, fmt.Errorf("topic %s not found", topic)', False),
+    ("Go: a secret version it does not know is taken", G + "settings.go",
+     "\t\tif !slices.Contains(secretVersions, version) {", "\t\tif !slices.Contains(secretVersions, version) && false {",
+     False),
+    ("Go: an unset secret version is not v1", G + "settings.go", '\t\tsetting = "v1"', '\t\tsetting = ""', False),
+    ("Go: a missing secret is taken", G + "settings.go", '\t\tif secret == "" {', '\t\tif secret == "" && false {', False),
+    ("Go: log lines lose their trace id", G + "logs.go",
+     "\tif span := trace.SpanContextFromContext(ctx); span.IsValid() {",
+     "\tif span := trace.SpanContextFromContext(ctx); span.IsValid() && false {", False),
+    ("Go: log strings are not cut", G + "logs.go",
+     "\tif len(runes) <= maxLoggedChars {", "\tif len(runes) <= maxLoggedChars*100 {", False),
+    ("Go: the SDK's own log lines go through the pipeline they report on", G + "logs.go",
+     '\tif logger == "opentelemetry" {', '\tif logger == "" {', False),
+    ("Go: lines below LOG_LEVEL are kept", G + "logs.go", "\tif lv.number < l.minimum {", "\tif lv.number < 0 {", False),
+    ("Go: warnings are logged as WARN, not Python's WARNING", G + "logs.go",
+     'levelWarning = level{"WARNING", 30, otellog.SeverityWarn}', 'levelWarning = level{"WARN", 30, otellog.SeverityWarn}',
+     False),
+    ("Go: JSON lines leave characters outside ASCII as they are", G + "logs.go",
+     "\t\t\tcase r >= 0x20 && r <= 0x7e:", "\t\t\tcase r >= 0x20:", False),
+    ("Go: span attributes are not cut", G + "telemetry.go",
+     "\tlimits.AttributeValueLengthLimit = maxLoggedChars // as in the JSON logs", "\t// no limit", False),
+    ("Go: OTEL_SDK_DISABLED=true does not switch telemetry off", G + "telemetry.go",
+     'strings.ToLower(os.Getenv("OTEL_SDK_DISABLED")) == "true"', 'strings.ToLower(os.Getenv("OTEL_SDK_DISABLED")) == "yes"',
+     False),
+    ("Go: the resource names another namespace, so Prometheus another job", G + "telemetry.go",
+     'const namespace = "klaxon-patient"', 'const namespace = "klaxon-receiver"', False),
+    ("Go: the health flag passes whatever /healthz answers", G + "main.go",
+     "\tif answer.StatusCode != http.StatusOK {", "\tif answer.StatusCode >= 600 {", False),
+    # Week 8, item 2: kind-up and a run's provenance, with the Go receiver.
+    ("kind-up loads and applies klaxon-receiver:dev", "src/klaxon/patient/cluster.py",
+     "    receiver_image = content_tag(receiver_build_inputs(), RECEIVER_IMAGE)\n", "    receiver_image = RECEIVER_IMAGE\n",
+     False),
+    ("the receiver's tag ignores its Go code, so a change to it rolls nothing", "src/klaxon/patient/cluster.py",
+     "    return [REPO / name for name in RECEIVER_BUILD_FILES] + module",
+     "    return [REPO / name for name in RECEIVER_BUILD_FILES]", False),
+    ("the kind run's fingerprint leaves out the Go receiver", "src/klaxon/patient/cluster.py",
+     'for folder in ("deploy", "docker", "go", "requirements")', 'for folder in ("deploy", "docker", "requirements")',
+     False),
+    ("a run's stack fingerprint leaves out the Go receiver", "src/klaxon/demo/live.py",
+     '    folders = ("docker", "go", "requirements")', '    folders = ("docker", "requirements")', False),
 ]
 
 
@@ -4168,6 +4331,32 @@ def run_tests(work: Path, python: str, integration: bool) -> subprocess.Complete
         return subprocess.CompletedProcess(args, 1, "FAILED (the tests did not end within 600 s)", "")
 
 
+# Week 8, item 2: the Go receiver's mutants are checked with make test-go on the copy, in the official golang image.
+GO_TEST = ["make", "--no-print-directory", "test-go"]
+
+
+def run_go_tests(work: Path) -> subprocess.CompletedProcess:
+    """make test-go on the copy: gofmt, go vet and go test (the Makefile finds Docker Desktop's docker from HOME)."""
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(Path.home())}
+    try:
+        return subprocess.run(GO_TEST, cwd=work, env=env, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:  # Go tests that hang under a mutant did not pass: the mutant is caught
+        return subprocess.CompletedProcess(GO_TEST, 1, "--- FAIL: the Go tests did not end within 600 s", "")
+
+
+def go_test_failed(result: subprocess.CompletedProcess) -> bool:
+    """Whether a Go test failed: go test prints "--- FAIL" for each. A run that failed without one did not get that
+    far: the code did not build, or gofmt or go vet refused it."""
+    return any(line.lstrip().startswith("--- FAIL") for line in (result.stdout + result.stderr).splitlines())
+
+
+def suite_of(mutant: tuple) -> str:
+    """The tests that judge a mutant: the Go receiver's (go), the stack's (integration), or the offline ones."""
+    if mutant[1].endswith(".go"):
+        return "go"
+    return "integration" if mutant[4] else "offline"
+
+
 USAGE = (
     "usage: python scripts/mutation_check.py REPO WORKDIR [--with-stack | --stack-only] [--shard K/N] [--only FILE ...]"
 )
@@ -4205,9 +4394,10 @@ def main() -> int:
     # calls this runner's own command line (week 5). deploy: a test checks the kind manifests against compose.yaml,
     # and some mutants break them (week 5, item 5). .gitignore: a test reads it.
     # requirements/ since week 6, items 2 and 3: a test reads the LangGraph lock, and some mutants break it; and
-    # kind-up's image tag reads the lock file, as its tests do.
+    # kind-up's image tag reads the lock file, as its tests do. Week 8: go/, the Go receiver (its mutants, its shared
+    # table of cases, which a Python test reads too, and kind-up's second tag), and .github/, which a test reads.
     for item in ("src", "tests", "docker", "deploy", "evidence", "requirements", "scripts", "compose.yaml",
-                 "pyproject.toml", "Makefile", ".gitignore"):
+                 "pyproject.toml", "Makefile", ".gitignore", "go", ".github"):
         src = repo / item
         (shutil.copytree if src.is_dir() else shutil.copy2)(src, work / item)
 
@@ -4232,28 +4422,40 @@ def main() -> int:
     if broken:
         print("mutants that do not compile:\n  " + "\n  ".join(broken))
         return 2
-    for integration in sorted({m[4] for m in selected}):
-        baseline = run_tests(work, python, integration)
+    for suite in sorted({suite_of(m) for m in selected}):
+        baseline = run_go_tests(work) if suite == "go" else run_tests(work, python, suite == "integration")
         if baseline.returncode != 0:
-            print(f"baseline FAILED ({'integration' if integration else 'offline'}):\n{baseline.stdout[-3000:]}")
+            print(f"baseline FAILED ({suite}):\n{(baseline.stdout + baseline.stderr)[-3000:]}")
             return 2
-        print(f"baseline passes ({'integration' if integration else 'offline'})")
+        print(f"baseline passes ({suite})")
 
-    survived = []
-    for name, file, old, new, integration in selected:
+    survived, broken = [], []
+    for mutant in selected:
+        name, file, old, new, integration = mutant
         path = work / file
         original = path.read_text()
         assert original.count(old) == 1, f"{name}: the text to break is not found exactly once in {file}"
         path.write_text(original.replace(old, new))
         try:
-            result = run_tests(work, python, integration)
+            result = run_go_tests(work) if suite_of(mutant) == "go" else run_tests(work, python, integration)
         finally:
             path.write_text(original)
-        killed = result.returncode != 0
-        failing = next((line for line in result.stdout.splitlines() if line.startswith("FAILED")), "")
+        if suite_of(mutant) == "go":
+            killed = go_test_failed(result)
+            if result.returncode != 0 and not killed:  # not caught by a test: it did not build or pass gofmt or vet
+                broken.append(f"{name}: {(result.stdout + result.stderr).strip()[-300:]}")
+                print(f"BROKEN    {name}")
+                continue
+            failing = next((line.strip() for line in result.stdout.splitlines() if "--- FAIL" in line), "")
+        else:
+            killed = result.returncode != 0
+            failing = next((line for line in result.stdout.splitlines() if line.startswith("FAILED")), "")
         print(f"{'caught  ' if killed else 'SURVIVED'}  {name}  {failing[:150]}")
         if not killed:
             survived.append(name)
+    if broken:
+        print("Go mutants that do not build, or that gofmt or go vet refuses:\n  " + "\n  ".join(broken))
+        return 2
     print(f"\n{len(selected) - len(survived)} of {len(selected)} deliberate breaks caught")
     return 1 if survived else 0
 

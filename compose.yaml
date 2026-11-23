@@ -147,9 +147,16 @@ services:
       - "127.0.0.1:8081:8000"
     healthcheck: *http-health
 
+  # The webhook receiver, in Go since week 8 (go/receiver): an image of its own, built in the official golang image
+  # and run from an empty one, so it has no shell or Python and checks its own health. The Python receiver
+  # (klaxon.patient.services.receiver_app) stays in the repo as the reference the Go one is tested against.
   webhook-receiver:
-    <<: *patient-service
-    command: ["python", "-m", "klaxon.patient.services.receiver_app"]
+    image: klaxon-receiver:dev
+    build:
+      context: .
+      dockerfile: docker/receiver.Dockerfile
+    restart: unless-stopped
+    init: true
     environment:
       <<: *telemetry
       KAFKA_BOOTSTRAP: kafka:9092
@@ -163,7 +170,9 @@ services:
         condition: service_completed_successfully
     ports:
       - "127.0.0.1:8082:8000"
-    healthcheck: *http-health
+    healthcheck:
+      <<: *http-health
+      test: ["CMD", "/receiver", "-health"] # GET /healthz on its own port, from inside: the image has no shell
 
   payments-api:
     <<: *patient-service

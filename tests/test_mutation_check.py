@@ -96,14 +96,58 @@ def test_a_mutants_run_leaves_out_the_guard_on_the_list_itself(monkeypatch, tmp_
 
 def test_the_runners_copy_holds_every_folder_kind_ups_image_tag_reads():
     # Week 6, item 3: the tag reads requirements/, which the copy once left out, so its baseline would have failed.
+    # Week 8: kind-up tags the Go receiver's image too, from go/.
     import re
 
     from klaxon.patient import cluster
 
     listed = re.search(r"for item in \((.*?)\):", SCRIPT.read_text(), re.DOTALL).group(1)
     copied = set(re.findall(r'"([^"]+)"', listed))
-    needed = {path.relative_to(cluster.REPO).parts[0] for path in cluster.build_inputs()}
-    assert needed <= copied and "requirements" in copied
+    inputs = cluster.build_inputs() + cluster.receiver_build_inputs()
+    needed = {path.relative_to(cluster.REPO).parts[0] for path in inputs}
+    assert needed <= copied and {"requirements", "go"} <= copied
+    assert ".github" in copied  # tests/test_go_receiver.py reads the CI workflow
+
+
+# Week 8, item 2: the Go receiver's mutants, checked with make test-go.
+
+
+def test_the_go_mutants_are_judged_by_make_test_go_and_the_others_as_before():
+    runner = load_runner()
+    go = [m for m in runner.MUTANTS if m[1].endswith(".go")]
+    assert len(go) >= 30 and all(m[1].startswith("go/receiver/") and not m[4] for m in go)
+    assert {runner.suite_of(m) for m in go} == {"go"}
+    assert {runner.suite_of(m) for m in runner.MUTANTS if m not in go} == {"offline", "integration"}
+    assert runner.select(False, True, []) == [m for m in runner.MUTANTS if m[4]]  # --stack-only: no Go mutant
+    assert set(runner.select(False, False, ["go/receiver/kafka.go"])) == {m for m in go if m[1].endswith("kafka.go")}
+
+
+def test_a_go_mutants_run_is_make_test_go_on_the_copy(monkeypatch, tmp_path):
+    runner = load_runner()
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return subprocess.CompletedProcess(args, 0, "ok  \tklaxon/receiver\t0.5s\n", "")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    runner.run_go_tests(tmp_path)
+    [(args, kwargs)] = calls
+    assert args == ["make", "--no-print-directory", "test-go"] and kwargs["cwd"] == tmp_path
+    assert kwargs["env"]["PATH"] == "/usr/bin:/bin" and "HOME" in kwargs["env"]  # the Makefile finds docker from HOME
+
+
+def test_only_a_failing_go_test_catches_a_go_mutant():
+    runner = load_runner()
+
+    def done(code: int, out: str):
+        return subprocess.CompletedProcess(["make"], code, out, "")
+
+    failed = "--- FAIL: TestTheGoReceiverAnswersEachSharedCase (0.01s)\n    --- FAIL: TestX/Kafka_down (0.00s)\nFAIL\n"
+    assert runner.go_test_failed(done(2, failed))
+    assert not runner.go_test_failed(done(2, '# klaxon/receiver\n./kafka.go:9:2: "strconv" imported and not used\n'))
+    assert not runner.go_test_failed(done(1, "gofmt would change: receiver.go\n"))
+    assert not runner.go_test_failed(done(0, "ok  \tklaxon/receiver\t3.0s\n"))
 
 
 # Week 7, item 3: --shard K/N, so CI runs the full list as N parts side by side.
