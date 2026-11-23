@@ -4319,6 +4319,23 @@ MUTANTS = [
      "else 2)' || exit 2\"", "else 0)' || exit 2\"", False),
     ("openhands: the hook lets a tool through when it cannot tell", "experiments/openhands/run_openhands.py",
      "else 2)' || exit 2\"", "else 2)'\"", False),
+    # Week 8, item 4, after its first run broke on this side (2026-11-23).
+    ("openhands: the runner names a tool without importing it", "experiments/openhands/run_openhands.py",
+     "    from openhands.tools.glob import GlobTool\n", "    GlobTool = type('GlobTool', (), {'name': 'glob'})  # named only\n",
+     False),
+    ("openhands: a run starts over an earlier attempt's files", "src/klaxon/openhands_task.py",
+     "    if left:  # an attempt that was not saved as a run", "    if False:  # an attempt that was not saved as a run",
+     False),
+    ("openhands: a crash on this side is saved as a run", "src/klaxon/openhands_task.py",
+     '    if outcome.startswith("error") and stop_reason(False, summary) != "time_budget":',
+     '    if outcome.startswith("no such outcome"):', False),
+    ("openhands: a runner that leaves no summary leaves a run", "src/klaxon/openhands_task.py",
+     '            file=sys.stderr,\n        )\n        return 2\n    outcome = str(summary.get("outcome", ""))',
+     '            file=sys.stderr,\n        )\n        summary = {}\n    outcome = str(summary.get("outcome", ""))', False),
+    ("openhands: glob's list of names opens every file", "src/klaxon/openhands_task.py",
+     'SEEN_BY = ("grep", "planning_file_editor")', 'SEEN_BY = ("grep", "planning_file_editor", "glob")', False),
+    ("openhands: a file cited without opening goes unsaid", "src/klaxon/openhands_task.py",
+     "    unread = [call_id for call_id in cited if call_id not in opened]", "    unread = []", False),
 ]
 
 

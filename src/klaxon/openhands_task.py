@@ -257,16 +257,48 @@ def stop_reason(diagnosed: bool, summary: Mapping) -> str:
     return "invalid_replies"
 
 
-def run_record(snapshot: Mapping, reading: contract.Reading, how: str, summary: Mapping, counts: Mapping) -> dict:
+SEEN_BY = ("grep", "planning_file_editor")  # its tools that show a file's text: glob only lists names
+
+
+def opened_calls(path: Path, calls: Mapping[str, tuple[str, dict]]) -> list[str]:
+    """The saved files OpenHands read, by call id: those whose file name shows in a step of a tool that shows text
+    (grep, the file viewer), in its call or in its result. glob only lists names, so it opens nothing. Klaxon's
+    contract checks only that a cited call exists; here every file exists from the start, so this says which it cited
+    without reading. A heuristic, read from its own record."""
+    names = {f"{call_id}_{tool}.json": call_id for call_id, (tool, _) in calls.items()}
+    opened: set[str] = set()
+    for line in path.read_text().splitlines() if path.exists() else []:
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("tool_name") in SEEN_BY:
+            text = json.dumps(event, ensure_ascii=False)
+            opened |= {call_id for name, call_id in names.items() if name in text}
+    return sorted(opened, key=lambda call_id: int(call_id[1:]))
+
+
+def run_record(
+    snapshot: Mapping,
+    reading: contract.Reading,
+    how: str,
+    summary: Mapping,
+    counts: Mapping,
+    opened: Sequence[str] = (),
+) -> dict:
     """The run, as Klaxon saves a run: its snapshot's fault run, with OpenHands' answer as the loop's diagnosis, graded
-    by the rule, labeled a local model's run."""
+    by the rule, labeled a local model's run. opened: the files it read (opened_calls)."""
     diagnosis = None if reading.diagnosis is None else reading.diagnosis.as_dict()
     reason = stop_reason(diagnosis is not None, summary)
     problems = "; ".join(clean_text(problem, 200) for problem in reading.problems) or "none"
+    cited = [item["call_id"] for item in diagnosis["evidence"]] if diagnosis else []
+    unread = [call_id for call_id in cited if call_id not in opened]
     detail = (
         f"OpenHands: {clean_text(str(summary.get('outcome')), 300)}; its status: {summary.get('execution_status')};"
         f" its answer read {how}; problems: {problems}"
     )
+    if unread:
+        detail += f"; cited without opening: {', '.join(unread)}"
     return dict(snapshot) | {
         "label": LABEL,
         "model": MODEL,
@@ -281,7 +313,8 @@ def run_record(snapshot: Mapping, reading: contract.Reading, how: str, summary: 
             "trace": EVENTS,
         },
         "comparison": grading.compare(snapshot["case"]["name"], diagnosis),
-        "openhands": dict(summary) | {"answer_read": how, "problems": list(reading.problems)},
+        "openhands": dict(summary)
+        | {"answer_read": how, "problems": list(reading.problems), "opened": list(opened), "cited_not_opened": unread},
         "stopped": f"OpenHands stopped: {reason}",
     }
 
@@ -366,6 +399,12 @@ def _run(folder: Path) -> int:
     if (folder / fault_runs.RUN_FILE).exists():
         print(f"Not run: {clean_text(folder.name)} has its run already, and a run is never saved over", file=sys.stderr)
         return 2
+    left = [name for name in (EVENTS, ANSWER, SUMMARY) if (folder / name).exists()]
+    if left:  # an attempt that was not saved as a run: its files must not mix with the next one's
+        print(
+            f"Not run: an earlier attempt's files are here ({', '.join(left)}): move them aside first", file=sys.stderr
+        )
+        return 2
     try:
         snapshot = json.loads((folder / SNAPSHOT_RUN).read_text())
         calls = calls_of(folder)
@@ -392,10 +431,23 @@ def _run(folder: Path) -> int:
     try:
         summary = json.loads((folder / SUMMARY).read_text())
     except (OSError, ValueError):
-        summary = {"outcome": f"the runner exited ({exited}) with no summary"}
+        print(
+            f"Not saved as a run: the runner exited ({exited}) with no summary; any files it left are here",
+            file=sys.stderr,
+        )
+        return 2
+    outcome = str(summary.get("outcome", ""))
+    if outcome.startswith("error") and stop_reason(False, summary) != "time_budget":  # broke on this side: says nothing
+        print(  # of OpenHands' work, as a model's error says nothing of Klaxon's (evaluation.NOT_RUN)
+            f"Not saved as a run: it broke on this side ({clean_text(outcome, 300)}). Its files are left here: move them"
+            " aside, fix the cause, and run it again",
+            file=sys.stderr,
+        )
+        return 2
     text = (folder / ANSWER).read_text() if (folder / ANSWER).exists() else ""
     reading, how = read_answer(text, calls)
-    record = run_record(snapshot, reading, how, summary, step_counts(folder / EVENTS))
+    opened = opened_calls(folder / EVENTS, calls)
+    record = run_record(snapshot, reading, how, summary, step_counts(folder / EVENTS), opened)
     (folder / fault_runs.RUN_FILE).write_text(json.dumps(record, indent=2, default=str) + "\n")
     verdict = record["comparison"].get("verdict") if isinstance(record["comparison"], Mapping) else None
     print(f"Stopped: {record['loop']['reason']}; by the rule: {verdict or 'no diagnosis'}. Saved in {folder.name}")

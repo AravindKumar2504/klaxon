@@ -64,7 +64,22 @@ def main() -> int:
 
     from openhands.sdk import LLM, Agent, Conversation, Tool
     from openhands.sdk.hooks import HookConfig, HookDefinition, HookMatcher
+
+    # Imported here, not only named: the agent runs in the sandbox, and this side reads back each event it sends,
+    # one of which names its tools by kind. A kind this side has not imported fails to validate (2026-11-23: the first
+    # run broke there, on GlobTool, before its record was whole).
+    from openhands.tools.glob import GlobTool
+    from openhands.tools.grep import GrepTool
+    from openhands.tools.planning_file_editor import PlanningFileEditorTool
     from openhands.workspace import DockerWorkspace
+
+    classes = (GlobTool, GrepTool, PlanningFileEditorTool)
+    if tuple(tool.name for tool in classes) != TOOLS:
+        print(
+            f"Not started: the SDK names these tools {[tool.name for tool in classes]}, not {list(TOOLS)}",
+            file=sys.stderr,
+        )
+        return 2
 
     llm = LLM(
         model=f"openai/{MODEL}",  # Ollama's OpenAI-compatible API
@@ -77,7 +92,7 @@ def main() -> int:
         drop_params=True,
         usage_id="agent",
     )
-    agent = Agent(llm=llm, tools=[Tool(name=name) for name in TOOLS])
+    agent = Agent(llm=llm, tools=[Tool(name=tool.name) for tool in classes])
     hooks = HookConfig(pre_tool_use=[HookMatcher(matcher="*", hooks=[HookDefinition(command=DENY_OTHERS)])])
     last: dict = {"text": None, "from": None}
     counted = {"events": 0}

@@ -8,6 +8,7 @@ mount, the tools, the hook) are read from the script itself, and the hook's comm
 import importlib.util
 import json
 import subprocess
+from pathlib import Path
 
 import httpx
 import pytest
@@ -238,6 +239,13 @@ def test_the_runner_pins_its_image_mounts_the_data_read_only_and_offers_only_fil
     source = RUNNER.read_text()
     assert 'volumes=[f"{data}:{MOUNT}:ro"]' in source and 'platform="linux/arm64"' in source
     assert "TerminalTool" not in source and "openhands.tools.terminal" not in source
+    for imported in (
+        "glob import GlobTool",
+        "grep import GrepTool",
+        "planning_file_editor import PlanningFileEditorTool",
+    ):
+        assert f"    from openhands.tools.{imported}\n" in source  # imported, not only named: so the events naming them
+        # validate on this side (2026-11-23: the first run broke on GlobTool)
     pinned = {line for line in (RUNNER.parent / "requirements.txt").read_text().splitlines() if "==" in line}
     assert pinned == {f"openhands-{name}==1.60.1" for name in ("sdk", "tools", "workspace", "agent-server")}
 
@@ -273,3 +281,94 @@ def test_its_runs_are_set_beside_the_nights_nine_on_fault_1(tmp_path, capsys):
     rows = [line for line in capsys.readouterr().out.splitlines() if line.startswith("| 2026-")]
     assert len(rows) == 10 and sum("| openhands | qwen3:8b | 7 |" in row for row in rows) == 1
     assert sum("_duplicate-delivery_seed" in row and "| claude-opus-5-5 |" in row for row in rows) == 9
+
+
+# The run command around the runner: the runner made up (it writes what the real one would), and Ollama and the venv
+# taken as there. What it saves as a run, and what it never does.
+
+
+def snapshot_folder(tmp_path):
+    """A saved snapshot, made up: its fault run, its index and its task."""
+    folder = tmp_path / "2026-11-23T090000Z_duplicate-delivery_seed7_openhands"
+    (folder / "data").mkdir(parents=True)
+    (folder / oh.SNAPSHOT_RUN).write_text(json.dumps(snapshot_record()))
+    index = [
+        {"call_id": c, "tool": t, "arguments": a, "file": f"{c}_{t}.json", "error": False}
+        for c, (t, a) in CALLS.items()
+    ]
+    (folder / "data" / "INDEX.json").write_text(json.dumps(index))
+    (folder / oh.TASK).write_text("The task.")
+    return folder
+
+
+def runner_that_writes(summary, answer="", events=()):
+    """subprocess.run, standing in for OpenHands' runner: it writes what the runner writes, into its --out folder."""
+
+    def run(argv, **_):
+        out = Path(argv[argv.index("--out") + 1])
+        (out / oh.SUMMARY).write_text(json.dumps(summary))
+        (out / oh.ANSWER).write_text(answer)
+        (out / oh.EVENTS).write_text("".join(json.dumps(event) + "\n" for event in events))
+        return subprocess.CompletedProcess(argv, 0)
+
+    return run
+
+
+@pytest.fixture
+def ready(monkeypatch, tmp_path):
+    """Ollama answering, and OpenHands' venv in place: both made up."""
+    venv = tmp_path / "python"
+    venv.write_text("")
+    monkeypatch.setattr(oh, "ollama_problem", lambda: None)
+    monkeypatch.setattr(oh, "VENV_PYTHON", venv)
+    return monkeypatch
+
+
+READ = [  # its steps: grep finds a line in one file; glob lists every name, which opens none
+    {"source": "agent", "llm_response_id": "r1", "tool_name": "grep", "action": {"pattern": "naive", "path": "data"}},
+    {
+        "source": "environment",
+        "tool_name": "grep",
+        "observation": {"text": "c2_recent_deploys.json: LEDGER_HANDLER=naive"},
+    },
+    {"source": "agent", "llm_response_id": "r2", "tool_name": "glob", "action": {"pattern": "*.json"}},
+    {
+        "source": "environment",
+        "tool_name": "glob",
+        "observation": {"text": "c1_service_health.json c3_money_check.json"},
+    },
+]
+
+
+def test_a_run_is_saved_with_the_files_it_opened_and_those_it_cited_without_opening(ready, tmp_path):
+    folder = snapshot_folder(tmp_path)
+    ready.setattr(oh.subprocess, "run", runner_that_writes({"outcome": "finished", "seconds": 120.0}, REPLY, READ))
+    assert oh.main(["run", str(folder)]) == 0
+    record = json.loads((folder / "run.json").read_text())
+    assert record["loop"]["reason"] == "diagnosed" and record["comparison"]["verdict"] == "names the cause"
+    assert (record["loop"]["steps"], record["loop"]["tool_calls"]) == (2, 2)
+    assert record["openhands"]["opened"] == ["c2"] and record["openhands"]["cited_not_opened"] == ["c3"]
+    assert "cited without opening: c3" in record["loop"]["detail"]
+
+
+def test_a_crash_on_this_side_is_never_saved_as_a_run_nor_run_over_but_its_time_limit_is(ready, tmp_path, capsys):
+    folder = snapshot_folder(tmp_path)
+    crash = {"outcome": "error: ValidationError: 3 validation errors for Event", "seconds": 74.6}
+    ready.setattr(oh.subprocess, "run", runner_that_writes(crash, "{}"))
+    assert oh.main(["run", str(folder)]) == 2 and not (folder / "run.json").exists()
+    assert "Not saved as a run: it broke on this side" in capsys.readouterr().err
+    assert oh.main(["run", str(folder)]) == 2  # its files are still here: no attempt starts over them
+    assert "an earlier attempt's files are here" in capsys.readouterr().err
+    for name in (oh.EVENTS, oh.ANSWER, oh.SUMMARY):  # moved aside, as the message says
+        (folder / name).rename(tmp_path / name)
+    timed_out = {"outcome": "error: TimeoutError: timed out after 900 s", "seconds": 900.0}
+    ready.setattr(oh.subprocess, "run", runner_that_writes(timed_out))
+    assert oh.main(["run", str(folder)]) == 0
+    assert json.loads((folder / "run.json").read_text())["loop"]["reason"] == "time_budget"  # a result: saved
+
+
+def test_a_runner_that_leaves_no_summary_leaves_no_run(ready, tmp_path, capsys):
+    folder = snapshot_folder(tmp_path)
+    ready.setattr(oh.subprocess, "run", lambda argv, **_: subprocess.CompletedProcess(argv, 1))
+    assert oh.main(["run", str(folder)]) == 2 and not (folder / "run.json").exists()
+    assert "with no summary" in capsys.readouterr().err
