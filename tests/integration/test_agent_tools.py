@@ -50,9 +50,12 @@ def eventually(probe, seconds: float = 30.0):
 
 def test_the_patients_own_metrics_are_listed_with_their_labels(tools):
     def with_the_lag_gauge():
-        # Wait for the metric this test names: a fresh stack exports some klaxon_ metrics before others.
+        # Wait for the metric this test names, with its labels: a fresh stack exports some klaxon_ metrics before
+        # others, and a stack started on kept data still knows the name from before, with no series this hour.
         out = tools["list_metrics"].call({"match": "klaxon_"})
-        return out if any(m["name"] == "klaxon_kafka_consumer_lag" for m in out["metrics"]) else None
+        return (
+            out if any(m["name"] == "klaxon_kafka_consumer_lag" and m.get("labels") for m in out["metrics"]) else None
+        )
 
     out = eventually(with_the_lag_gauge, seconds=60.0)
     by_name = {m["name"]: m.get("labels") for m in out["metrics"]}
