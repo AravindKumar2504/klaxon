@@ -949,6 +949,76 @@ def held_back(row: Mapping) -> dict:
     return dict(row) | hidden | {"graders_disagree": False, "judge_held_back": True}
 
 
+NO_DIAGNOSIS = "no diagnosis"  # a run's settled verdict when it ended in none: it names nothing (week 8, item 3)
+
+
+def settled(row: Mapping) -> str | None:
+    """The verdict on a run's cause that the loops are compared by (week 8, item 3): Aravind's, where he gave one; else
+    the rule's, where the judge gave the same; else None, unsettled (the judge's verdict held back, missing or "no
+    verdict", or the two differ on a run he has not labeled). A run that ended in no diagnosis names nothing:
+    NO_DIAGNOSIS. A run that did not run: None, and it is counted apart."""
+    if row["not_run"] is not None:
+        return None
+    if not row["diagnosed"]:
+        return NO_DIAGNOSIS
+    if row["aravind"] is not None:
+        return row["aravind"]
+    if row["judge"] == row["verdict"]:
+        return row["verdict"]
+    return None
+
+
+def _loop_order(kind: str) -> int:
+    return loop.LOOPS.index(kind) if kind in loop.LOOPS else len(loop.LOOPS)
+
+
+def compare_loops(rows: Sequence[Mapping]) -> list[dict]:
+    """The loops side by side (week 8, item 3): for each model and mode run on more than one loop, each loop's runs
+    counted by their settled verdicts, in all and case by case."""
+    groups: dict[tuple, dict[str, list[Mapping]]] = {}
+    for row in rows:
+        groups.setdefault((row["model"] or "unknown", row["mode"]), {}).setdefault(row["loop_kind"], []).append(row)
+    out = []
+    for (model, mode), by_loop in sorted(groups.items()):
+        if len(by_loop) < 2:
+            continue
+        names = {row["case"] for loop_rows in by_loop.values() for row in loop_rows}
+        order = [name for name in CASES if name in names] + sorted(names - set(CASES))
+        entry: dict = {"model": model, "mode": mode, "cases": order, "loops": []}
+        for kind in sorted(by_loop, key=_loop_order):
+            loop_rows = by_loop[kind]
+            loop_ran = [row for row in loop_rows if row["not_run"] is None]
+            said = Counter(settled(row) for row in loop_ran)
+            entry["loops"].append(
+                {
+                    "loop_kind": kind,
+                    "runs": len(loop_rows),
+                    "ran": len(loop_ran),
+                    "names_the_cause": said["names the cause"],
+                    "partly": said["partly"],
+                    "misses_the_cause": said["misses the cause"],
+                    "no_diagnosis": said[NO_DIAGNOSIS],
+                    "unsettled": said[None],
+                    "labeled": sum(1 for row in loop_ran if row["aravind"] is not None),
+                    "median_diagnosis_seconds": _median(row["diagnosis_seconds"] for row in loop_ran),
+                    "median_calls": _median(row["calls"] for row in loop_ran),
+                    "calls": sum(row["calls"] for row in loop_rows),
+                    "cost_usd": round(sum(row["cost_usd"] for row in loop_rows), 4),
+                    "by_case": {
+                        name: {
+                            "ran": sum(1 for row in loop_ran if row["case"] == name),
+                            "names_the_cause": sum(
+                                1 for row in loop_ran if row["case"] == name and settled(row) == "names the cause"
+                            ),
+                        }
+                        for name in order
+                    },
+                }
+            )
+        out.append(entry)
+    return out
+
+
 def report(paths: Sequence[Path], show_judge: bool = False) -> dict:
     """The report on these saved runs. The judge's verdict on a run Aravind has not labeled is held back, unless
     show_judge (once he has labeled the runs he will, or for Claude's own reading)."""
@@ -971,6 +1041,7 @@ def report(paths: Sequence[Path], show_judge: bool = False) -> dict:
         "suites": [suite_summary(folder) for folder in suites],
         "runs": rows,
         "summary": summarize(rows),
+        "loops": compare_loops(rows),
     }
 
 
@@ -1024,9 +1095,45 @@ def pick(paths: Sequence[Path], total: int, seed: int = PICK_SEED, passed_over: 
     return sorted(must + rest[: max(total - len(must), MIN_DRAWN)])
 
 
+def loops_markdown(found: Mapping) -> list[str]:
+    """The report's lines for the loops side by side (week 8, item 3): none when no model and mode ran on more than one
+    loop, or for a report made before there was this view."""
+    if not found.get("loops"):
+        return []
+    lines = ["", "## The loops side by side"]
+    for entry in found["loops"]:
+        words = [LOOP_WORDS.get(e["loop_kind"], _cell(e["loop_kind"]) + " loop") for e in entry["loops"]]
+        lines += [
+            "",
+            f"{_cell(entry['model'])}, {_cell(entry['mode'])}:",
+            "",
+            "| Loop | Runs | Named the cause | Partly | Misses the cause | No diagnosis | Unsettled | Labeled by Aravind"
+            " | Median s to diagnose | Median calls | Model calls | Cost |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for word, e in zip(words, entry["loops"], strict=True):
+            lines.append(
+                f"| {word} | {e['ran']} ran, {e['runs'] - e['ran']} not run | {_of(e['names_the_cause'], e['ran'])} |"
+                f" {e['partly']} | {e['misses_the_cause']} | {e['no_diagnosis']} | {e['unsettled']} | {e['labeled']} |"
+                f" {_number(e['median_diagnosis_seconds'])} | {_number(e['median_calls'])} | {e['calls']} |"
+                f" ${e['cost_usd']:.2f} |"
+            )
+        lines += ["", "| Case | " + " | ".join(words) + " |", "|---|" + "---|" * len(words)]
+        for name in entry["cases"]:
+            cells = [_of(e["by_case"][name]["names_the_cause"], e["by_case"][name]["ran"]) for e in entry["loops"]]
+            lines.append(f"| {_cell(name)} | " + " | ".join(cells) + " |")
+    lines += [
+        "",
+        "Named the cause, side by side: of the runs that ran, by each run's settled verdict: Aravind's where he gave one;"
+        " else the rule's, where the judge gave the same. Unsettled: the judge's verdict is held back or missing, or it"
+        " differs from the rule's on a run he has not labeled. A run with no diagnosis names nothing.",
+    ]
+    return lines
+
+
 def markdown(found: Mapping) -> str:
-    """The report as a page: the suites; per model, a table of its cases; then every run, and the runs that did not
-    run."""
+    """The report as a page: the suites; per model, a table of its cases; the loops side by side, where more than one
+    ran (week 8); then every run, and the runs that did not run."""
     lines = ["# Klaxon evaluation report", "", found["label"], ""]
     lines.append(f"Made {found['made_at_utc']} from {len(found['runs'])} runs in: {', '.join(found['from'])}.")
     if found.get("judge_held_back"):
@@ -1085,6 +1192,9 @@ def markdown(found: Mapping) -> str:
         " different ones (listed below). Diagnosed: the runs that ended in a diagnosis; a run out of steps, tool calls or"
         " time ran, and gave none. A run that did not run counts only in the Runs column and the totals. Medians are"
         " over the runs that ran and have the number.",
+    ]
+    lines += loops_markdown(found)
+    lines += [
         "",
         "## Each run",
         "",

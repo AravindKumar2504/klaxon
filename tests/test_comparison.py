@@ -230,3 +230,90 @@ def test_make_eval_passes_loops_and_not_run_of_on_as_one_argument_each_and_only_
     assert given[given.index("--not-run-of") + 1] == "evidence/week8/a suite"
     odd = made("LOOPS=plain'; echo pwned")
     assert odd[odd.index("--loops") + 1] == "plain'; echo pwned" and "pwned" not in odd
+
+
+# The loops side by side in the report: made-up rows, then the 72 runs as saved. Nothing is called.
+
+WEEK8 = evaluation.REPO / "evidence" / "week8" / "2026-11-20T161208Z_suite_claude-opus-5-5_plain-langgraph-multi"
+
+
+def row_of(loop_kind, case="duplicate-delivery", **over):
+    """A made-up report row: diagnosed, the rule and the judge agreeing that it names the cause, not labeled."""
+    made_up = {"model": "m", "mode": "evaluation", "loop_kind": loop_kind, "case": case, "not_run": None}
+    made_up |= {"diagnosed": True, "verdict": "names the cause", "judge": "names the cause", "aravind": None}
+    made_up |= {"diagnosis_seconds": 10.0, "calls": 2, "cost_usd": 0.5}
+    return made_up | over
+
+
+def test_a_runs_settled_verdict_is_his_label_else_the_rule_and_the_judge_as_one_else_none():
+    assert evaluation.settled(row_of(loop.PLAIN)) == "names the cause"  # the rule and the judge agree
+    assert evaluation.settled(row_of(loop.PLAIN, judge="partly")) is None  # they differ: unsettled
+    assert evaluation.settled(row_of(loop.PLAIN, judge="partly", aravind="partly")) == "partly"  # his label settles it
+    assert evaluation.settled(row_of(loop.PLAIN, aravind="misses the cause")) == "misses the cause"  # his, over both
+    assert evaluation.settled(row_of(loop.PLAIN, judge=None)) is None  # held back, or not judged
+    assert evaluation.settled(row_of(loop.PLAIN, judge="no verdict")) is None
+    none = {"diagnosed": False, "verdict": None, "judge": None}
+    assert evaluation.settled(row_of(loop.PLAIN, **none)) == evaluation.NO_DIAGNOSIS  # it names nothing
+    assert evaluation.settled(row_of(loop.PLAIN, not_run="no fresh stack")) is None  # counted apart
+
+
+def test_the_loops_go_side_by_side_by_settled_verdicts_only_where_a_mode_ran_on_more_than_one():
+    rows = [
+        row_of(loop.MULTI),  # names the cause
+        row_of(loop.MULTI, case="false-alarm", judge="partly"),  # unsettled
+        row_of(loop.PLAIN, case="false-alarm", aravind="partly"),  # his: partly
+        row_of(loop.PLAIN, diagnosed=False, verdict=None, judge=None, calls=3),  # no diagnosis
+        row_of(loop.PLAIN, not_run="no fresh stack", calls=0, cost_usd=0.0),  # counted apart
+        row_of(loop.LANGGRAPH, mode="another mode"),  # a mode run on one loop only: left out
+    ]
+    (entry,) = evaluation.compare_loops(rows)
+    assert (entry["model"], entry["mode"], entry["cases"]) == ("m", "evaluation", ["duplicate-delivery", "false-alarm"])
+    assert [found["loop_kind"] for found in entry["loops"]] == [loop.PLAIN, loop.MULTI]  # the loops' own order
+    plain, multi = entry["loops"]
+    assert (plain["runs"], plain["ran"], plain["names_the_cause"], plain["partly"], plain["no_diagnosis"]) == (
+        3,
+        2,
+        0,
+        1,
+        1,
+    )
+    assert (plain["unsettled"], plain["labeled"], plain["calls"]) == (0, 1, 5)
+    assert (multi["ran"], multi["names_the_cause"], multi["unsettled"], multi["median_calls"]) == (2, 1, 1, 2)
+    assert multi["by_case"] == {
+        "duplicate-delivery": {"ran": 1, "names_the_cause": 1},
+        "false-alarm": {"ran": 1, "names_the_cause": 0},
+    }
+    assert evaluation.compare_loops([row_of(loop.PLAIN), row_of(loop.PLAIN)]) == []  # one loop: nothing side by side
+
+
+def test_the_page_shows_the_loops_side_by_side_and_an_unsettled_run_never_as_a_miss():
+    found = {"loops": evaluation.compare_loops([row_of(loop.PLAIN), row_of(loop.MULTI, judge="partly")])}
+    page = "\n".join(evaluation.loops_markdown(found))
+    assert "## The loops side by side" in page and "| plain loop | 1 ran, 0 not run | 1 of 1 |" in page
+    assert "| multi-agent loop | 1 ran, 0 not run | 0 of 1 | 0 | 0 | 0 | 1 |" in page
+    assert "| duplicate-delivery | 1 of 1 | 0 of 1 |" in page
+    assert (
+        evaluation.loops_markdown({"loops": []}) == [] and evaluation.loops_markdown({}) == []
+    )  # a report from before
+
+
+def test_the_72_runs_side_by_side_by_his_labels_and_the_graders_as_saved():
+    # The week 8 comparison (2026-11-20 UTC), the judge's verdicts (2026-11-20) and his 24 labels (2026-11-22).
+    found = evaluation.report([WEEK8], show_judge=True)
+    (entry,) = found["loops"]
+    said = {
+        e["loop_kind"]: (e["ran"], e["names_the_cause"], e["partly"], e["misses_the_cause"], e["no_diagnosis"])
+        + (e["unsettled"], e["labeled"], e["calls"])
+        for e in entry["loops"]
+    }
+    assert said == {
+        loop.PLAIN: (24, 24, 0, 0, 0, 0, 9, 173),
+        loop.LANGGRAPH: (24, 21, 1, 0, 2, 0, 5, 179),
+        loop.MULTI: (24, 21, 3, 0, 0, 0, 10, 290),
+    }
+    cases = {name: [e["by_case"][name]["names_the_cause"] for e in entry["loops"]] for name in entry["cases"]}
+    assert cases.pop("false-alarm") == [3, 2, 3] and cases.pop("missing-deploys") == [3, 1, 0]
+    assert len(cases) == 6 and all(counts == [3, 3, 3] for counts in cases.values())  # the six faults
+    assert "## The loops side by side" in evaluation.markdown(found)
+    held = {e["loop_kind"]: e["unsettled"] for e in evaluation.report([WEEK8])["loops"][0]["loops"]}
+    assert held == {loop.PLAIN: 15, loop.LANGGRAPH: 17, loop.MULTI: 14}  # the judge held back on runs not labeled
