@@ -1,0 +1,165 @@
+{
+ "call_id": "c8",
+ "tool": "query_metrics",
+ "arguments": {
+  "query": "klaxon_consumer_events_total",
+  "minutes": 15
+ },
+ "result": {
+  "query": "klaxon_consumer_events_total",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "step_seconds": 30,
+  "result_type": "matrix",
+  "series": [
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_events_total",
+     "consumer": "ledger",
+     "outcome": "already_processed",
+     "service_instance_id": "2395d5d9-f6cf-46dd-92e1-8aba04aa5d4b",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      9.0
+     ],
+     [
+      "08:04:03",
+      18.0
+     ],
+     [
+      "08:04:33",
+      20.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_events_total",
+     "consumer": "ledger",
+     "outcome": "posted",
+     "service_instance_id": "2395d5d9-f6cf-46dd-92e1-8aba04aa5d4b",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      99.0
+     ],
+     [
+      "08:04:03",
+      212.0
+     ],
+     [
+      "08:04:33",
+      272.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_events_total",
+     "consumer": "ledger",
+     "outcome": "posted",
+     "service_instance_id": "444d85b5-e34d-4be0-8883-b26690f8835d",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "08:04:33",
+      27.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_events_total",
+     "consumer": "payment-confirmer",
+     "outcome": "already_confirmed",
+     "service_instance_id": "b61ebe78-b2e1-4ae7-984c-2ed538f44a68",
+     "service_name": "payment-confirmer"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      92.0
+     ],
+     [
+      "08:04:03",
+      194.0
+     ],
+     [
+      "08:04:33",
+      278.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_events_total",
+     "consumer": "payment-confirmer",
+     "outcome": "confirmed",
+     "service_instance_id": "b61ebe78-b2e1-4ae7-984c-2ed538f44a68",
+     "service_name": "payment-confirmer"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      2.0
+     ],
+     [
+      "08:04:03",
+      8.0
+     ],
+     [
+      "08:04:33",
+      12.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_events_total",
+     "consumer": "payment-confirmer",
+     "outcome": "refund_already_confirmed",
+     "service_instance_id": "b61ebe78-b2e1-4ae7-984c-2ed538f44a68",
+     "service_name": "payment-confirmer"
+    },
+    "points": [
+     [
+      "08:03:33",
+      14.0
+     ],
+     [
+      "08:04:03",
+      28.0
+     ],
+     [
+      "08:04:33",
+      32.0
+     ]
+    ]
+   }
+  ],
+  "series_total": 6,
+  "truncated": false
+ }
+}

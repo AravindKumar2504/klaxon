@@ -1,0 +1,16 @@
+{
+ "call_id": "c21",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"ledger-consumer\"} | severity_text = \"ERROR\"",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"ledger-consumer\"} | severity_text = \"ERROR\"",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "lines": [],
+  "more_may_exist": false
+ }
+}

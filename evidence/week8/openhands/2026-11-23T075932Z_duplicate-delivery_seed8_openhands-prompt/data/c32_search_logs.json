@@ -1,0 +1,717 @@
+{
+ "call_id": "c32",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"webhook-receiver\"}",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"webhook-receiver\"}",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "lines": [
+   {
+    "time": "2026-11-23T08:01:07.895Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.8",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "881a58a0480e315a8463455c478ece05"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:07.895Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000332",
+     "key": "pay_000305",
+     "logger": "klaxon.receiver",
+     "offset": "103",
+     "partition": "2",
+     "trace_id": "881a58a0480e315a8463455c478ece05"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:07.631Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "c4b18af37bb1ad230374e89a12207790"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:07.631Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000331",
+     "key": "pay_000304",
+     "logger": "klaxon.receiver",
+     "offset": "137",
+     "partition": "1",
+     "trace_id": "c4b18af37bb1ad230374e89a12207790"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:07.369Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.2",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "dfe753a9c4cc6ab3b4a71b82e1a6022b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:07.369Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000330",
+     "key": "pay_000303",
+     "logger": "klaxon.receiver",
+     "offset": "136",
+     "partition": "1",
+     "trace_id": "dfe753a9c4cc6ab3b4a71b82e1a6022b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.692Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "0.9",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "f294d0c2ffc030dadc974b0ab764b99d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.692Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000329",
+     "key": "pay_000302",
+     "logger": "klaxon.receiver",
+     "offset": "106",
+     "partition": "0",
+     "trace_id": "f294d0c2ffc030dadc974b0ab764b99d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.507Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.1",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "72f969d7b4d11e4994a0a2d706ccee2e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.507Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000328",
+     "key": "pay_000301",
+     "logger": "klaxon.receiver",
+     "offset": "135",
+     "partition": "1",
+     "trace_id": "72f969d7b4d11e4994a0a2d706ccee2e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.490Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.4",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "b34523d2cf801691029c63d33ed1bfb4"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.490Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000327",
+     "key": "pay_000263",
+     "logger": "klaxon.receiver",
+     "offset": "134",
+     "partition": "1",
+     "trace_id": "b34523d2cf801691029c63d33ed1bfb4"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.487Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "2",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "280b2ea008427cd47a3d0bf0f40d7aac"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.487Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000326",
+     "key": "pay_000300",
+     "logger": "klaxon.receiver",
+     "offset": "102",
+     "partition": "2",
+     "trace_id": "280b2ea008427cd47a3d0bf0f40d7aac"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.208Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "2.1",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "5ddc836cbd665fdadf63ff461aa7ab80"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.208Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000325",
+     "key": "pay_000299",
+     "logger": "klaxon.receiver",
+     "offset": "101",
+     "partition": "2",
+     "trace_id": "5ddc836cbd665fdadf63ff461aa7ab80"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.045Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.5",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "049bce955aefcea624838af4c0e701cf"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.045Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000324",
+     "key": "pay_000298",
+     "logger": "klaxon.receiver",
+     "offset": "133",
+     "partition": "1",
+     "trace_id": "049bce955aefcea624838af4c0e701cf"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:05.282Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.2",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "d30d1df4f27f5e80b116dec5fd47ab42"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:05.282Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000323",
+     "key": "pay_000297",
+     "logger": "klaxon.receiver",
+     "offset": "100",
+     "partition": "2",
+     "trace_id": "d30d1df4f27f5e80b116dec5fd47ab42"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.778Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "9298bdcb8b2f945bb794fc35cdcb3c81"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.778Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000322",
+     "key": "pay_000296",
+     "logger": "klaxon.receiver",
+     "offset": "105",
+     "partition": "0",
+     "trace_id": "9298bdcb8b2f945bb794fc35cdcb3c81"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.722Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.2",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "835070830cebf21b48c1a7ee4a159a6b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.722Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000321",
+     "key": "pay_000237",
+     "logger": "klaxon.receiver",
+     "offset": "99",
+     "partition": "2",
+     "trace_id": "835070830cebf21b48c1a7ee4a159a6b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.698Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.8",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "9ca71f6c15c616036450b8971586096d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.698Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000320",
+     "key": "pay_000238",
+     "logger": "klaxon.receiver",
+     "offset": "132",
+     "partition": "1",
+     "trace_id": "9ca71f6c15c616036450b8971586096d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.421Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.5",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "0a74d487b7dda86f73d41c59ebec301e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.421Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000319",
+     "key": "pay_000295",
+     "logger": "klaxon.receiver",
+     "offset": "98",
+     "partition": "2",
+     "trace_id": "0a74d487b7dda86f73d41c59ebec301e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.416Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.9",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "74fdc2967e62ac1c266f81e1198e46e6"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.415Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000318",
+     "key": "pay_000294",
+     "logger": "klaxon.receiver",
+     "offset": "131",
+     "partition": "1",
+     "trace_id": "74fdc2967e62ac1c266f81e1198e46e6"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.327Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.5",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "e47a032fce6f9cfd3e9a6797c650a63a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.327Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000317",
+     "key": "pay_000293",
+     "logger": "klaxon.receiver",
+     "offset": "104",
+     "partition": "0",
+     "trace_id": "e47a032fce6f9cfd3e9a6797c650a63a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.214Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.6",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "a2f924d2a5e1c4f368ed242c9468b536"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.214Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000316",
+     "key": "pay_000292",
+     "logger": "klaxon.receiver",
+     "offset": "97",
+     "partition": "2",
+     "trace_id": "a2f924d2a5e1c4f368ed242c9468b536"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.956Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "2",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "774674378d1c1fda86ccbbbc04ef7340"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.956Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000315",
+     "key": "pay_000291",
+     "logger": "klaxon.receiver",
+     "offset": "103",
+     "partition": "0",
+     "trace_id": "774674378d1c1fda86ccbbbc04ef7340"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.751Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.3",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "789f0470c67b50eb2bcdfcd7afcbd5ca"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.751Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000314",
+     "key": "pay_000246",
+     "logger": "klaxon.receiver",
+     "offset": "130",
+     "partition": "1",
+     "trace_id": "789f0470c67b50eb2bcdfcd7afcbd5ca"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.652Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.6",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "61483528fc81373156c92d5044f152f2"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.652Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000313",
+     "key": "pay_000290",
+     "logger": "klaxon.receiver",
+     "offset": "102",
+     "partition": "0",
+     "trace_id": "61483528fc81373156c92d5044f152f2"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.527Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.7",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "75326847960e53e589fabb591d6cafcd"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.527Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000312",
+     "key": "pay_000259",
+     "logger": "klaxon.receiver",
+     "offset": "129",
+     "partition": "1",
+     "trace_id": "75326847960e53e589fabb591d6cafcd"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.360Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "0.8",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "3c85ed5bbe5ace8d9092f1eeca388a1f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.360Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000311",
+     "key": "pay_000289",
+     "logger": "klaxon.receiver",
+     "offset": "96",
+     "partition": "2",
+     "trace_id": "3c85ed5bbe5ace8d9092f1eeca388a1f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.294Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.2",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "3ac0216fa9512ddbf0a66c63087aa38f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.294Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000310",
+     "key": "pay_000288",
+     "logger": "klaxon.receiver",
+     "offset": "101",
+     "partition": "0",
+     "trace_id": "3ac0216fa9512ddbf0a66c63087aa38f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.159Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "0.7",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "d47dedb79debb4efccde37221b9b6341"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.159Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000309",
+     "key": "pay_000287",
+     "logger": "klaxon.receiver",
+     "offset": "95",
+     "partition": "2",
+     "trace_id": "d47dedb79debb4efccde37221b9b6341"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.116Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.receiver",
+     "method": "POST",
+     "ms": "1.1",
+     "route": "/webhooks/provider",
+     "status": "200",
+     "trace_id": "58278fa1c78875e17f88cab0297caac1"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.116Z",
+    "service": "webhook-receiver",
+    "level": "INFO",
+    "message": "webhook queued",
+    "fields": {
+     "event_id": "evt_000308",
+     "key": "pay_000286",
+     "logger": "klaxon.receiver",
+     "offset": "100",
+     "partition": "0",
+     "trace_id": "58278fa1c78875e17f88cab0297caac1"
+    }
+   }
+  ],
+  "more_may_exist": true
+ }
+}

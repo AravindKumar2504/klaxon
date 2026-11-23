@@ -1,0 +1,96 @@
+{
+ "call_id": "c12",
+ "tool": "query_metrics",
+ "arguments": {
+  "query": "klaxon_provider_attempts_total",
+  "minutes": 15
+ },
+ "result": {
+  "query": "klaxon_provider_attempts_total",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "step_seconds": 30,
+  "result_type": "matrix",
+  "series": [
+   {
+    "labels": {
+     "__name__": "klaxon_provider_attempts_total",
+     "path": "/v1/payments",
+     "result": "200",
+     "service_instance_id": "48c61798-7db4-4df3-9e68-789163fc4ce7",
+     "service_name": "payments-api"
+    },
+    "points": [
+     [
+      "07:59:38",
+      11.0
+     ],
+     [
+      "08:00:08",
+      84.0
+     ],
+     [
+      "08:00:38",
+      182.0
+     ],
+     [
+      "08:01:08",
+      289.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_provider_attempts_total",
+     "path": "/v1/payments",
+     "result": "500",
+     "service_instance_id": "48c61798-7db4-4df3-9e68-789163fc4ce7",
+     "service_name": "payments-api"
+    },
+    "points": [
+     [
+      "07:59:38",
+      6.0
+     ],
+     [
+      "08:00:08",
+      12.0
+     ],
+     [
+      "08:00:38",
+      27.0
+     ],
+     [
+      "08:01:08",
+      33.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_provider_attempts_total",
+     "path": "/v1/refunds",
+     "result": "200",
+     "service_instance_id": "48c61798-7db4-4df3-9e68-789163fc4ce7",
+     "service_name": "payments-api"
+    },
+    "points": [
+     [
+      "08:00:08",
+      4.0
+     ],
+     [
+      "08:00:38",
+      16.0
+     ],
+     [
+      "08:01:08",
+      26.0
+     ]
+    ]
+   }
+  ],
+  "series_total": 3,
+  "truncated": false
+ }
+}

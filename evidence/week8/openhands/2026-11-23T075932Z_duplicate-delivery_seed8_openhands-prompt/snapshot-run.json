@@ -1,0 +1,553 @@
+{
+  "label": "The first half of a local model's run (week 8, item 4; for CSYE 7374 only): fault 1 under synthetic traffic on this Mac's Docker Compose stack, a simulated provider, no real money. At its alert, Klaxon's read-only tools answered a fixed list of questions, saved as files for OpenHands. No model was called. Copied from 2026-11-23T075932Z_duplicate-delivery_seed8_openhands, unchanged, for the second batch.",
+  "case": {
+    "name": "duplicate-delivery",
+    "kind": "fault",
+    "title": "Payments counted twice in the books",
+    "right_answer": "The fault's recorded cause: a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time.",
+    "right_action": [
+      "rollback_deploy",
+      "ledger-consumer"
+    ],
+    "fault": "duplicate-delivery",
+    "withheld": {},
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)",
+    "seed": 8,
+    "model": "qwen3:8b"
+  },
+  "seed": 8,
+  "model": "qwen3:8b",
+  "fault_name": "duplicate-delivery",
+  "evaluation_version": 2,
+  "loop_kind": "openhands-prompt",
+  "rerun_command": "python -m klaxon.openhands_task snapshot --seed 8",
+  "ran_at_utc": "2026-11-23T07:59:32+00:00",
+  "ran_at_local": "2026-11-23T02:59:32-05:00",
+  "python": "3.12.14",
+  "klaxon_version": "0.0.1",
+  "code_sha256": "dd7c25df7d4826e67d6fd2b58c877650a07c452ba569ee5c41e8ffa32e2c9945",
+  "stack_files_sha256": "af56ce80f6aa9ce2df24f7e30956f41b256b1d82db700f796b0826155bafac16",
+  "git_commit": "d862afe678d52cd0e0f593e90517be5b9dcae3a5",
+  "git_clean_code_and_stack": true,
+  "stack": {
+    "docker_client": "29.8.2",
+    "docker_server": "29.8.2",
+    "compose": "5.5.1",
+    "images": [
+      {
+        "service": "klaxon-kafka-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-kafka-init-1",
+        "image": "apache/kafka:4.3.1",
+        "id": "sha256:77e3df9054047a88b520d0cc46e16696d3b22022e1d580aeccd2632df6532837"
+      },
+      {
+        "service": "klaxon-redis-1",
+        "image": "redis:8.8.3-alpine",
+        "id": "sha256:0b2b77d3ea5078274795e3177cdbdada8b96316684a38911d528534ed679b5ec"
+      },
+      {
+        "service": "klaxon-webhook-receiver-1",
+        "image": "klaxon-receiver:dev",
+        "id": "sha256:6fab2e587dcb90b914704cf642032b03238bcfeaf4f0126285a43b9c8ab2d691"
+      },
+      {
+        "service": "klaxon-otel-lgtm-1",
+        "image": "grafana/otel-lgtm:0.34.0",
+        "id": "sha256:b966ea107831d526d9eb8fe4d2d86c9e5731392fad9dce8296bcf2072031f07c"
+      },
+      {
+        "service": "klaxon-ledger-consumer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a587c2224868ce6e0e724b28bdb6dff85c437273e21bd622755e9a38a4325d18"
+      },
+      {
+        "service": "klaxon-payments-api-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a587c2224868ce6e0e724b28bdb6dff85c437273e21bd622755e9a38a4325d18"
+      },
+      {
+        "service": "klaxon-payment-confirmer-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a587c2224868ce6e0e724b28bdb6dff85c437273e21bd622755e9a38a4325d18"
+      },
+      {
+        "service": "klaxon-postgres-1",
+        "image": "postgres:18.6-alpine",
+        "id": "sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+      },
+      {
+        "service": "klaxon-fake-provider-1",
+        "image": "klaxon-patient:dev",
+        "id": "sha256:a587c2224868ce6e0e724b28bdb6dff85c437273e21bd622755e9a38a4325d18"
+      }
+    ]
+  },
+  "fault": {
+    "name": "duplicate-delivery",
+    "title": "Payments counted twice in the books",
+    "cause": "a deploy of the ledger consumer without its dedupe (LEDGER_HANDLER=naive): every webhook the provider sends again, after an acknowledgement it never got, is booked a second time",
+    "expected_symptoms": [
+      "the money check fails: events counted twice, the books ahead of the provider by their amounts",
+      "the webhook dashboard stays green, and consumer lag stays at 0",
+      "the ledger stops reporting 'already processed' while the confirmer still sees the same duplicates"
+    ],
+    "expected_money": {
+      "during": "failed",
+      "after": "failed",
+      "quiet": "failed"
+    },
+    "remedy": "roll the ledger consumer back to the idempotent handler, then repair each double posting with a reversal (a write, so it needs approval)"
+  },
+  "traffic_settings": {
+    "rate": 3.0,
+    "seconds": null,
+    "seed": 8,
+    "lose_ack_rate": 0.05,
+    "lost_answer_rate": 0.02,
+    "double_click_share": 0.02,
+    "refund_share": 0.1,
+    "max_in_flight": 64,
+    "api_url": "http://127.0.0.1:8080",
+    "provider_url": "http://127.0.0.1:8081",
+    "run_id": "ca9f732b"
+  },
+  "budgets": {
+    "iterations": 30,
+    "seconds": 900
+  },
+  "stopped": "the answers were saved for OpenHands, and the fault cleared; no model was called",
+  "timings": {
+    "injected_at": 76.5,
+    "injection_took": 2.4,
+    "alert_evaluation_began": 93.9,
+    "loop_started_at": 94.6,
+    "loop_ended_at": 95.7,
+    "cleared_at": 98.7
+  },
+  "evaluations": [
+    {
+      "phase": "before",
+      "began": 60.0,
+      "took": 0.6,
+      "at_utc": "2026-11-23T08:00:32Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.039
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.149,
+            "requests_per_second": 3.151,
+            "share": 0.047
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "before",
+      "began": 75.6,
+      "took": 0.9,
+      "at_utc": "2026-11-23T08:00:48Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.025
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.1,
+            "requests_per_second": 3.539,
+            "share": 0.028
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "passed",
+            "invariants": 5,
+            "failed": {},
+            "money_off_cents": 0
+          },
+          "breached": false,
+          "needed": 1,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": null
+    },
+    {
+      "phase": "during",
+      "began": 93.9,
+      "took": 0.7,
+      "at_utc": "2026-11-23T08:01:06Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.08,
+            "requests_per_second": 3.739,
+            "share": 0.021
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 1,
+              "matches_provider": 2
+            },
+            "money_off_cents": 15718
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+        "fired_at": "2026-11-23T08:01:06Z"
+      }
+    },
+    {
+      "phase": "after",
+      "began": 188.7,
+      "took": 0.8,
+      "at_utc": "2026-11-23T08:02:41Z",
+      "checks": [
+        {
+          "rule": "PaymentsLatencyHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "p95_seconds": 0.024
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "PaymentsErrorsHigh",
+          "subject": "payments-api",
+          "numbers": {
+            "errors_per_second": 0.04,
+            "requests_per_second": 2.999,
+            "share": 0.013
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "ledger",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "ConsumerLagHigh",
+          "subject": "payment-confirmer",
+          "numbers": {
+            "messages_behind": 0.0
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        },
+        {
+          "rule": "MoneyCheckFailed",
+          "subject": "money check",
+          "numbers": {
+            "outcome": "failed",
+            "invariants": 5,
+            "failed": {
+              "posted_exactly_once": 1,
+              "matches_provider": 2
+            },
+            "money_off_cents": 15718
+          },
+          "breached": true,
+          "needed": 1,
+          "sentence": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+          "in_a_row": 1,
+          "firing": true
+        },
+        {
+          "rule": "BooksBehindProvider",
+          "subject": "the books",
+          "numbers": {
+            "settled": true,
+            "webhooks_not_acknowledged": null,
+            "messages_behind": null
+          },
+          "breached": false,
+          "needed": 2,
+          "sentence": "",
+          "in_a_row": 0,
+          "firing": false
+        }
+      ],
+      "problems": [],
+      "alert": {
+        "name": "MoneyCheckFailed",
+        "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+        "fired_at": "2026-11-23T08:02:41Z"
+      }
+    }
+  ],
+  "injected": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "naive"
+  },
+  "cleared": {
+    "redeployed": "ledger-consumer",
+    "LEDGER_HANDLER": "idempotent",
+    "LEDGER_BAD_EVENTS": "dead_letter"
+  },
+  "alert": {
+    "name": "MoneyCheckFailed",
+    "summary": "The money check failed 2 of its 5 invariants: posted_exactly_once (1 finding), matches_provider (2 findings). By its count, our ledger is $157.18 ahead of the provider's balance.",
+    "fired_at": "2026-11-23T08:01:06Z"
+  },
+  "loop": null,
+  "comparison": null,
+  "traffic": {
+    "counts": {
+      "double_clicks.in_progress": 4,
+      "double_clicks.ran_first": 5,
+      "double_clicks.sent": 9,
+      "not_sent.refunds": 1,
+      "payments.arrived": 601,
+      "payments.succeeded": 601,
+      "refunds.succeeded": 58,
+      "retries": 23,
+      "retries.after_409": 5,
+      "retries.after_503": 18
+    },
+    "unexpected": []
+  },
+  "provider_behavior": "the provider's behavior was put back as it was found",
+  "gated": false,
+  "rehearsal": false,
+  "gate": null,
+  "verification": null,
+  "undo": null,
+  "damage": {},
+  "deploys": null,
+  "removed_by": null,
+  "platform": "compose",
+  "snapshot": {
+    "calls": 43,
+    "seconds": 1.2,
+    "data": "data",
+    "task": "task.md"
+  },
+  "snapshot_of": "2026-11-23T075932Z_duplicate-delivery_seed8_openhands",
+  "openhands_tool_calls": "prompt",
+  "copied_at_utc": "2026-11-23T09:22:34Z"
+}

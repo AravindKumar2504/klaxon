@@ -1,0 +1,82 @@
+{
+ "call_id": "c1",
+ "tool": "service_health",
+ "arguments": {},
+ "result": {
+  "at": "2026-11-23T08:01:07Z",
+  "services": [
+   {
+    "service": "fake-provider",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:24Z"
+   },
+   {
+    "service": "kafka",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:24Z"
+   },
+   {
+    "service": "kafka-init",
+    "state": "exited",
+    "health": null,
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:28Z",
+    "exit_code": 0,
+    "note": "one-shot: creates the Kafka topics, then exits"
+   },
+   {
+    "service": "ledger-consumer",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T08:00:49Z"
+   },
+   {
+    "service": "otel-lgtm",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:24Z"
+   },
+   {
+    "service": "payment-confirmer",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:30Z"
+   },
+   {
+    "service": "payments-api",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:25Z"
+   },
+   {
+    "service": "postgres",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:24Z"
+   },
+   {
+    "service": "redis",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:24Z"
+   },
+   {
+    "service": "webhook-receiver",
+    "state": "running",
+    "health": "healthy",
+    "restarts": 0,
+    "started_at": "2026-11-23T07:59:30Z"
+   }
+  ]
+ }
+}

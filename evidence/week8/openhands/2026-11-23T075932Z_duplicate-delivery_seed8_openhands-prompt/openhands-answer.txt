@@ -1,0 +1,24 @@
+{
+  "action": "diagnose",
+  "diagnosis": {
+    "hypothesis": "A duplicate payment event (pay_000259) was processed twice, causing both the 'posted_exactly_once' invariant failure and the $157.18 ledger-provider discrepancy. The first transaction was recorded by the provider as $78.59, while the ledger incorrectly counted it as $235.77, creating a $157.18 gap.",
+    "evidence": [
+      {
+        "call_id": "c3",
+        "shows": "The 'posted_exactly_once' invariant failed due to event 'evt_000281' being posted twice, with transaction IDs 281 and 282."
+      },
+      {
+        "call_id": "c3",
+        "shows": "The 'matches_provider' invariant failed with a $157.18 discrepancy, specifically for payment 'pay_000259' (ledger: $235.77, provider: $78.59)."
+      }
+    ],
+    "confidence": 1,
+    "proposed_fix": {
+      "kind": "code_change",
+      "target": "payment-processing-service",
+      "summary": "Add idempotency checks for payment events and reconcile duplicate transaction IDs 281/282. Verify provider-side processing of payment 'pay_000259'."
+    },
+    "blast_radius": "Affects all payment processing workflows and ledger synchronization. Could impact ongoing transactions if duplicate logic exists elsewhere.",
+    "rollback_plan": "Revert the recent deploy (c2_recent_deploys.json) if the code change causes instability. Restore ledger state from backups if needed."
+  }
+}

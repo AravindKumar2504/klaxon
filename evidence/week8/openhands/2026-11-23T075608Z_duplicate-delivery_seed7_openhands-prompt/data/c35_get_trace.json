@@ -1,0 +1,189 @@
+{
+ "call_id": "c35",
+ "tool": "get_trace",
+ "arguments": {
+  "trace_id": "5efd9235f93fb4b898c69c3f205e78f2"
+ },
+ "result": {
+  "trace_id": "5efd9235f93fb4b898c69c3f205e78f2",
+  "services": [
+   "payments-api"
+  ],
+  "spans": [
+   {
+    "span_id": "8c9984104ee7bdd8",
+    "parent_span_id": null,
+    "service": "payments-api",
+    "name": "POST /payments",
+    "kind": "server",
+    "start_ms": 0.0,
+    "duration_ms": 627.456,
+    "status": "error",
+    "attributes": {
+     "server.port": 8080,
+     "klaxon.payment_id": "pmt_000160",
+     "url.scheme": "http",
+     "network.protocol.version": "1.1",
+     "http.response.status_code": 503,
+     "error.type": "503",
+     "http.request.method": "POST",
+     "url.path": "redacted",
+     "server.address": "redacted",
+     "http.route": "/payments"
+    }
+   },
+   {
+    "span_id": "6a0ac34f34699e64",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "SET",
+    "kind": "client",
+    "start_ms": 1.829,
+    "duration_ms": 0.522,
+    "status": "unset",
+    "attributes": {
+     "db.query.text": "SET ? ? ? ? ?",
+     "db.redis.args_length": 6,
+     "db.system.name": "redis",
+     "server.port": 6379,
+     "network.transport": "tcp",
+     "server.address": "redis"
+    }
+   },
+   {
+    "span_id": "243af0e8d0a02c82",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "klaxon",
+    "kind": "client",
+    "start_ms": 2.553,
+    "duration_ms": 0.418,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "dcc0318282af8954",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "SELECT",
+    "kind": "client",
+    "start_ms": 3.035,
+    "duration_ms": 0.433,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "SELECT * FROM payments WHERE idempotency_key = %s",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "db91c812ef6ce28e",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 3.538,
+    "duration_ms": 1.4,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO payments (idempotency_key, request_fingerprint, customer, amount_cents, currency, status) VALUES (%s, %s, %s, %s, %s, 'pending') ON CONFLICT (idempotency_key) DO NOTHING RETURNING *",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "d1d0129591606fe3",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "POST",
+    "kind": "client",
+    "start_ms": 5.49,
+    "duration_ms": 4.062,
+    "status": "error",
+    "attributes": {
+     "url.full": "http://fake-provider:8000/v1/payments",
+     "network.peer.address": "fake-provider",
+     "server.port": 8000,
+     "network.peer.port": 8000,
+     "http.response.status_code": 500,
+     "error.type": "500",
+     "network.protocol.version": "1.1",
+     "http.request.method": "POST",
+     "server.address": "fake-provider"
+    }
+   },
+   {
+    "span_id": "34d2e79b13a35658",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "POST",
+    "kind": "client",
+    "start_ms": 220.585,
+    "duration_ms": 4.089,
+    "status": "error",
+    "attributes": {
+     "url.full": "http://fake-provider:8000/v1/payments",
+     "network.peer.address": "fake-provider",
+     "server.port": 8000,
+     "network.peer.port": 8000,
+     "http.response.status_code": 500,
+     "error.type": "500",
+     "network.protocol.version": "1.1",
+     "http.request.method": "POST",
+     "server.address": "fake-provider"
+    }
+   },
+   {
+    "span_id": "401234391512e1b6",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "POST",
+    "kind": "client",
+    "start_ms": 625.688,
+    "duration_ms": 1.072,
+    "status": "error",
+    "attributes": {
+     "url.full": "http://fake-provider:8000/v1/payments",
+     "network.peer.address": "fake-provider",
+     "server.port": 8000,
+     "network.peer.port": 8000,
+     "http.response.status_code": 500,
+     "error.type": "500",
+     "network.protocol.version": "1.1",
+     "http.request.method": "POST",
+     "server.address": "fake-provider"
+    }
+   },
+   {
+    "span_id": "9ddb5523a5950476",
+    "parent_span_id": "8c9984104ee7bdd8",
+    "service": "payments-api",
+    "name": "EVAL",
+    "kind": "client",
+    "start_ms": 627.0,
+    "duration_ms": 0.155,
+    "status": "unset",
+    "attributes": {
+     "db.query.text": "EVAL ? ? ? ?",
+     "db.redis.args_length": 5,
+     "db.system.name": "redis",
+     "server.port": 6379,
+     "network.transport": "tcp",
+     "server.address": "redis"
+    }
+   }
+  ],
+  "spans_total": 9,
+  "spans_left_out": 0
+ }
+}

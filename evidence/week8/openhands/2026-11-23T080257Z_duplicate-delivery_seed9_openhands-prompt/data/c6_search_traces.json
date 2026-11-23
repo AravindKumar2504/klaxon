@@ -1,0 +1,157 @@
+{
+ "call_id": "c6",
+ "tool": "search_traces",
+ "arguments": {
+  "query": "{ }",
+  "minutes": 15,
+  "limit": 20
+ },
+ "result": {
+  "query": "{ }",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "traces": [
+   {
+    "trace_id": "74ce984aaa0fc1f525244d571615d359",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:04:00.521Z",
+    "duration_ms": 2.0
+   },
+   {
+    "trace_id": "72456fb7d50c1cfb4e2d491696c688ae",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:04:00.518Z",
+    "duration_ms": 4.0
+   },
+   {
+    "trace_id": "aed908648f8bbbb2bace00ee5c505e6e",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:04:00.478Z",
+    "duration_ms": 3.0
+   },
+   {
+    "trace_id": "3da9080d9bfa87c283bb2934ceb0e720",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:04:00.472Z",
+    "duration_ms": 7.0
+   },
+   {
+    "trace_id": "64b0fc7f44ceefd3ef7a45806d847a5",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:59.559Z",
+    "duration_ms": 12.0
+   },
+   {
+    "trace_id": "2571bcbb0de1735f8e407b05963375b9",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:03:59.453Z",
+    "duration_ms": 5.0
+   },
+   {
+    "trace_id": "78e31354d119a6063ff6f51a2a48b6b6",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:59.443Z",
+    "duration_ms": 11.0
+   },
+   {
+    "trace_id": "c8b96949285846c4f8b7365ee4deadf",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:03:59.038Z",
+    "duration_ms": 4.0
+   },
+   {
+    "trace_id": "388c9ebbb06600f12d531e3e8cc628df",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:59.028Z",
+    "duration_ms": 11.0
+   },
+   {
+    "trace_id": "7a71d2842bc1d8ada4175583f1d27d23",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:58.613Z",
+    "duration_ms": 12.0
+   },
+   {
+    "trace_id": "36263d46d7678e5bbf9e9f2af7f548b2",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:57.370Z",
+    "duration_ms": 9.0
+   },
+   {
+    "trace_id": "807be2bfcd2570fe0f2699c281dabac0",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:03:57.273Z",
+    "duration_ms": 4.0
+   },
+   {
+    "trace_id": "b94aabf503ccc0bea12f9412b2b78f44",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:57.265Z",
+    "duration_ms": 10.0
+   },
+   {
+    "trace_id": "327a6159120df32d95425198bc0c5fe2",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:56.387Z",
+    "duration_ms": 8.0
+   },
+   {
+    "trace_id": "73bb32bffeacade2c386c6be2c76943b",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:03:56.217Z",
+    "duration_ms": 4.0
+   },
+   {
+    "trace_id": "aefe953e59d2dd96168e3df18dc61ccf",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:56.212Z",
+    "duration_ms": 8.0
+   },
+   {
+    "trace_id": "4a631fa95f3b6ecf1329de5891caf458",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:03:56.198Z",
+    "duration_ms": 4.0
+   },
+   {
+    "trace_id": "96d7f24cae3c7a7df94f9ee85e6be41b",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:56.185Z",
+    "duration_ms": 15.0
+   },
+   {
+    "trace_id": "880d399e00a66806a1de1787ddd928d7",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:56.101Z",
+    "duration_ms": 5.0
+   },
+   {
+    "trace_id": "a072a57ab9e63d9c88c85766c250942",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:03:55.874Z",
+    "duration_ms": 7.0
+   }
+  ],
+  "more_may_exist": true
+ }
+}

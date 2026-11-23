@@ -1,0 +1,434 @@
+[
+ {
+  "call_id": "c1",
+  "tool": "service_health",
+  "arguments": {},
+  "file": "c1_service_health.json",
+  "error": false
+ },
+ {
+  "call_id": "c2",
+  "tool": "recent_deploys",
+  "arguments": {},
+  "file": "c2_recent_deploys.json",
+  "error": false
+ },
+ {
+  "call_id": "c3",
+  "tool": "money_check",
+  "arguments": {},
+  "file": "c3_money_check.json",
+  "error": false
+ },
+ {
+  "call_id": "c4",
+  "tool": "list_metrics",
+  "arguments": {
+   "match": "klaxon_"
+  },
+  "file": "c4_list_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c5",
+  "tool": "search_traces",
+  "arguments": {
+   "query": "{ status = error }",
+   "minutes": 15,
+   "limit": 20
+  },
+  "file": "c5_search_traces.json",
+  "error": false
+ },
+ {
+  "call_id": "c6",
+  "tool": "search_traces",
+  "arguments": {
+   "query": "{ }",
+   "minutes": 15,
+   "limit": 20
+  },
+  "file": "c6_search_traces.json",
+  "error": false
+ },
+ {
+  "call_id": "c7",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_consumer_dead_letters_total",
+   "minutes": 15
+  },
+  "file": "c7_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c8",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_consumer_events_total",
+   "minutes": 15
+  },
+  "file": "c8_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c9",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_consumer_retries_total",
+   "minutes": 15
+  },
+  "file": "c9_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c10",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_kafka_consumer_lag",
+   "minutes": 15
+  },
+  "file": "c10_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c11",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_payments_pending",
+   "minutes": 15
+  },
+  "file": "c11_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c12",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_provider_attempts_total",
+   "minutes": 15
+  },
+  "file": "c12_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c13",
+  "tool": "query_metrics",
+  "arguments": {
+   "query": "klaxon_webhooks_received_total",
+   "minutes": 15
+  },
+  "file": "c13_query_metrics.json",
+  "error": false
+ },
+ {
+  "call_id": "c14",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"fake-provider\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c14_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c15",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"fake-provider\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c15_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c16",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"kafka\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c16_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c17",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"kafka\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c17_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c18",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"kafka-init\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c18_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c19",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"kafka-init\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c19_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c20",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"ledger-consumer\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c20_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c21",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"ledger-consumer\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c21_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c22",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"otel-lgtm\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c22_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c23",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"otel-lgtm\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c23_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c24",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"payment-confirmer\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c24_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c25",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"payment-confirmer\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c25_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c26",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"payments-api\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c26_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c27",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"payments-api\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c27_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c28",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"postgres\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c28_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c29",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"postgres\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c29_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c30",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"redis\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c30_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c31",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"redis\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c31_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c32",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"webhook-receiver\"}",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c32_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c33",
+  "tool": "search_logs",
+  "arguments": {
+   "query": "{service_name=\"webhook-receiver\"} | severity_text = \"ERROR\"",
+   "minutes": 15,
+   "limit": 50
+  },
+  "file": "c33_search_logs.json",
+  "error": false
+ },
+ {
+  "call_id": "c34",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "fecb7a3c369a75199c77f37b0dcf5975"
+  },
+  "file": "c34_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c35",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "e43d3df9be86f356120e42350bf078d5"
+  },
+  "file": "c35_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c36",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "c1bdef79c747f6540338085cdf24f189"
+  },
+  "file": "c36_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c37",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "42d02430114f7766e5cbe35469f0897e"
+  },
+  "file": "c37_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c38",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "a83d272403c370fabfcc8f86b09724ae"
+  },
+  "file": "c38_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c39",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "7b644dd2b03235bd3b09ba7b79e53f53"
+  },
+  "file": "c39_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c40",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "28d3138fd8e279ee608c7d340c999bdf"
+  },
+  "file": "c40_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c41",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "e7dc4919d9e1f2bda8630d003b5d7055"
+  },
+  "file": "c41_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c42",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "5d14d0551411af41a43571e26d5b8f51"
+  },
+  "file": "c42_get_trace.json",
+  "error": false
+ },
+ {
+  "call_id": "c43",
+  "tool": "get_trace",
+  "arguments": {
+   "trace_id": "106b5ee12c5afb6b171750ae50bb4aea"
+  },
+  "file": "c43_get_trace.json",
+  "error": false
+ }
+]

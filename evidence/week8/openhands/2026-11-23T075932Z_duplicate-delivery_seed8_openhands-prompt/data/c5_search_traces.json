@@ -1,0 +1,80 @@
+{
+ "call_id": "c5",
+ "tool": "search_traces",
+ "arguments": {
+  "query": "{ status = error }",
+  "minutes": 15,
+  "limit": 20
+ },
+ "result": {
+  "query": "{ status = error }",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "traces": [
+   {
+    "trace_id": "fecb7a3c369a75199c77f37b0dcf5975",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:32.476Z",
+    "duration_ms": 627.0
+   },
+   {
+    "trace_id": "e43d3df9be86f356120e42350bf078d5",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:16.909Z",
+    "duration_ms": 618.0
+   },
+   {
+    "trace_id": "c1bdef79c747f6540338085cdf24f189",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:11.460Z",
+    "duration_ms": 618.0
+   },
+   {
+    "trace_id": "42d02430114f7766e5cbe35469f0897e",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:08.459Z",
+    "duration_ms": 618.0
+   },
+   {
+    "trace_id": "a83d272403c370fabfcc8f86b09724ae",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:08.455Z",
+    "duration_ms": 622.0
+   },
+   {
+    "trace_id": "7b644dd2b03235bd3b09ba7b79e53f53",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:59:45.442Z",
+    "duration_ms": 615.0
+   },
+   {
+    "trace_id": "28d3138fd8e279ee608c7d340c999bdf",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:59:43.366Z",
+    "duration_ms": 621.0
+   },
+   {
+    "trace_id": "e7dc4919d9e1f2bda8630d003b5d7055",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:59:34.224Z",
+    "duration_ms": 613.0
+   },
+   {
+    "trace_id": "5d14d0551411af41a43571e26d5b8f51",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:59:33.103Z",
+    "duration_ms": 619.0
+   }
+  ],
+  "more_may_exist": false
+ }
+}

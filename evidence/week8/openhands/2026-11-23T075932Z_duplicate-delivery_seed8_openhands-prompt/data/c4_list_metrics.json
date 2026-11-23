@@ -1,0 +1,72 @@
+{
+ "call_id": "c4",
+ "tool": "list_metrics",
+ "arguments": {
+  "match": "klaxon_"
+ },
+ "result": {
+  "match": "klaxon_",
+  "metrics": [
+   {
+    "name": "klaxon_consumer_dead_letters_total",
+    "labels": [
+     "consumer",
+     "reason",
+     "service_instance_id",
+     "service_name"
+    ]
+   },
+   {
+    "name": "klaxon_consumer_events_total",
+    "labels": [
+     "consumer",
+     "outcome",
+     "service_instance_id",
+     "service_name"
+    ]
+   },
+   {
+    "name": "klaxon_consumer_retries_total",
+    "labels": [
+     "consumer",
+     "service_instance_id",
+     "service_name"
+    ]
+   },
+   {
+    "name": "klaxon_kafka_consumer_lag",
+    "labels": [
+     "consumer",
+     "partition",
+     "service_name"
+    ]
+   },
+   {
+    "name": "klaxon_payments_pending",
+    "labels": [
+     "age",
+     "service_instance_id",
+     "service_name"
+    ]
+   },
+   {
+    "name": "klaxon_provider_attempts_total",
+    "labels": [
+     "path",
+     "result",
+     "service_instance_id",
+     "service_name"
+    ]
+   },
+   {
+    "name": "klaxon_webhooks_received_total",
+    "labels": [
+     "result",
+     "service_name"
+    ]
+   }
+  ],
+  "metrics_total": 7,
+  "truncated": false
+ }
+}

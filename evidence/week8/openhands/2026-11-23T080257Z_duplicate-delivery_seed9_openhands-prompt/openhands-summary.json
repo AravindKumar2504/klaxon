@@ -1,0 +1,21 @@
+{
+ "sdk": "1.60.1",
+ "image": "ghcr.io/openhands/agent-server:1.60.1-python",
+ "platform": "linux/arm64",
+ "model": "qwen3:8b",
+ "tools": [
+  "glob",
+  "grep",
+  "planning_file_editor"
+ ],
+ "mount": "/workspace/project/data:ro",
+ "max_iterations": 30,
+ "timeout_seconds": 900,
+ "tool_calls": "prompt",
+ "outcome": "finished",
+ "execution_status": "ConversationExecutionStatus.FINISHED",
+ "errors": [],
+ "events": 49,
+ "answer_from": "its finish action",
+ "seconds": 497.1
+}

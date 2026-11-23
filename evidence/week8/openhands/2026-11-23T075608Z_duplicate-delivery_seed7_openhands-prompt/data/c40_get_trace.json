@@ -1,0 +1,224 @@
+{
+ "call_id": "c40",
+ "tool": "get_trace",
+ "arguments": {
+  "trace_id": "42918509805be7465f44120bece5a403"
+ },
+ "result": {
+  "trace_id": "42918509805be7465f44120bece5a403",
+  "services": [
+   "ledger-consumer",
+   "payment-confirmer",
+   "webhook-receiver"
+  ],
+  "spans": [
+   {
+    "span_id": "60fb742b8f97962a",
+    "parent_span_id": null,
+    "service": "webhook-receiver",
+    "name": "POST /webhooks/provider",
+    "kind": "server",
+    "start_ms": 0.0,
+    "duration_ms": 1.029,
+    "status": "unset",
+    "attributes": {
+     "url.scheme": "http",
+     "network.protocol.version": "1.1",
+     "server.port": 8000,
+     "provider.event_id": "evt_000202",
+     "klaxon.webhook.result": "queued",
+     "http.response.status_code": 200,
+     "http.request.method": "POST",
+     "url.path": "redacted",
+     "server.address": "redacted",
+     "http.route": "/webhooks/provider"
+    }
+   },
+   {
+    "span_id": "185bbf4277b68734",
+    "parent_span_id": "60fb742b8f97962a",
+    "service": "webhook-receiver",
+    "name": "send provider-events",
+    "kind": "producer",
+    "start_ms": 0.157,
+    "duration_ms": 0.796,
+    "status": "unset",
+    "attributes": {
+     "messaging.system": "kafka",
+     "messaging.operation.type": "send",
+     "messaging.destination.name": "provider-events",
+     "provider.event_id": "evt_000202",
+     "messaging.destination.partition.id": "1",
+     "messaging.kafka.offset": 93
+    }
+   },
+   {
+    "span_id": "d44e51cefc25d0fe",
+    "parent_span_id": "185bbf4277b68734",
+    "service": "payment-confirmer",
+    "name": "process provider-events",
+    "kind": "consumer",
+    "start_ms": 1.653,
+    "duration_ms": 2.14,
+    "status": "unset",
+    "attributes": {
+     "messaging.system": "kafka",
+     "messaging.operation.type": "process",
+     "messaging.destination.name": "provider-events",
+     "messaging.destination.partition.id": "1",
+     "messaging.kafka.offset": 93,
+     "messaging.consumer.group.name": "payment-confirmer",
+     "provider.event_id": "evt_000202",
+     "provider.payment_id": "pay_000149",
+     "klaxon.refund_id": "rfd_000016",
+     "provider.refund_id": "re_000016",
+     "klaxon.outcome": "refund_already_confirmed"
+    }
+   },
+   {
+    "span_id": "ccc8d7a6c07581e2",
+    "parent_span_id": "185bbf4277b68734",
+    "service": "ledger-consumer",
+    "name": "process provider-events",
+    "kind": "consumer",
+    "start_ms": 1.683,
+    "duration_ms": 2.315,
+    "status": "unset",
+    "attributes": {
+     "messaging.system": "kafka",
+     "messaging.operation.type": "process",
+     "messaging.destination.name": "provider-events",
+     "messaging.destination.partition.id": "1",
+     "messaging.kafka.offset": 93,
+     "messaging.consumer.group.name": "ledger",
+     "provider.event_id": "evt_000202",
+     "provider.payment_id": "pay_000149",
+     "klaxon.refund_id": "rfd_000016",
+     "provider.refund_id": "re_000016",
+     "klaxon.outcome": "posted"
+    }
+   },
+   {
+    "span_id": "ee8f86c140af7520",
+    "parent_span_id": "ccc8d7a6c07581e2",
+    "service": "ledger-consumer",
+    "name": "klaxon",
+    "kind": "client",
+    "start_ms": 1.819,
+    "duration_ms": 0.234,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "d6ace35a8f4d2298",
+    "parent_span_id": "d44e51cefc25d0fe",
+    "service": "payment-confirmer",
+    "name": "klaxon",
+    "kind": "client",
+    "start_ms": 1.841,
+    "duration_ms": 0.294,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "8023be84bf1ce748",
+    "parent_span_id": "ccc8d7a6c07581e2",
+    "service": "ledger-consumer",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 2.249,
+    "duration_ms": 0.372,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO processed_events (event_id) VALUES (%s) ON CONFLICT (event_id) DO NOTHING",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "140f144798ccc2ba",
+    "parent_span_id": "d44e51cefc25d0fe",
+    "service": "payment-confirmer",
+    "name": "UPDATE",
+    "kind": "client",
+    "start_ms": 2.409,
+    "duration_ms": 0.694,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "UPDATE refunds SET status = 'succeeded',       provider_refund_id = COALESCE(%(provider)s, provider_refund_id), updated_at = now() WHERE id = %(ours)s AND status = 'pending' AND amount_cents = %(amount)s   AND (provider_refund_id IS NULL OR provider_refund_id = %(provider)s)   AND payment_id IN (SEL",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "40dd24dd1a7e4e6c",
+    "parent_span_id": "ccc8d7a6c07581e2",
+    "service": "ledger-consumer",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 2.742,
+    "duration_ms": 0.274,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO transactions (event_id, payment_id, description, source) VALUES (%s, %s, %s, %s) RETURNING id",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "39fb2383054c43ff",
+    "parent_span_id": "ccc8d7a6c07581e2",
+    "service": "ledger-consumer",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 3.072,
+    "duration_ms": 0.35,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO entries (transaction_id, account, side, amount_cents) VALUES (%s, %s, %s, %s)",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "e16ca7de9cc75722",
+    "parent_span_id": "d44e51cefc25d0fe",
+    "service": "payment-confirmer",
+    "name": "SELECT",
+    "kind": "client",
+    "start_ms": 3.171,
+    "duration_ms": 0.308,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "SELECT r.id, r.status, r.amount_cents, r.provider_refund_id, p.provider_payment_id FROM refunds r JOIN payments p ON p.id = r.payment_id WHERE r.id = %s",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   }
+  ],
+  "spans_total": 11,
+  "spans_left_out": 0
+ }
+}

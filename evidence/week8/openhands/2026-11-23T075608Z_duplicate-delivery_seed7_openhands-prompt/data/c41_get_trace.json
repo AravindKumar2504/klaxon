@@ -1,0 +1,222 @@
+{
+ "call_id": "c41",
+ "tool": "get_trace",
+ "arguments": {
+  "trace_id": "534e04c6825b6025cc683d0fd808a8b6"
+ },
+ "result": {
+  "trace_id": "534e04c6825b6025cc683d0fd808a8b6",
+  "services": [
+   "ledger-consumer",
+   "payment-confirmer",
+   "webhook-receiver"
+  ],
+  "spans": [
+   {
+    "span_id": "8120b75649caa597",
+    "parent_span_id": null,
+    "service": "webhook-receiver",
+    "name": "POST /webhooks/provider",
+    "kind": "server",
+    "start_ms": 0.0,
+    "duration_ms": 1.345,
+    "status": "unset",
+    "attributes": {
+     "url.scheme": "http",
+     "network.protocol.version": "1.1",
+     "server.port": 8000,
+     "provider.event_id": "evt_000201",
+     "klaxon.webhook.result": "queued",
+     "http.response.status_code": 200,
+     "http.request.method": "POST",
+     "url.path": "redacted",
+     "server.address": "redacted",
+     "http.route": "/webhooks/provider"
+    }
+   },
+   {
+    "span_id": "d054af8828e4948d",
+    "parent_span_id": "8120b75649caa597",
+    "service": "webhook-receiver",
+    "name": "send provider-events",
+    "kind": "producer",
+    "start_ms": 0.268,
+    "duration_ms": 0.957,
+    "status": "unset",
+    "attributes": {
+     "messaging.system": "kafka",
+     "messaging.operation.type": "send",
+     "messaging.destination.name": "provider-events",
+     "provider.event_id": "evt_000201",
+     "messaging.destination.partition.id": "1",
+     "messaging.kafka.offset": 92
+    }
+   },
+   {
+    "span_id": "a0532fa0a7f9ed9a",
+    "parent_span_id": "d054af8828e4948d",
+    "service": "payment-confirmer",
+    "name": "process provider-events",
+    "kind": "consumer",
+    "start_ms": 1.772,
+    "duration_ms": 1.424,
+    "status": "unset",
+    "attributes": {
+     "messaging.system": "kafka",
+     "messaging.operation.type": "process",
+     "messaging.destination.name": "provider-events",
+     "messaging.destination.partition.id": "1",
+     "messaging.kafka.offset": 92,
+     "messaging.consumer.group.name": "payment-confirmer",
+     "provider.event_id": "evt_000201",
+     "provider.payment_id": "pay_000186",
+     "klaxon.payment_id": "pmt_000186",
+     "klaxon.outcome": "already_confirmed"
+    }
+   },
+   {
+    "span_id": "b9632cbb76220c82",
+    "parent_span_id": "d054af8828e4948d",
+    "service": "ledger-consumer",
+    "name": "process provider-events",
+    "kind": "consumer",
+    "start_ms": 1.834,
+    "duration_ms": 2.019,
+    "status": "unset",
+    "attributes": {
+     "messaging.system": "kafka",
+     "messaging.operation.type": "process",
+     "messaging.destination.name": "provider-events",
+     "messaging.destination.partition.id": "1",
+     "messaging.kafka.offset": 92,
+     "messaging.consumer.group.name": "ledger",
+     "provider.event_id": "evt_000201",
+     "provider.payment_id": "pay_000186",
+     "klaxon.payment_id": "pmt_000186",
+     "klaxon.outcome": "posted"
+    }
+   },
+   {
+    "span_id": "316e46cafc99ad2a",
+    "parent_span_id": "a0532fa0a7f9ed9a",
+    "service": "payment-confirmer",
+    "name": "klaxon",
+    "kind": "client",
+    "start_ms": 1.852,
+    "duration_ms": 0.265,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "bdab05693d9ab581",
+    "parent_span_id": "b9632cbb76220c82",
+    "service": "ledger-consumer",
+    "name": "klaxon",
+    "kind": "client",
+    "start_ms": 1.919,
+    "duration_ms": 0.26,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "499712070ad95d17",
+    "parent_span_id": "b9632cbb76220c82",
+    "service": "ledger-consumer",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 2.387,
+    "duration_ms": 0.273,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO processed_events (event_id) VALUES (%s) ON CONFLICT (event_id) DO NOTHING",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "e56cf6c25cc1138f",
+    "parent_span_id": "a0532fa0a7f9ed9a",
+    "service": "payment-confirmer",
+    "name": "UPDATE",
+    "kind": "client",
+    "start_ms": 2.388,
+    "duration_ms": 0.291,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "UPDATE payments SET status = 'succeeded', provider_payment_id = %(provider)s, updated_at = now() WHERE id = %(ours)s AND status = 'pending' AND amount_cents = %(amount)s   AND (provider_payment_id IS NULL OR provider_payment_id = %(provider)s)",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "259482bff020a287",
+    "parent_span_id": "b9632cbb76220c82",
+    "service": "ledger-consumer",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 2.711,
+    "duration_ms": 0.211,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO transactions (event_id, payment_id, description, source) VALUES (%s, %s, %s, %s) RETURNING id",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "26b1e5d07c10ed23",
+    "parent_span_id": "a0532fa0a7f9ed9a",
+    "service": "payment-confirmer",
+    "name": "SELECT",
+    "kind": "client",
+    "start_ms": 2.735,
+    "duration_ms": 0.201,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "SELECT id, status, amount_cents, provider_payment_id FROM payments WHERE id = %s",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   },
+   {
+    "span_id": "dff9d23970e04965",
+    "parent_span_id": "b9632cbb76220c82",
+    "service": "ledger-consumer",
+    "name": "INSERT",
+    "kind": "client",
+    "start_ms": 2.963,
+    "duration_ms": 0.341,
+    "status": "unset",
+    "attributes": {
+     "db.system.name": "postgresql",
+     "db.namespace": "klaxon",
+     "db.query.text": "INSERT INTO entries (transaction_id, account, side, amount_cents) VALUES (%s, %s, %s, %s)",
+     "server.port": 5432,
+     "server.address": "postgres"
+    }
+   }
+  ],
+  "spans_total": 11,
+  "spans_left_out": 0
+ }
+}

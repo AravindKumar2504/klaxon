@@ -1,0 +1,25 @@
+{
+  "action": "diagnose",
+  "why": "The money check failed due to duplicate payments and provider mismatch.",
+  "diagnosis": {
+    "hypothesis": "The 'posted_exactly_once' invariant failed because an event was posted twice, and 'matches_provider' failed due to a $104.44 discrepancy from a failed payment to 'fake-provider'.",
+    "evidence": [
+      {
+        "call_id": "c3",
+        "shows": "Event 'evt_000272' was posted twice, and 'pay_000247' shows a $104.44 difference between ledger and provider."
+      },
+      {
+        "call_id": "c34",
+        "shows": "Payments-api sent 3 POST requests to 'fake-provider' with 500 errors, likely causing failed payments and duplicate ledger entries."
+      }
+    ],
+    "confidence": 0.95,
+    "proposed_fix": {
+      "kind": "rollback",
+      "target": "payments-api",
+      "summary": "Roll back the latest deploy to fix payment processing logic and prevent duplicate postings."
+    },
+    "blast_radius": "Affects payments-api service and its ability to process payments to 'fake-provider'.",
+    "rollback_plan": "Revert to the previous deploy version and monitor for duplicate postings."
+  }
+}
