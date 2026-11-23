@@ -1,0 +1,16 @@
+{
+ "call_id": "c28",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"postgres\"}",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"postgres\"}",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "lines": [],
+  "more_may_exist": false
+ }
+}

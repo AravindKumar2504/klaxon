@@ -1,0 +1,150 @@
+{
+ "call_id": "c3",
+ "tool": "money_check",
+ "arguments": {},
+ "result": {
+  "outcome": "failed",
+  "cutoff": "2026-11-23T07:57:44Z",
+  "waited_to_settle": true,
+  "settled_after_seconds": 0.19,
+  "invariants": [
+   {
+    "name": "posted_exactly_once",
+    "passed": false,
+    "summary": "evt_000251 (payment.succeeded, pay_000230, $37.09) posted 2 times, expected 1; evt_000261 (payment.succeeded, pay_000240, $95.33) posted 2 times, expected 1; evt_000267 (payment.succeeded, pay_000244, $44.44) posted 2 times, expected 1; evt_000268 (payment.succeeded, pay_000245, $18.27) posted 2 times, expected 1; evt_000288 (refund.succeeded, pay_000217, $24.55) posted 2 times, expected 1; evt_000298 (payment.succeeded, pay_000270, $58.79) posted 2 times, expected 1; evt_000308 (payment.succeeded, pay_000279, $131.93) posted 3 times, expected 1",
+    "evidence": [
+     {
+      "event_id": "evt_000251",
+      "type": "payment.succeeded",
+      "payment_id": "pay_000230",
+      "amount_cents": 3709,
+      "times_posted": 2,
+      "expected": 1,
+      "problem": "counted twice",
+      "transaction_ids": [
+       251,
+       255
+      ]
+     },
+     {
+      "event_id": "evt_000261",
+      "type": "payment.succeeded",
+      "payment_id": "pay_000240",
+      "amount_cents": 9533,
+      "times_posted": 2,
+      "expected": 1,
+      "problem": "counted twice",
+      "transaction_ids": [
+       262,
+       265
+      ]
+     },
+     {
+      "event_id": "evt_000267",
+      "type": "payment.succeeded",
+      "payment_id": "pay_000244",
+      "amount_cents": 4444,
+      "times_posted": 2,
+      "expected": 1,
+      "problem": "counted twice",
+      "transaction_ids": [
+       269,
+       272
+      ]
+     },
+     {
+      "event_id": "evt_000268",
+      "type": "payment.succeeded",
+      "payment_id": "pay_000245",
+      "amount_cents": 1827,
+      "times_posted": 2,
+      "expected": 1,
+      "problem": "counted twice",
+      "transaction_ids": [
+       270,
+       273
+      ]
+     },
+     {
+      "event_id": "evt_000288",
+      "type": "refund.succeeded",
+      "payment_id": "pay_000217",
+      "amount_cents": 2455,
+      "times_posted": 2,
+      "expected": 1,
+      "problem": "counted twice",
+      "transaction_ids": [
+       292,
+       297
+      ]
+     }
+    ],
+    "evidence_total": 7
+   },
+   {
+    "name": "ledger_balanced",
+    "passed": true,
+    "summary": "debits $16,589.28 = credits $16,589.28",
+    "evidence": [],
+    "evidence_total": 0
+   },
+   {
+    "name": "matches_provider",
+    "passed": false,
+    "summary": "ledger says $14,437.76, provider says $13,944.53: off by +$493.23",
+    "evidence": [
+     {
+      "scope": "provider_clearing, all payments",
+      "ledger_cents": 1443776,
+      "provider_cents": 1394453,
+      "difference_cents": 49323
+     },
+     {
+      "scope": "pay_000217",
+      "ledger_cents": 1,
+      "provider_cents": 2456,
+      "difference_cents": -2455
+     },
+     {
+      "scope": "pay_000230",
+      "ledger_cents": 7418,
+      "provider_cents": 3709,
+      "difference_cents": 3709
+     },
+     {
+      "scope": "pay_000240",
+      "ledger_cents": 19066,
+      "provider_cents": 9533,
+      "difference_cents": 9533
+     },
+     {
+      "scope": "pay_000244",
+      "ledger_cents": 8888,
+      "provider_cents": 4444,
+      "difference_cents": 4444
+     }
+    ],
+    "evidence_total": 8
+   },
+   {
+    "name": "payments_match_provider",
+    "passed": true,
+    "summary": "all 287 of our payments agree with the provider (287 charged once, 0 never charged)",
+    "evidence": [],
+    "evidence_total": 0
+   },
+   {
+    "name": "refunds_match_provider",
+    "passed": true,
+    "summary": "all 31 of our refunds agree with the provider (31 refunded once, 0 never refunded), and no charge was refunded more than its amount",
+    "evidence": [],
+    "evidence_total": 0
+   }
+  ],
+  "left_for_next_check": {
+   "provider_events": 0,
+   "provider_charges": 0,
+   "provider_refunds": 0
+  }
+ }
+}

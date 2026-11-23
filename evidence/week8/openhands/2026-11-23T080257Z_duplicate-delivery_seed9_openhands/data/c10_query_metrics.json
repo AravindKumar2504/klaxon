@@ -1,0 +1,175 @@
+{
+ "call_id": "c10",
+ "tool": "query_metrics",
+ "arguments": {
+  "query": "klaxon_kafka_consumer_lag",
+  "minutes": 15
+ },
+ "result": {
+  "query": "klaxon_kafka_consumer_lag",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "step_seconds": 30,
+  "result_type": "matrix",
+  "series": [
+   {
+    "labels": {
+     "__name__": "klaxon_kafka_consumer_lag",
+     "consumer": "ledger",
+     "partition": "0",
+     "service_name": "webhook-receiver"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      0.0
+     ],
+     [
+      "08:04:03",
+      0.0
+     ],
+     [
+      "08:04:33",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_kafka_consumer_lag",
+     "consumer": "ledger",
+     "partition": "1",
+     "service_name": "webhook-receiver"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      0.0
+     ],
+     [
+      "08:04:03",
+      0.0
+     ],
+     [
+      "08:04:33",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_kafka_consumer_lag",
+     "consumer": "ledger",
+     "partition": "2",
+     "service_name": "webhook-receiver"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      0.0
+     ],
+     [
+      "08:04:03",
+      0.0
+     ],
+     [
+      "08:04:33",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_kafka_consumer_lag",
+     "consumer": "payment-confirmer",
+     "partition": "0",
+     "service_name": "webhook-receiver"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      0.0
+     ],
+     [
+      "08:04:03",
+      0.0
+     ],
+     [
+      "08:04:33",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_kafka_consumer_lag",
+     "consumer": "payment-confirmer",
+     "partition": "1",
+     "service_name": "webhook-receiver"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      0.0
+     ],
+     [
+      "08:04:03",
+      0.0
+     ],
+     [
+      "08:04:33",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_kafka_consumer_lag",
+     "consumer": "payment-confirmer",
+     "partition": "2",
+     "service_name": "webhook-receiver"
+    },
+    "points": [
+     [
+      "08:03:03",
+      0.0
+     ],
+     [
+      "08:03:33",
+      0.0
+     ],
+     [
+      "08:04:03",
+      0.0
+     ],
+     [
+      "08:04:33",
+      0.0
+     ]
+    ]
+   }
+  ],
+  "series_total": 6,
+  "truncated": false
+ }
+}

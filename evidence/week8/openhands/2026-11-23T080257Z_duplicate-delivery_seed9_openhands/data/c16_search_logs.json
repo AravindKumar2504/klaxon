@@ -1,0 +1,16 @@
+{
+ "call_id": "c16",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"kafka\"}",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"kafka\"}",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "lines": [],
+  "more_may_exist": false
+ }
+}

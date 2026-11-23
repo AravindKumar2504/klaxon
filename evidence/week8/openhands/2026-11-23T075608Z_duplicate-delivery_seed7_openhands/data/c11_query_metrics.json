@@ -1,0 +1,71 @@
+{
+ "call_id": "c11",
+ "tool": "query_metrics",
+ "arguments": {
+  "query": "klaxon_payments_pending",
+  "minutes": 15
+ },
+ "result": {
+  "query": "klaxon_payments_pending",
+  "from": "2026-11-23T07:42:45Z",
+  "to": "2026-11-23T07:57:45Z",
+  "step_seconds": 30,
+  "result_type": "matrix",
+  "series": [
+   {
+    "labels": {
+     "__name__": "klaxon_payments_pending",
+     "age": "over_1m",
+     "service_instance_id": "c99d5c38-b756-4bd6-8f17-df04ef7b2d21",
+     "service_name": "payments-api"
+    },
+    "points": [
+     [
+      "07:56:15",
+      0.0
+     ],
+     [
+      "07:56:45",
+      0.0
+     ],
+     [
+      "07:57:15",
+      0.0
+     ],
+     [
+      "07:57:45",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_payments_pending",
+     "age": "under_1m",
+     "service_instance_id": "c99d5c38-b756-4bd6-8f17-df04ef7b2d21",
+     "service_name": "payments-api"
+    },
+    "points": [
+     [
+      "07:56:15",
+      0.0
+     ],
+     [
+      "07:56:45",
+      0.0
+     ],
+     [
+      "07:57:15",
+      0.0
+     ],
+     [
+      "07:57:45",
+      0.0
+     ]
+    ]
+   }
+  ],
+  "series_total": 2,
+  "truncated": false
+ }
+}

@@ -1,0 +1,45 @@
+{
+ "call_id": "c5",
+ "tool": "search_traces",
+ "arguments": {
+  "query": "{ status = error }",
+  "minutes": 15,
+  "limit": 20
+ },
+ "result": {
+  "query": "{ status = error }",
+  "from": "2026-11-23T07:42:45Z",
+  "to": "2026-11-23T07:57:45Z",
+  "traces": [
+   {
+    "trace_id": "cd7e83fe04cfc5b1483f7a8addd9d3d9",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:57:14.107Z",
+    "duration_ms": 623.0
+   },
+   {
+    "trace_id": "5efd9235f93fb4b898c69c3f205e78f2",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:57:04.110Z",
+    "duration_ms": 627.0
+   },
+   {
+    "trace_id": "b16075b3c261ba0a867cbe5e7a867ec1",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:56:28.300Z",
+    "duration_ms": 621.0
+   },
+   {
+    "trace_id": "8e70f3227a02755914238b716e25d0b1",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T07:56:12.406Z",
+    "duration_ms": 613.0
+   }
+  ],
+  "more_may_exist": false
+ }
+}

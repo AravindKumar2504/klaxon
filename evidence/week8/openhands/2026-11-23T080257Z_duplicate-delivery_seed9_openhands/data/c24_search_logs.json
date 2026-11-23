@@ -1,0 +1,871 @@
+{
+ "call_id": "c24",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"payment-confirmer\"}",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"payment-confirmer\"}",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "lines": [
+   {
+    "time": "2026-11-23T08:04:32.617Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3493",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000328",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000299",
+     "provider_payment_id": "pay_000299",
+     "source": "provider-events/2@102",
+     "trace_id": "e02ecc47a778f270737f0e47a8279f78"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:32.451Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "6925",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000327",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000298",
+     "provider_payment_id": "pay_000298",
+     "source": "provider-events/1@139",
+     "trace_id": "0ac50451b4cb2b18c475c903d94d066d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:32.268Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "4754",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000326",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000297",
+     "provider_payment_id": "pay_000297",
+     "source": "provider-events/2@101",
+     "trace_id": "8368b0d8432f9d58cc44a86ae3559230"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:31.993Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "4172",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000325",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000296",
+     "provider_payment_id": "pay_000296",
+     "source": "provider-events/0@105",
+     "trace_id": "8853e9af22bb75d31c31dcd80c8deb1a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:31.749Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "2031",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000324",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000295",
+     "provider_payment_id": "pay_000295",
+     "source": "provider-events/2@100",
+     "trace_id": "90a32f0fcfc3b0a99b6fcedcda0bd882"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:31.318Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "1838",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000323",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000294",
+     "provider_payment_id": "pay_000294",
+     "source": "provider-events/1@138",
+     "trace_id": "60d59a2ef188c856c532f443c90957bb"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:31.311Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "8878",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000322",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000293",
+     "provider_payment_id": "pay_000293",
+     "source": "provider-events/0@104",
+     "trace_id": "6258ca2843fc35b37f644d5e592f8a21"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:31.308Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "8268",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000321",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000292",
+     "provider_payment_id": "pay_000292",
+     "source": "provider-events/2@99",
+     "trace_id": "a8df81b8e07bd28bdf98b8f5281f41bc"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:30.844Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "6529",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000320",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000291",
+     "provider_payment_id": "pay_000291",
+     "source": "provider-events/0@103",
+     "trace_id": "ff9ee5938b45bbac657165f032a267e0"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:30.487Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "4844",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000319",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000290",
+     "provider_payment_id": "pay_000290",
+     "source": "provider-events/0@102",
+     "trace_id": "1f50b9a347dd2c6c4b9989d9425fd754"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:30.064Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "5216",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000318",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000289",
+     "provider_payment_id": "pay_000289",
+     "source": "provider-events/2@98",
+     "trace_id": "9aad07ea47dce4786d08a2c834383a4b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:29.270Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "4515",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000317",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000288",
+     "provider_payment_id": "pay_000288",
+     "source": "provider-events/0@101",
+     "trace_id": "20696e19b7325e61acf25f4138a1f729"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:29.174Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "5911",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000316",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000287",
+     "provider_payment_id": "pay_000287",
+     "source": "provider-events/2@97",
+     "trace_id": "f074afce30d34da9d0bd727caedb52c8"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:29.060Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "1230",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000315",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000286",
+     "provider_payment_id": "pay_000286",
+     "source": "provider-events/0@100",
+     "trace_id": "1daccd29f0f1813e0fef4fea86aad246"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:28.814Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "9334",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000314",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000285",
+     "provider_payment_id": "pay_000285",
+     "source": "provider-events/2@96",
+     "trace_id": "d65db6a0a577b7f1bf23eff6738938f7"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:28.378Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3130",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000313",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000284",
+     "provider_payment_id": "pay_000284",
+     "source": "provider-events/0@99",
+     "trace_id": "58bbef524bc3a72883dbdbe375e37202"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:28.223Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "refund already confirmed",
+    "fields": {
+     "amount_cents": "1015",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000312",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000232",
+     "provider_refund_id": "re_000029",
+     "refund_id": "rfd_000029",
+     "source": "provider-events/0@98",
+     "trace_id": "79a77a7eaa3d143bb99b80bedda3d81b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:28.196Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "5477",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000311",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000283",
+     "provider_payment_id": "pay_000283",
+     "source": "provider-events/0@97",
+     "trace_id": "0cd95517ddc5144be772cb0f932edb7f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:27.961Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3337",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000310",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000282",
+     "provider_payment_id": "pay_000282",
+     "source": "provider-events/2@95",
+     "trace_id": "bd982486fa1ad0cf72a51f4fd4174f28"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:27.355Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "4753",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000309",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000281",
+     "provider_payment_id": "pay_000281",
+     "source": "provider-events/1@137",
+     "trace_id": "c4aad50fa56bb94ffff29aa3b2399906"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:27.316Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "5287",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000308",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000280",
+     "provider_payment_id": "pay_000280",
+     "source": "provider-events/0@96",
+     "trace_id": "aea09fa7336b98722957e5d8a1172e4c"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:27.059Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "1966",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000307",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000279",
+     "provider_payment_id": "pay_000279",
+     "source": "provider-events/0@95",
+     "trace_id": "39cb121417f1bd88d5f597d0124e2fb0"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:26.920Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "15155",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000306",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000278",
+     "provider_payment_id": "pay_000278",
+     "source": "provider-events/0@94",
+     "trace_id": "5228fb90ee1808d9d6dab6452f1de48f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:26.879Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3182",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000305",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000277",
+     "provider_payment_id": "pay_000277",
+     "source": "provider-events/1@136",
+     "trace_id": "bfc80109cecbc4fb7e090276be5cc405"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:26.651Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "8608",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000304",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000276",
+     "provider_payment_id": "pay_000276",
+     "source": "provider-events/0@93",
+     "trace_id": "8cb10210c38f73919913b8c821c3165f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:26.206Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "2200",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000303",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000275",
+     "provider_payment_id": "pay_000275",
+     "source": "provider-events/2@94",
+     "trace_id": "cc1fa317fc087b58a385f2a98941db91"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:25.813Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "refund already confirmed",
+    "fields": {
+     "amount_cents": "1830",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000302",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000248",
+     "provider_refund_id": "re_000028",
+     "refund_id": "rfd_000028",
+     "source": "provider-events/2@93",
+     "trace_id": "a02294ab5a6aa632b33dfd6207065281"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:25.421Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "1951",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000301",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000274",
+     "provider_payment_id": "pay_000274",
+     "source": "provider-events/1@135",
+     "trace_id": "04b263a2782115c79656bbbf7dc2f3e8"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:25.354Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "6883",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000300",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000273",
+     "provider_payment_id": "pay_000273",
+     "source": "provider-events/2@92",
+     "trace_id": "830c0b160ea5ceaf6a9a9bdd17078727"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:25.266Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "12440",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000299",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000272",
+     "provider_payment_id": "pay_000272",
+     "source": "provider-events/2@91",
+     "trace_id": "d6f761745eb99fecb5994d8fecb51123"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:24.812Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "2030",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000298",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000271",
+     "provider_payment_id": "pay_000271",
+     "source": "provider-events/2@90",
+     "trace_id": "524e8a70d49ea19d008694fac702b0eb"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:24.451Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "1373",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000297",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000270",
+     "provider_payment_id": "pay_000270",
+     "source": "provider-events/0@92",
+     "trace_id": "06e339c7cc85a8c7a03617ab4ac2e6cb"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:23.463Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "5640",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000296",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000269",
+     "provider_payment_id": "pay_000269",
+     "source": "provider-events/0@91",
+     "trace_id": "4e46fb1eb7176437c782a2d2f5da8de6"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:23.131Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3937",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000295",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000268",
+     "provider_payment_id": "pay_000268",
+     "source": "provider-events/0@90",
+     "trace_id": "a4f11ae151073d7738ca39bb2f100e4a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:22.248Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "10200",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000294",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000267",
+     "provider_payment_id": "pay_000267",
+     "source": "provider-events/1@134",
+     "trace_id": "9b7644d6cd956416ace4714c6d3f83ff"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:21.891Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "refund already confirmed",
+    "fields": {
+     "amount_cents": "8072",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000293",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000253",
+     "provider_refund_id": "re_000027",
+     "refund_id": "rfd_000027",
+     "source": "provider-events/0@89",
+     "trace_id": "1ea7b3296bb78d4b2dd1e0455f5bef02"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:21.652Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "946",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000292",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000266",
+     "provider_payment_id": "pay_000266",
+     "source": "provider-events/0@88",
+     "trace_id": "52cff05864ab68657121da7891aa0863"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:21.345Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "confirmed",
+    "fields": {
+     "amount_cents": "10789",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000291",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000265",
+     "provider_payment_id": "pay_000265",
+     "source": "provider-events/1@133",
+     "trace_id": "cb1a98e37302d5d8d944827f0498b62b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:21.236Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "8042",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000290",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000264",
+     "provider_payment_id": "pay_000264",
+     "source": "provider-events/1@132",
+     "trace_id": "092f663e22a002d094262eb5a248d463"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:20.549Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "465",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000289",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000263",
+     "provider_payment_id": "pay_000263",
+     "source": "provider-events/1@131",
+     "trace_id": "be2e93625222310ec41c1ca50c5f0735"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:20.008Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "2050",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000288",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000262",
+     "provider_payment_id": "pay_000262",
+     "source": "provider-events/0@87",
+     "trace_id": "7cc286d1b592ec55a739ae1dfc72dbdd"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:19.774Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "4569",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000287",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000261",
+     "provider_payment_id": "pay_000261",
+     "source": "provider-events/1@130",
+     "trace_id": "7bb4643e59437fe00d1596b938b3c1e8"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:19.232Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3146",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000286",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000260",
+     "provider_payment_id": "pay_000260",
+     "source": "provider-events/2@89",
+     "trace_id": "08f3f8ea270cbd4f19e76e5cfdc64811"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:18.987Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "refund already confirmed",
+    "fields": {
+     "amount_cents": "2769",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000285",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000211",
+     "provider_refund_id": "re_000026",
+     "refund_id": "rfd_000026",
+     "source": "provider-events/2@88",
+     "trace_id": "83488d3c586ad15a2456252553c4c912"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:17.985Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3517",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000284",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000259",
+     "provider_payment_id": "pay_000259",
+     "source": "provider-events/1@129",
+     "trace_id": "f4a0a53388751a8c996e066d61467ef6"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:17.238Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "11673",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000283",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000257",
+     "provider_payment_id": "pay_000258",
+     "source": "provider-events/2@87",
+     "trace_id": "cf0b5ffc115fab3ea5e63cfe1442c0e1"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:17.235Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "2952",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000282",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000258",
+     "provider_payment_id": "pay_000257",
+     "source": "provider-events/0@86",
+     "trace_id": "4211ad31c78e5f18db98954092008cf2"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:16.474Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "13944",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000281",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000256",
+     "provider_payment_id": "pay_000256",
+     "source": "provider-events/1@128",
+     "trace_id": "b5d18095aa1bea74f9ba9a9dfeedfb31"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:16.258Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "3414",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000280",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000255",
+     "provider_payment_id": "pay_000255",
+     "source": "provider-events/1@127",
+     "trace_id": "6b264a6fd32945f47f41446f89a855ad"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:15.976Z",
+    "service": "payment-confirmer",
+    "level": "INFO",
+    "message": "already confirmed",
+    "fields": {
+     "amount_cents": "5734",
+     "consumer": "payment-confirmer",
+     "event_id": "evt_000279",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000254",
+     "provider_payment_id": "pay_000254",
+     "source": "provider-events/1@126",
+     "trace_id": "82ee0f2aae51c7d92c545fd38cd067c3"
+    }
+   }
+  ],
+  "more_may_exist": true
+ }
+}

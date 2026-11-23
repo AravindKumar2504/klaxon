@@ -1,0 +1,872 @@
+{
+ "call_id": "c20",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"ledger-consumer\"}",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"ledger-consumer\"}",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "lines": [
+   {
+    "time": "2026-11-23T08:01:06.694Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "683",
+     "consumer": "ledger",
+     "event_id": "evt_000329",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000302",
+     "provider_payment_id": "pay_000302",
+     "source": "provider-events/0@106",
+     "trace_id": "f294d0c2ffc030dadc974b0ab764b99d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.509Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2211",
+     "consumer": "ledger",
+     "event_id": "evt_000328",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000301",
+     "provider_payment_id": "pay_000301",
+     "source": "provider-events/1@135",
+     "trace_id": "72f969d7b4d11e4994a0a2d706ccee2e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.494Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "12507",
+     "consumer": "ledger",
+     "event_id": "evt_000327",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000263",
+     "provider_refund_id": "re_000027",
+     "refund_id": "rfd_000027",
+     "source": "provider-events/1@134",
+     "trace_id": "b34523d2cf801691029c63d33ed1bfb4"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.491Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "4290",
+     "consumer": "ledger",
+     "event_id": "evt_000326",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000300",
+     "provider_payment_id": "pay_000300",
+     "source": "provider-events/2@102",
+     "trace_id": "280b2ea008427cd47a3d0bf0f40d7aac"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.210Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "13961",
+     "consumer": "ledger",
+     "event_id": "evt_000325",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000299",
+     "provider_payment_id": "pay_000299",
+     "source": "provider-events/2@101",
+     "trace_id": "5ddc836cbd665fdadf63ff461aa7ab80"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:06.048Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2014",
+     "consumer": "ledger",
+     "event_id": "evt_000324",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000298",
+     "provider_payment_id": "pay_000298",
+     "source": "provider-events/1@133",
+     "trace_id": "049bce955aefcea624838af4c0e701cf"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:05.285Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "5203",
+     "consumer": "ledger",
+     "event_id": "evt_000323",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000297",
+     "provider_payment_id": "pay_000297",
+     "source": "provider-events/2@100",
+     "trace_id": "d30d1df4f27f5e80b116dec5fd47ab42"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.780Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "1766",
+     "consumer": "ledger",
+     "event_id": "evt_000322",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000296",
+     "provider_payment_id": "pay_000296",
+     "source": "provider-events/0@105",
+     "trace_id": "9298bdcb8b2f945bb794fc35cdcb3c81"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.725Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "6678",
+     "consumer": "ledger",
+     "event_id": "evt_000321",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000237",
+     "provider_refund_id": "re_000026",
+     "refund_id": "rfd_000026",
+     "source": "provider-events/2@99",
+     "trace_id": "835070830cebf21b48c1a7ee4a159a6b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.700Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "3345",
+     "consumer": "ledger",
+     "event_id": "evt_000320",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000238",
+     "provider_refund_id": "re_000025",
+     "refund_id": "rfd_000025",
+     "source": "provider-events/1@132",
+     "trace_id": "9ca71f6c15c616036450b8971586096d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:04.424Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "7121",
+     "consumer": "ledger",
+     "event_id": "evt_000319",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000295",
+     "provider_payment_id": "pay_000295",
+     "source": "provider-events/2@98",
+     "trace_id": "0a74d487b7dda86f73d41c59ebec301e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.419Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2081",
+     "consumer": "ledger",
+     "event_id": "evt_000318",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000294",
+     "provider_payment_id": "pay_000294",
+     "source": "provider-events/1@131",
+     "trace_id": "74fdc2967e62ac1c266f81e1198e46e6"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.329Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2158",
+     "consumer": "ledger",
+     "event_id": "evt_000317",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000293",
+     "provider_payment_id": "pay_000293",
+     "source": "provider-events/0@104",
+     "trace_id": "e47a032fce6f9cfd3e9a6797c650a63a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:03.217Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "5406",
+     "consumer": "ledger",
+     "event_id": "evt_000316",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000292",
+     "provider_payment_id": "pay_000292",
+     "source": "provider-events/2@97",
+     "trace_id": "a2f924d2a5e1c4f368ed242c9468b536"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.959Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "5864",
+     "consumer": "ledger",
+     "event_id": "evt_000315",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000291",
+     "provider_payment_id": "pay_000291",
+     "source": "provider-events/0@103",
+     "trace_id": "774674378d1c1fda86ccbbbc04ef7340"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.754Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "1396",
+     "consumer": "ledger",
+     "event_id": "evt_000314",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000246",
+     "provider_refund_id": "re_000024",
+     "refund_id": "rfd_000024",
+     "source": "provider-events/1@130",
+     "trace_id": "789f0470c67b50eb2bcdfcd7afcbd5ca"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.654Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "1517",
+     "consumer": "ledger",
+     "event_id": "evt_000313",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000290",
+     "provider_payment_id": "pay_000290",
+     "source": "provider-events/0@102",
+     "trace_id": "61483528fc81373156c92d5044f152f2"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.530Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "7859",
+     "consumer": "ledger",
+     "event_id": "evt_000312",
+     "event_type": "refund.succeeded",
+     "logger": "klaxon.consumer",
+     "provider_payment_id": "pay_000259",
+     "provider_refund_id": "re_000023",
+     "refund_id": "rfd_000023",
+     "source": "provider-events/1@129",
+     "trace_id": "75326847960e53e589fabb591d6cafcd"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.362Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "8524",
+     "consumer": "ledger",
+     "event_id": "evt_000311",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000289",
+     "provider_payment_id": "pay_000289",
+     "source": "provider-events/2@96",
+     "trace_id": "3c85ed5bbe5ace8d9092f1eeca388a1f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.296Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "1082",
+     "consumer": "ledger",
+     "event_id": "evt_000310",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000288",
+     "provider_payment_id": "pay_000288",
+     "source": "provider-events/0@101",
+     "trace_id": "3ac0216fa9512ddbf0a66c63087aa38f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.160Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "16632",
+     "consumer": "ledger",
+     "event_id": "evt_000309",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000287",
+     "provider_payment_id": "pay_000287",
+     "source": "provider-events/2@95",
+     "trace_id": "d47dedb79debb4efccde37221b9b6341"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.118Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "3178",
+     "consumer": "ledger",
+     "event_id": "evt_000308",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000286",
+     "provider_payment_id": "pay_000286",
+     "source": "provider-events/0@100",
+     "trace_id": "58278fa1c78875e17f88cab0297caac1"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.061Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "8892",
+     "consumer": "ledger",
+     "event_id": "evt_000307",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000285",
+     "provider_payment_id": "pay_000285",
+     "source": "provider-events/2@94",
+     "trace_id": "f19705b527fc1bba69fcc401190bbd40"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:02.005Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2906",
+     "consumer": "ledger",
+     "event_id": "evt_000306",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000284",
+     "provider_payment_id": "pay_000284",
+     "source": "provider-events/0@99",
+     "trace_id": "c42fb17ca0d0e3d358303386202e9a04"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:01.842Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "7344",
+     "consumer": "ledger",
+     "event_id": "evt_000305",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000283",
+     "provider_payment_id": "pay_000283",
+     "source": "provider-events/0@98",
+     "trace_id": "55e7860d1e0975753970c1c892e4644f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:01.839Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "414",
+     "consumer": "ledger",
+     "event_id": "evt_000304",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000282",
+     "provider_payment_id": "pay_000282",
+     "source": "provider-events/2@93",
+     "trace_id": "eec71b87f732b6a5d5b37e6d595a547a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:00.847Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "7176",
+     "consumer": "ledger",
+     "event_id": "evt_000303",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000281",
+     "provider_payment_id": "pay_000281",
+     "source": "provider-events/1@128",
+     "trace_id": "5fdba56bce70d844541702de4e234c82"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:00.813Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "4006",
+     "consumer": "ledger",
+     "event_id": "evt_000302",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000280",
+     "provider_payment_id": "pay_000280",
+     "source": "provider-events/0@97",
+     "trace_id": "19c784a35b49d75efa6ce47a25087e57"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:00.758Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "18238",
+     "consumer": "ledger",
+     "event_id": "evt_000301",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000279",
+     "provider_payment_id": "pay_000279",
+     "source": "provider-events/0@96",
+     "trace_id": "39fcbb5144628b5ad81374b4343b7add"
+    }
+   },
+   {
+    "time": "2026-11-23T08:01:00.671Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "3109",
+     "consumer": "ledger",
+     "event_id": "evt_000300",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000278",
+     "provider_payment_id": "pay_000278",
+     "source": "provider-events/0@95",
+     "trace_id": "f7ec5158ac854d461d4dc4f539ac031e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:59.691Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "3356",
+     "consumer": "ledger",
+     "event_id": "evt_000299",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000277",
+     "provider_payment_id": "pay_000277",
+     "source": "provider-events/1@127",
+     "trace_id": "1820dacaf85574ad0a746fe7c95cac5e"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:59.630Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "822",
+     "consumer": "ledger",
+     "event_id": "evt_000298",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000276",
+     "provider_payment_id": "pay_000276",
+     "source": "provider-events/0@94",
+     "trace_id": "ed98f6d51e43cbed556c82f6037ecdc6"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:59.257Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "9695",
+     "consumer": "ledger",
+     "event_id": "evt_000297",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000275",
+     "provider_payment_id": "pay_000275",
+     "source": "provider-events/2@92",
+     "trace_id": "08282449dff9452151f1b585411cce5a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:59.171Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "5422",
+     "consumer": "ledger",
+     "event_id": "evt_000296",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000274",
+     "provider_payment_id": "pay_000274",
+     "source": "provider-events/1@126",
+     "trace_id": "8f159d46c5ddef91157b863099cf2cae"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:58.985Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "9077",
+     "consumer": "ledger",
+     "event_id": "evt_000295",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000273",
+     "provider_payment_id": "pay_000273",
+     "source": "provider-events/2@91",
+     "trace_id": "d5d2e5c3136bf02ee1386497a543867d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:58.983Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2802",
+     "consumer": "ledger",
+     "event_id": "evt_000294",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000272",
+     "provider_payment_id": "pay_000272",
+     "source": "provider-events/2@90",
+     "trace_id": "57f96c0cb7543db13c55d698cba3c52d"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:58.783Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "984",
+     "consumer": "ledger",
+     "event_id": "evt_000293",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000271",
+     "provider_payment_id": "pay_000271",
+     "source": "provider-events/2@89",
+     "trace_id": "166c8a1716c8ce0be3c6efe29fbe4d09"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:57.933Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "1440",
+     "consumer": "ledger",
+     "event_id": "evt_000292",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000270",
+     "provider_payment_id": "pay_000270",
+     "source": "provider-events/0@93",
+     "trace_id": "c99a6cda4e3bda74f119e43c177ccef8"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:57.929Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "15551",
+     "consumer": "ledger",
+     "event_id": "evt_000291",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000269",
+     "provider_payment_id": "pay_000269",
+     "source": "provider-events/0@92",
+     "trace_id": "eb9fbd98b5d8b06d14b60e2346a10871"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:57.669Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "3916",
+     "consumer": "ledger",
+     "event_id": "evt_000290",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000268",
+     "provider_payment_id": "pay_000268",
+     "source": "provider-events/0@91",
+     "trace_id": "d1ac9ddd54769015061c6de0db394b1b"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:57.609Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2594",
+     "consumer": "ledger",
+     "event_id": "evt_000289",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000267",
+     "provider_payment_id": "pay_000267",
+     "source": "provider-events/1@125",
+     "trace_id": "6ca34f3b54501ee60d96141113bbe911"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:57.190Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "2098",
+     "consumer": "ledger",
+     "event_id": "evt_000288",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000266",
+     "provider_payment_id": "pay_000266",
+     "source": "provider-events/0@90",
+     "trace_id": "215891c8d7ff43bdd5bb84066f4c440a"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:56.941Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "9008",
+     "consumer": "ledger",
+     "event_id": "evt_000287",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000265",
+     "provider_payment_id": "pay_000265",
+     "source": "provider-events/1@124",
+     "trace_id": "6911e23315f9a6789344731cf103ba61"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:56.680Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "3539",
+     "consumer": "ledger",
+     "event_id": "evt_000286",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000264",
+     "provider_payment_id": "pay_000264",
+     "source": "provider-events/1@123",
+     "trace_id": "7d7d9ee7de9b9fae1701172bff6a8c8f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:56.281Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "12507",
+     "consumer": "ledger",
+     "event_id": "evt_000285",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000263",
+     "provider_payment_id": "pay_000263",
+     "source": "provider-events/1@122",
+     "trace_id": "99619ba47080cbaa6f2f5e444dd0ebba"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:55.967Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "1113",
+     "consumer": "ledger",
+     "event_id": "evt_000284",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000262",
+     "provider_payment_id": "pay_000262",
+     "source": "provider-events/0@89",
+     "trace_id": "e5b2e00b01acba0c03676433d2b3f083"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:55.926Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "6672",
+     "consumer": "ledger",
+     "event_id": "evt_000283",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000261",
+     "provider_payment_id": "pay_000261",
+     "source": "provider-events/1@121",
+     "trace_id": "f7f2f79ca497791b78cea1be77e1ae32"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:54.818Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "7402",
+     "consumer": "ledger",
+     "event_id": "evt_000282",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000260",
+     "provider_payment_id": "pay_000260",
+     "source": "provider-events/2@88",
+     "trace_id": "dd966b7310401c488623b60dd9eba784"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:54.799Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "15718",
+     "consumer": "ledger",
+     "event_id": "evt_000281",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000259",
+     "provider_payment_id": "pay_000259",
+     "source": "provider-events/1@120",
+     "trace_id": "70fd54679f39a2374814fd14672499c2"
+    }
+   },
+   {
+    "time": "2026-11-23T08:00:54.295Z",
+    "service": "ledger-consumer",
+    "level": "INFO",
+    "message": "posted",
+    "fields": {
+     "amount_cents": "15718",
+     "consumer": "ledger",
+     "event_id": "evt_000281",
+     "event_type": "payment.succeeded",
+     "logger": "klaxon.consumer",
+     "payment_id": "pmt_000259",
+     "provider_payment_id": "pay_000259",
+     "source": "provider-events/1@119",
+     "trace_id": "a3bd09bdcf3451b18406e39a4feb754b"
+    }
+   }
+  ],
+  "more_may_exist": true
+ }
+}

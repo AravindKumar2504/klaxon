@@ -1,0 +1,693 @@
+{
+ "call_id": "c26",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"payments-api\"}",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"payments-api\"}",
+  "from": "2026-11-23T07:42:45Z",
+  "to": "2026-11-23T07:57:45Z",
+  "lines": [
+   {
+    "time": "2026-11-23T07:57:43.758Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "9.3",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "acf669107234d6cbb56fffae50bff0cc"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:43.757Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "1309",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000287",
+     "provider_payment_id": "pay_000287",
+     "trace_id": "acf669107234d6cbb56fffae50bff0cc"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:43.720Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "11.4",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "acc55bd82885dd9782d4066edd52f9d7"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:43.719Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "2944",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000286",
+     "provider_payment_id": "pay_000286",
+     "trace_id": "acc55bd82885dd9782d4066edd52f9d7"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:42.796Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "9.8",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "6ebeb7940a51a50789b635338aafc4ea"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:42.795Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "1900",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000285",
+     "provider_payment_id": "pay_000285",
+     "trace_id": "6ebeb7940a51a50789b635338aafc4ea"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:42.740Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "11.1",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "c789d775dc86ae1da2e50e4a2fc9d1c5"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:42.739Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "2207",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000284",
+     "provider_payment_id": "pay_000284",
+     "trace_id": "c789d775dc86ae1da2e50e4a2fc9d1c5"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:42.421Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "11",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "966670867a753699edb38a1df54a836f"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:42.420Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "2701",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000283",
+     "provider_payment_id": "pay_000283",
+     "trace_id": "966670867a753699edb38a1df54a836f"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:41.789Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "5.1",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "41b7a049c9d9640ef236a080f7596487"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:41.788Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "5655",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000282",
+     "provider_payment_id": "pay_000282",
+     "trace_id": "41b7a049c9d9640ef236a080f7596487"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.875Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "10.7",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "4359f20695ce862fdbbcab6a50249399"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.874Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "1123",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000281",
+     "provider_payment_id": "pay_000281",
+     "trace_id": "4359f20695ce862fdbbcab6a50249399"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.590Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "4",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "96f3aaa76c27d0da466c86a4c789599c"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.453Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "8.9",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "e2a7230b9f134fe1c335ed5e26e55f20"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.452Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "4003",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000280",
+     "provider_payment_id": "pay_000280",
+     "trace_id": "e2a7230b9f134fe1c335ed5e26e55f20"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.278Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "15.4",
+     "route": "/payments/{payment_id}/refunds",
+     "status": "201",
+     "trace_id": "40a9f535462b353a8fb8940e121e2ccd"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.277Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "refund succeeded",
+    "fields": {
+     "amount": "10349",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000216",
+     "refund_id": "rfd_000031",
+     "trace_id": "40a9f535462b353a8fb8940e121e2ccd"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.079Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "617.6",
+     "route": "/payments",
+     "status": "503",
+     "trace_id": "91c5eb10fe810800b018519e35851c0d"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:40.078Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000278",
+     "trace_id": "91c5eb10fe810800b018519e35851c0d"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.866Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "12",
+     "route": "/payments/{payment_id}/refunds",
+     "status": "201",
+     "trace_id": "608ce94683c7bd520f37d93834ef081a"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.865Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "refund succeeded",
+    "fields": {
+     "amount": "875",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000210",
+     "refund_id": "rfd_000030",
+     "trace_id": "608ce94683c7bd520f37d93834ef081a"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.647Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "11.5",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "1eece8ab256d61e233d0416ad0f41a54"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.646Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "13193",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000279",
+     "provider_payment_id": "pay_000279",
+     "trace_id": "1eece8ab256d61e233d0416ad0f41a54"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.449Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "11.4",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "9d1b76ded8febbe044db123abadf533a"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.449Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "4332",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000277",
+     "provider_payment_id": "pay_000277",
+     "trace_id": "9d1b76ded8febbe044db123abadf533a"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.148Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "9.5",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "125fe84629d756ded114141f306f30d1"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:39.147Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "2019",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000276",
+     "provider_payment_id": "pay_000276",
+     "trace_id": "125fe84629d756ded114141f306f30d1"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.931Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "11",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "2cfa40778ea0f1affa59830ba04f37b3"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.930Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "3174",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000275",
+     "provider_payment_id": "pay_000275",
+     "trace_id": "2cfa40778ea0f1affa59830ba04f37b3"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.609Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "12.8",
+     "route": "/payments/{payment_id}/refunds",
+     "status": "201",
+     "trace_id": "92c711b9eafa246778a904a5c7a083d1"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.608Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "refund succeeded",
+    "fields": {
+     "amount": "1839",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000221",
+     "refund_id": "rfd_000029",
+     "trace_id": "92c711b9eafa246778a904a5c7a083d1"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.394Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "10.5",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "8f816a29f35ab65e94937176ef59c87a"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.393Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "1860",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000274",
+     "provider_payment_id": "pay_000274",
+     "trace_id": "8f816a29f35ab65e94937176ef59c87a"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.292Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "9.6",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "16e7822455f0311fdb2920502ff2e153"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.291Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "3733",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000273",
+     "provider_payment_id": "pay_000273",
+     "trace_id": "16e7822455f0311fdb2920502ff2e153"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.200Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "10.2",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "a41f96982274bc46b96ca39e758ec220"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.199Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "3075",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000272",
+     "provider_payment_id": "pay_000272",
+     "trace_id": "a41f96982274bc46b96ca39e758ec220"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.059Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "6.1",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "cb13f81c03a8f122809cbe488445dd7e"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.058Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "1929",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000271",
+     "provider_payment_id": "pay_000271",
+     "trace_id": "cb13f81c03a8f122809cbe488445dd7e"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:38.055Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "1.8",
+     "route": "/payments",
+     "status": "409",
+     "trace_id": "c2b5b4d1fd5ce247aed1881b59722ac2"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:37.967Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "9.9",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "4ee2e237b6cc14900937910cbe1bfb0d"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:37.966Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "5879",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000270",
+     "provider_payment_id": "pay_000270",
+     "trace_id": "4ee2e237b6cc14900937910cbe1bfb0d"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:37.598Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "7.6",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "60edc6876b778d60319484485abe9ace"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:37.597Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "3601",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000269",
+     "provider_payment_id": "pay_000269",
+     "trace_id": "60edc6876b778d60319484485abe9ace"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:37.310Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "2.6",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "5d7d7062eb144c004c29d205f2889226"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:36.826Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "6.5",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "33223e67b485438f0efe245f1a6c1254"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:36.825Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "payment succeeded",
+    "fields": {
+     "amount_cents": "4983",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000268",
+     "provider_payment_id": "pay_000268",
+     "trace_id": "33223e67b485438f0efe245f1a6c1254"
+    }
+   },
+   {
+    "time": "2026-11-23T07:57:36.814Z",
+    "service": "payments-api",
+    "level": "INFO",
+    "message": "request",
+    "fields": {
+     "logger": "klaxon.payments_api",
+     "method": "POST",
+     "ms": "9.5",
+     "route": "/payments",
+     "status": "201",
+     "trace_id": "76eb3c46f81e4c03380b096a240f57f6"
+    }
+   }
+  ],
+  "more_may_exist": true
+ }
+}

@@ -1,0 +1,157 @@
+{
+ "call_id": "c7",
+ "tool": "query_metrics",
+ "arguments": {
+  "query": "klaxon_consumer_dead_letters_total",
+  "minutes": 15
+ },
+ "result": {
+  "query": "klaxon_consumer_dead_letters_total",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "step_seconds": 30,
+  "result_type": "matrix",
+  "series": [
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_dead_letters_total",
+     "consumer": "ledger",
+     "reason": "bad_event",
+     "service_instance_id": "07280113-eae4-48a8-91e2-6c6aed2d07c9",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "07:59:38",
+      0.0
+     ],
+     [
+      "08:00:08",
+      0.0
+     ],
+     [
+      "08:00:38",
+      0.0
+     ],
+     [
+      "08:01:08",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_dead_letters_total",
+     "consumer": "ledger",
+     "reason": "refused_values",
+     "service_instance_id": "07280113-eae4-48a8-91e2-6c6aed2d07c9",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "07:59:38",
+      0.0
+     ],
+     [
+      "08:00:08",
+      0.0
+     ],
+     [
+      "08:00:38",
+      0.0
+     ],
+     [
+      "08:01:08",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_dead_letters_total",
+     "consumer": "ledger",
+     "reason": "bad_event",
+     "service_instance_id": "bea7b6db-f9c1-4f0c-a9bf-cc5bbea80a5c",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "08:01:08",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_dead_letters_total",
+     "consumer": "ledger",
+     "reason": "refused_values",
+     "service_instance_id": "bea7b6db-f9c1-4f0c-a9bf-cc5bbea80a5c",
+     "service_name": "ledger-consumer"
+    },
+    "points": [
+     [
+      "08:01:08",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_dead_letters_total",
+     "consumer": "payment-confirmer",
+     "reason": "bad_event",
+     "service_instance_id": "fc5b1154-a47c-4280-9e29-51b82b5a149b",
+     "service_name": "payment-confirmer"
+    },
+    "points": [
+     [
+      "07:59:38",
+      0.0
+     ],
+     [
+      "08:00:08",
+      0.0
+     ],
+     [
+      "08:00:38",
+      0.0
+     ],
+     [
+      "08:01:08",
+      0.0
+     ]
+    ]
+   },
+   {
+    "labels": {
+     "__name__": "klaxon_consumer_dead_letters_total",
+     "consumer": "payment-confirmer",
+     "reason": "refused_values",
+     "service_instance_id": "fc5b1154-a47c-4280-9e29-51b82b5a149b",
+     "service_name": "payment-confirmer"
+    },
+    "points": [
+     [
+      "07:59:38",
+      0.0
+     ],
+     [
+      "08:00:08",
+      0.0
+     ],
+     [
+      "08:00:38",
+      0.0
+     ],
+     [
+      "08:01:08",
+      0.0
+     ]
+    ]
+   }
+  ],
+  "series_total": 6,
+  "truncated": false
+ }
+}

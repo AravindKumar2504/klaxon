@@ -1,0 +1,161 @@
+{
+ "call_id": "c27",
+ "tool": "search_logs",
+ "arguments": {
+  "query": "{service_name=\"payments-api\"} | severity_text = \"ERROR\"",
+  "minutes": 15,
+  "limit": 50
+ },
+ "result": {
+  "query": "{service_name=\"payments-api\"} | severity_text = \"ERROR\"",
+  "from": "2026-11-23T07:49:33Z",
+  "to": "2026-11-23T08:04:33Z",
+  "lines": [
+   {
+    "time": "2026-11-23T08:04:21.952Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000265",
+     "trace_id": "1efd532951b97e5e8e83a55b2d709229"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:15.990Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000252",
+     "trace_id": "45d153292b7cb4131978592d8ed849e1"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:11.466Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000235",
+     "trace_id": "207cad7fa851a42904ba33b4f7067c6c"
+    }
+   },
+   {
+    "time": "2026-11-23T08:04:09.390Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000226",
+     "trace_id": "f77f884f208f6cce4be098ad9b5e9dfb"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:55.596Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000187",
+     "trace_id": "1756018c491fb3ede0372517a61b0df4"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:44.411Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000146",
+     "trace_id": "5f98a9109bcdca28118b93bd28ddecf0"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:43.751Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000141",
+     "trace_id": "39e351546ac7e7ad62d00ca7c7f53313"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:39.927Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000130",
+     "trace_id": "451401d13636859c831730a67942d30f"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:37.987Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000125",
+     "trace_id": "0f10a4e6b4ca6d0b838111896d9786fb"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:37.420Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000123",
+     "trace_id": "747a56879b6a0a44620d4ebacbbc86d9"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:23.437Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000077",
+     "trace_id": "3a67ee6124b39b4787c8404aa08cd470"
+    }
+   },
+   {
+    "time": "2026-11-23T08:03:02.446Z",
+    "service": "payments-api",
+    "level": "ERROR",
+    "message": "provider unavailable; payment left pending",
+    "fields": {
+     "error": "/v1/payments failed after 3 attempts: HTTP 500",
+     "logger": "klaxon.payments_api",
+     "payment_id": "pmt_000010",
+     "trace_id": "6d43a448758516c664e1cad5197a02f8"
+    }
+   }
+  ],
+  "more_may_exist": false
+ }
+}

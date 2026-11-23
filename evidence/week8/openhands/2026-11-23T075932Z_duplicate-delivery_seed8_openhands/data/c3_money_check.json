@@ -1,0 +1,80 @@
+{
+ "call_id": "c3",
+ "tool": "money_check",
+ "arguments": {},
+ "result": {
+  "outcome": "failed",
+  "cutoff": "2026-11-23T08:01:07Z",
+  "waited_to_settle": true,
+  "settled_after_seconds": 0.19,
+  "invariants": [
+   {
+    "name": "posted_exactly_once",
+    "passed": false,
+    "summary": "evt_000281 (payment.succeeded, pay_000259, $157.18) posted 2 times, expected 1",
+    "evidence": [
+     {
+      "event_id": "evt_000281",
+      "type": "payment.succeeded",
+      "payment_id": "pay_000259",
+      "amount_cents": 15718,
+      "times_posted": 2,
+      "expected": 1,
+      "problem": "counted twice",
+      "transaction_ids": [
+       281,
+       282
+      ]
+     }
+    ],
+    "evidence_total": 1
+   },
+   {
+    "name": "ledger_balanced",
+    "passed": true,
+    "summary": "debits $19,458.02 = credits $19,458.02",
+    "evidence": [],
+    "evidence_total": 0
+   },
+   {
+    "name": "matches_provider",
+    "passed": false,
+    "summary": "ledger says $16,901.72, provider says $16,744.54: off by +$157.18",
+    "evidence": [
+     {
+      "scope": "provider_clearing, all payments",
+      "ledger_cents": 1690172,
+      "provider_cents": 1674454,
+      "difference_cents": 15718
+     },
+     {
+      "scope": "pay_000259",
+      "ledger_cents": 23577,
+      "provider_cents": 7859,
+      "difference_cents": 15718
+     }
+    ],
+    "evidence_total": 2
+   },
+   {
+    "name": "payments_match_provider",
+    "passed": true,
+    "summary": "all 305 of our payments agree with the provider (305 charged once, 0 never charged)",
+    "evidence": [],
+    "evidence_total": 0
+   },
+   {
+    "name": "refunds_match_provider",
+    "passed": true,
+    "summary": "all 27 of our refunds agree with the provider (27 refunded once, 0 never refunded), and no charge was refunded more than its amount",
+    "evidence": [],
+    "evidence_total": 0
+   }
+  ],
+  "left_for_next_check": {
+   "provider_events": 0,
+   "provider_charges": 0,
+   "provider_refunds": 0
+  }
+ }
+}

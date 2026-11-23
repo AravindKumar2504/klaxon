@@ -1,0 +1,157 @@
+{
+ "call_id": "c6",
+ "tool": "search_traces",
+ "arguments": {
+  "query": "{ }",
+  "minutes": 15,
+  "limit": 20
+ },
+ "result": {
+  "query": "{ }",
+  "from": "2026-11-23T07:46:08Z",
+  "to": "2026-11-23T08:01:08Z",
+  "traces": [
+   {
+    "trace_id": "106b5ee12c5afb6b171750ae50bb4aea",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:31.187Z",
+    "duration_ms": 11.0
+   },
+   {
+    "trace_id": "2ad93c098d39031ec6a713a99a5450d6",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:29.461Z",
+    "duration_ms": 2.0
+   },
+   {
+    "trace_id": "4554be0168165fb68d747d1c4f745a00",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:29.454Z",
+    "duration_ms": 8.0
+   },
+   {
+    "trace_id": "2c1cca4109e439798fa2f441e7f7211f",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:29.330Z",
+    "duration_ms": 5.0
+   },
+   {
+    "trace_id": "b94e3b61f214e55658f9f5036799ac7",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:28.923Z",
+    "duration_ms": 1.0
+   },
+   {
+    "trace_id": "4ef8a62db52da74e3f7e23df157a7fe9",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:28.858Z",
+    "duration_ms": 2.0
+   },
+   {
+    "trace_id": "4ec1671e8fa3154e57c5ccba5540ef2a",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:28.666Z",
+    "duration_ms": 5.0
+   },
+   {
+    "trace_id": "264ed3322cb58fdd406e673c3c9dd4dd",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:28.659Z",
+    "duration_ms": 8.0
+   },
+   {
+    "trace_id": "9b378f5945baedeee7e4decdd6987c4",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:28.644Z",
+    "duration_ms": 3.0
+   },
+   {
+    "trace_id": "1574925a1c0dd548d74ac02f4c292c9c",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:28.606Z",
+    "duration_ms": 5.0
+   },
+   {
+    "trace_id": "2d534cbe5ea1ae43b64b4a9a474727d0",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:28.596Z",
+    "duration_ms": 12.0
+   },
+   {
+    "trace_id": "3e3bc0cef7ada2d0cfb8e2f808eb3a7a",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:28.407Z",
+    "duration_ms": 9.0
+   },
+   {
+    "trace_id": "3d11bce1bf25871d7b51cfc545bd6d80",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:28.135Z",
+    "duration_ms": 11.0
+   },
+   {
+    "trace_id": "21e511d46ea099f4d24632e2fa31f4d1",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:28.109Z",
+    "duration_ms": 6.0
+   },
+   {
+    "trace_id": "1403fa2fa3764f2e3f04739816f6b82e",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:27.664Z",
+    "duration_ms": 4.0
+   },
+   {
+    "trace_id": "52e8ff37894c7776f556c2572dd4e2b0",
+    "root_service": "payments-api",
+    "root_name": "POST /payments",
+    "start": "2026-11-23T08:00:27.657Z",
+    "duration_ms": 10.0
+   },
+   {
+    "trace_id": "119a07b27686f658bd9cd99f1cbc1cb4",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:27.656Z",
+    "duration_ms": 6.0
+   },
+   {
+    "trace_id": "130315c6162ecf0f326af970c7a0ee13",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:27.449Z",
+    "duration_ms": 6.0
+   },
+   {
+    "trace_id": "1c8653905521dd6eebd736168bba0814",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:26.415Z",
+    "duration_ms": 7.0
+   },
+   {
+    "trace_id": "6af06db69eaefa3167b8b2b06300b21",
+    "root_service": "webhook-receiver",
+    "root_name": "POST /webhooks/provider",
+    "start": "2026-11-23T08:00:26.116Z",
+    "duration_ms": 2.0
+   }
+  ],
+  "more_may_exist": true
+ }
+}
