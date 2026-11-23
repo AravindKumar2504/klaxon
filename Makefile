@@ -30,7 +30,7 @@ COMPOSE := $(DOCKER) compose --file compose.yaml --project-name klaxon
 	approve gate-demo rehearse-fault postmortem-facts postmortem replay-postmortem review-postmortem eval-cases eval eval-report rehearse-case \
 	judge-prompt judge replay-judge label label-pick calibrate calibration-report replay-calibration \
 	kind-up kind-down kind-ps kind-check kind-reader panel \
-	openhands-venv openhands-snapshot openhands-run openhands-task openhands-compare
+	openhands-venv openhands-snapshot openhands-run openhands-task openhands-compare openhands-variant
 
 help: ## list the commands
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -208,6 +208,9 @@ openhands-run: local-docker-only ## OpenHands on a saved snapshot, in its sandbo
 
 openhands-task: ## the exact task OpenHands gets for a saved snapshot; calls nothing: make openhands-task RUN=evidence/week8/openhands/<folder>
 	$(PY) -m klaxon.openhands_task task "$$RUN"
+
+openhands-variant: ## a saved snapshot, copied unchanged beside it, for the second batch: the agent calls its tools in its text (TOOL_CALLS=prompt); calls nothing: make openhands-variant RUN=evidence/week8/openhands/<folder>
+	$(PY) -m klaxon.openhands_task variant "$$RUN" $${TOOL_CALLS:+--tool-calls "$$TOOL_CALLS"}
 
 openhands-compare: ## OpenHands' runs beside the night's 9 on fault 1: the rule, the judge, his labels; calls nothing
 	$(PY) -m klaxon.openhands_task compare

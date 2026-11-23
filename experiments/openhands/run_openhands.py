@@ -26,6 +26,7 @@ MODEL = "qwen3:8b"
 OLLAMA_FROM_SANDBOX = "http://host.docker.internal:11434/v1"
 MOUNT = "/workspace/project/data"  # below /workspace, never over it: the server writes its own files there
 TOOLS = ("glob", "grep", "planning_file_editor")
+TOOL_CALLS = ("native", "prompt")  # how the model calls them: its own function calls, or calls written in its text
 ALLOWED = (*TOOLS, "finish")  # and the SDK's own one: end the run with a message
 EVENTS, ANSWER, SUMMARY = "openhands-events.jsonl", "openhands-answer.txt", "openhands-summary.json"
 # Runs in the sandbox, as the SDK runs every command hook: the event, as JSON, on its input. Exit 2 refuses the tool;
@@ -56,6 +57,13 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True, help="where the record of each step goes")
     parser.add_argument("--max-iterations", type=int, default=30)
     parser.add_argument("--timeout", type=int, default=900, help="seconds")
+    parser.add_argument(  # week 8, item 4's second batch (Aravind, 2026-11-23)
+        "--tool-calls",
+        choices=TOOL_CALLS,
+        default="native",
+        help="native: the model's own function calls; prompt: the SDK puts the tools in the prompt and reads each call"
+        " from the model's text, for models weak at native calls",
+    )
     args = parser.parse_args()
     data, out = args.data.resolve(), args.out.resolve()
     if not data.is_dir() or not args.task.is_file():
@@ -86,6 +94,7 @@ def main() -> int:
         base_url=OLLAMA_FROM_SANDBOX,
         api_key="ollama-on-this-mac",  # Ollama asks for none; the client wants one
         reasoning_effort="none",
+        native_tool_calling=args.tool_calls == "native",
         temperature=0.0,
         timeout=300,
         num_retries=1,
@@ -142,6 +151,7 @@ def main() -> int:
         "mount": f"{MOUNT}:ro",
         "max_iterations": args.max_iterations,
         "timeout_seconds": args.timeout,
+        "tool_calls": args.tool_calls,
         "outcome": outcome,
         "execution_status": status,
         "errors": errors,

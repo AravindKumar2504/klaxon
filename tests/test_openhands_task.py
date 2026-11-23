@@ -372,3 +372,57 @@ def test_a_runner_that_leaves_no_summary_leaves_no_run(ready, tmp_path, capsys):
     ready.setattr(oh.subprocess, "run", lambda argv, **_: subprocess.CompletedProcess(argv, 1))
     assert oh.main(["run", str(folder)]) == 2 and not (folder / "run.json").exists()
     assert "with no summary" in capsys.readouterr().err
+
+
+# The second batch (Aravind, 2026-11-23): the same snapshots, the agent calling its tools in its text.
+
+
+def runner_that_notes(asked, summary):
+    """subprocess.run, standing in for the runner: notes the command it was given, and writes what the runner writes."""
+    write = runner_that_writes(summary)
+
+    def run(argv, **kwargs):
+        asked.append(list(argv))
+        return write(argv, **kwargs)
+
+    return run
+
+
+def test_the_second_batch_copies_a_snapshot_unchanged_beside_it_and_its_run_calls_tools_in_text(ready, tmp_path):
+    folder = snapshot_folder(tmp_path)
+    assert oh.main(["variant", str(folder)]) == 0
+    copy = folder.with_name(f"{folder.name}-prompt")
+    assert (copy / "data" / "INDEX.json").read_text() == (folder / "data" / "INDEX.json").read_text()
+    assert (copy / oh.TASK).read_text() == (folder / oh.TASK).read_text()
+    saved = json.loads((copy / oh.SNAPSHOT_RUN).read_text())
+    assert (saved["snapshot_of"], saved["openhands_tool_calls"], saved["loop_kind"]) == (
+        folder.name,
+        "prompt",
+        "openhands-prompt",
+    )
+    assert saved["label"].endswith(f"Copied from {folder.name}, unchanged, for the second batch.")
+    unchanged = {key: value for key, value in snapshot_record().items() if key not in oh_copied_keys()}
+    assert {key: value for key, value in saved.items() if key not in oh_copied_keys()} == unchanged
+    assert oh.main(["variant", str(folder)]) == 2  # never made twice
+    assert oh.main(["variant", str(copy)]) == 2  # never a copy of a copy
+    assert oh.main(["variant", str(folder), "--tool-calls", "native"]) == 2  # native is the first batch's own
+    asked = []
+    ready.setattr(oh.subprocess, "run", runner_that_notes(asked, {"outcome": "finished", "seconds": 30.0}))
+    assert oh.main(["run", str(copy)]) == 0 and oh.main(["run", str(folder)]) == 0
+    assert [argv[argv.index("--tool-calls") + 1] for argv in asked] == ["prompt", "native"]
+    record = json.loads((copy / "run.json").read_text())
+    assert (
+        record["loop_kind"] == "openhands-prompt"
+        and "Its tool calls: prompt, written in the model's text" in record["label"]
+    )
+    assert json.loads((folder / "run.json").read_text())["loop_kind"] == "openhands"
+
+
+def oh_copied_keys():
+    return {"snapshot_of", "openhands_tool_calls", "loop_kind", "copied_at_utc", "label"}
+
+
+def test_the_runner_takes_its_way_of_calling_tools_from_the_command():
+    module = runner()
+    assert module.TOOL_CALLS == ("native", "prompt") == tuple(oh.TOOL_CALL_WORDS)
+    assert 'native_tool_calling=args.tool_calls == "native",' in RUNNER.read_text()

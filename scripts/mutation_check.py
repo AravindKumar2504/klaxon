@@ -4336,6 +4336,15 @@ MUTANTS = [
      'SEEN_BY = ("grep", "planning_file_editor")', 'SEEN_BY = ("grep", "planning_file_editor", "glob")', False),
     ("openhands: a file cited without opening goes unsaid", "src/klaxon/openhands_task.py",
      "    unread = [call_id for call_id in cited if call_id not in opened]", "    unread = []", False),
+    # Week 8, item 4's second batch (Aravind, 2026-11-23): the same snapshots, the tools called in the model's text.
+    ("openhands: the second batch's runs call their tools natively", "src/klaxon/openhands_task.py",
+     '    argv += ["--tool-calls", tool_calls_of(snapshot)]', '    argv += ["--tool-calls", "native"]', False),
+    ("openhands: a copy's runs pass for the first batch's", "src/klaxon/openhands_task.py",
+     '        "loop_kind": snapshot.get("loop_kind") or LOOP_KIND,', '        "loop_kind": LOOP_KIND,', False),
+    ("openhands: a snapshot is copied over an earlier copy", "src/klaxon/openhands_task.py",
+     "        if target.exists():", "        if False:", False),
+    ("openhands: the runner ignores how it was told to call tools", "experiments/openhands/run_openhands.py",
+     '        native_tool_calling=args.tool_calls == "native",', "        native_tool_calling=True,", False),
 ]
 
 

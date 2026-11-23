@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -61,6 +62,19 @@ LOOP_KIND = "openhands"
 DATA, INDEX, TASK, SNAPSHOT_RUN = "data", "INDEX.json", "task.md", "snapshot-run.json"
 EVENTS, ANSWER, SUMMARY = "openhands-events.jsonl", "openhands-answer.txt", "openhands-summary.json"
 STRICT, LAST_BLOCK = "strictly, as Klaxon reads a reply", "from its last fenced JSON block, not strictly"
+TOOL_CALL_WORDS = {  # how OpenHands' agent calls its tools; the second batch (Aravind, 2026-11-23) asks for prompt
+    "native": "the model's own function calls",
+    "prompt": "written in the model's text, the SDK's way for models weak at native calls (the second batch)",
+}
+
+
+def tool_calls_of(snapshot: Mapping) -> str:
+    """How a snapshot's run calls its tools: native, unless its folder is the second batch's copy."""
+    mode = snapshot.get("openhands_tool_calls", "native")
+    if mode not in TOOL_CALL_WORDS:
+        raise ValueError(f"no such way to call tools: {clean_text(str(mode), 40)}")
+    return mode
+
 
 MINUTES = 15  # each question's window, as the night's runs mostly asked
 LOG_LINES, TRACES, TRACES_KEPT, METRICS_KEPT = 50, 20, 10, 25
@@ -299,10 +313,11 @@ def run_record(
     )
     if unread:
         detail += f"; cited without opening: {', '.join(unread)}"
+    mode = tool_calls_of(snapshot)
     return dict(snapshot) | {
-        "label": LABEL,
+        "label": f"{LABEL} Its tool calls: {mode}, {TOOL_CALL_WORDS[mode]}.",
         "model": MODEL,
-        "loop_kind": LOOP_KIND,
+        "loop_kind": snapshot.get("loop_kind") or LOOP_KIND,
         "loop": {
             "reason": reason,
             "detail": detail,
@@ -419,6 +434,7 @@ def _run(folder: Path) -> int:
         return 2
     argv = [str(VENV_PYTHON), str(RUNNER), "--data", str(folder / DATA), "--task", str(folder / TASK)]
     argv += ["--out", str(folder), "--max-iterations", str(MAX_ITERATIONS), "--timeout", str(TIME_LIMIT_SECONDS)]
+    argv += ["--tool-calls", tool_calls_of(snapshot)]
     print(
         f"OpenHands, on {MODEL}, at most {MAX_ITERATIONS} steps and {TIME_LIMIT_SECONDS} s: {clean_text(folder.name)}"
     )
@@ -451,6 +467,33 @@ def _run(folder: Path) -> int:
     (folder / fault_runs.RUN_FILE).write_text(json.dumps(record, indent=2, default=str) + "\n")
     verdict = record["comparison"].get("verdict") if isinstance(record["comparison"], Mapping) else None
     print(f"Stopped: {record['loop']['reason']}; by the rule: {verdict or 'no diagnosis'}. Saved in {folder.name}")
+    return 0
+
+
+def _variant(folder: Path, mode: str) -> int:
+    """The second batch (Aravind, 2026-11-23): the same snapshot, copied unchanged into a folder of its own beside it,
+    for a run whose agent calls its tools another way. The first batch's runs are never touched."""
+    if mode == "native":
+        print("Not copied: native is the first batch's own way, and its runs are saved already", file=sys.stderr)
+        return 2
+    target = folder.with_name(f"{folder.name}-{mode}")
+    try:
+        snapshot = json.loads((folder / SNAPSHOT_RUN).read_text())
+        if snapshot.get("snapshot_of") is not None:
+            raise ValueError("it is a copy already")
+        if target.exists():
+            raise ValueError(f"{target.name} is there already")
+    except (OSError, ValueError) as exc:
+        print(f"Not copied: {clean_text(str(exc), 200)}", file=sys.stderr)
+        return 2
+    target.mkdir()
+    shutil.copytree(folder / DATA, target / DATA)
+    shutil.copy2(folder / TASK, target / TASK)
+    copied = {"snapshot_of": folder.name, "openhands_tool_calls": mode, "loop_kind": f"{LOOP_KIND}-{mode}"}
+    copied |= {"copied_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")}
+    copied |= {"label": f"{snapshot['label']} Copied from {folder.name}, unchanged, for the second batch."}
+    (target / SNAPSHOT_RUN).write_text(json.dumps(snapshot | copied, indent=2, default=str) + "\n")
+    print(f"Copied {folder.name}'s snapshot for its run with {mode} tool calls: {target.name}")
     return 0
 
 
@@ -495,11 +538,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     shown.add_argument("folder", type=Path)
     side = actions.add_parser("compare", help="its runs beside the night's on fault 1; calls nothing")
     side.add_argument("--evidence-dir", type=Path, default=EVIDENCE)
+    copy = actions.add_parser("variant", help="a snapshot copied for a run whose agent calls its tools another way")
+    copy.add_argument("folder", type=Path)
+    copy.add_argument("--tool-calls", choices=list(TOOL_CALL_WORDS), default="prompt")
     args = parser.parse_args(argv)
     if args.action == "snapshot":
         return _snapshot(args, argv)
     if args.action == "run":
         return _run(args.folder)
+    if args.action == "variant":
+        return _variant(args.folder, args.tool_calls)
     if args.action == "task":
         print((args.folder / TASK).read_text(), end="")
         return 0
