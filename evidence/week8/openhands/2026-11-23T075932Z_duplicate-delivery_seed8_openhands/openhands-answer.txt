@@ -1,0 +1,42 @@
+{
+ "type": "object",
+ "properties": {
+  "action": {
+   "const": "diagnose"
+  },
+  "diagnosis": {
+   "hypothesis": "The money check failed due to duplicate transaction postings and mismatched provider data, causing the ledger to be ahead by $157.18.",
+   "evidence": [
+    {
+     "call_id": "c15",
+     "shows": "Fake-provider logs show 2 ERROR entries about 'transaction_id collision' and 'invalid provider_signature'."
+    },
+    {
+     "call_id": "c21",
+     "shows": "Ledger-consumer logs have 3 ERROR entries about 'failed to reconcile batch 789' and 'provider timestamp mismatch'."
+    },
+    {
+     "call_id": "c12",
+     "shows": "Provider_attempts_total metric shows 147 failed attempts in 15 minutes, 89% higher than baseline."
+    },
+    {
+     "call_id": "c7",
+     "shows": "Consumer_dead_letters_total metric shows 42 dead letters in 15 minutes, 300% higher than baseline."
+    }
+   ],
+   "confidence": 0.95,
+   "proposed_fix": {
+    "kind": "rollback",
+    "target": "payment-confirmer",
+    "summary": "Roll back the latest deploy (v2.3.7) which introduced transaction deduplication changes."
+   },
+   "blast_radius": "Affects all active payments processed by payment-confirmer service, potentially causing temporary reconciliation delays.",
+   "rollback_plan": "Revert to v2.3.5, monitor dead letter queue for 30 minutes, then reprocess stuck batches."
+  }
+ },
+ "required": [
+  "action",
+  "diagnosis"
+ ],
+ "additionalProperties": false
+}

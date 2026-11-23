@@ -1,0 +1,38 @@
+{
+ "type": "object",
+ "properties": {
+  "action": {
+   "const": "diagnose"
+  },
+  "diagnosis": {
+   "hypothesis": "Kafka consumer lag is causing duplicate payment processing, leading to posted_exactly_once failures and balance mismatches with the provider.",
+   "evidence": [
+    {
+     "call_id": "c10",
+     "shows": "Kafka consumer lag metrics indicate the ledger-consumer is falling behind, causing missed messages and potential duplicates."
+    },
+    {
+     "call_id": "c21",
+     "shows": "Ledger-consumer logs contain errors related to message processing, suggesting failed or duplicated transactions."
+    },
+    {
+     "call_id": "c15",
+     "shows": "Fake-provider logs show mismatched transaction IDs, indicating failed synchronization with the ledger."
+    }
+   ],
+   "confidence": 0.95,
+   "proposed_fix": {
+    "kind": "scale",
+    "target": "ledger-consumer",
+    "summary": "Increase Kafka consumer parallelism to reduce lag and prevent duplicate processing."
+   },
+   "blast_radius": "May temporarily increase resource usage but avoids data corruption risks.",
+   "rollback_plan": "Revert scaling changes and restore previous consumer configuration if duplication persists."
+  }
+ },
+ "required": [
+  "action",
+  "diagnosis"
+ ],
+ "additionalProperties": false
+}
