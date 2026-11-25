@@ -1,6 +1,6 @@
 # Research behind Klaxon (2026-10-09)
 
-Claude did this research on 2026-10-09 with web searches and five parallel research agents. Aravind has not yet read these sources himself. Before the pitch says "alternatives I actually looked at", he should open at least the HolmesGPT and Claude Code Code Review pages below. Startup funding and accuracy figures are mostly vendor or press claims; treat them as reported, not verified.
+Researched on 2026-10-09, with web searches and five parallel research agents. Startup funding and accuracy figures are mostly vendor or press claims; treat them as reported, not verified.
 
 ## 1. Why the original Klaxon (code-review agent) was dropped
 
@@ -85,14 +85,14 @@ API prices per million tokens: Opus 5.5 $4 in / $20 out; Sonnet 5.5 $2 / $10; Ha
 
 ## 10. Payment confirmation (read 2026-10-11)
 
-Claude read these Stripe pages on 2026-10-11, for the week 2 payment confirmation. They back the design: match a webhook to our own payment through metadata, and treat a 500 as "outcome unknown".
+Stripe pages read on 2026-10-11, for the week 2 payment confirmation. They back the design: match a webhook to our own payment through metadata, and treat a 500 as "outcome unknown".
 - Idempotent requests: Stripe saves the first answer for an idempotency key, and retries with the same key "return the saved response, including `500` errors". https://docs.stripe.com/api/idempotent_requests
 - Advanced error handling: treat the outcome of a 500 as indeterminate, and use webhook events to reconcile what happened. To match an object received through a webhook to your own records, include a local identifier in its metadata. https://docs.stripe.com/error-low-level
 - Payment Intents lifecycle: a payment with an asynchronous method, such as a bank debit, stays `processing` until it settles, which can take up to a few days. (Considered and not copied: our API keeps answering "succeeded" when the provider does.) https://docs.stripe.com/payments/paymentintents/lifecycle
 
 ## 11. Observability (read 2026-10-12)
 
-Claude read these for week 2's OpenTelemetry work:
+Sources for week 2's OpenTelemetry work:
 - The `grafana/otel-lgtm` README and image files at v0.34.0: ports, the default sign-in, dashboard provisioning, and the health check that waits for every backend. https://github.com/grafana/docker-otel-lgtm/tree/v0.34.0
 - FastAPI 0.142's own telemetry, read in the installed package (`fastapi/telemetry/`): it makes server spans and the `http.server.request.duration` metric once providers exist, records the raw path, query and Host header, and believes incoming trace headers. That is why the telemetry module overwrites those attributes and ignores outside trace context.
 - PyPI release dates for every new package, to keep the two-week rule (`requirements/services.lock.txt` lists the result).

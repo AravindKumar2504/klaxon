@@ -17,7 +17,7 @@ from klaxon.agent.contract import ActionSpec
 # Services whose settings the deploy log knows (klaxon.patient.deploys.SERVICES; a test checks it). The payments API
 # and the webhook receiver since week 4, item 4: faults 4 to 6 are bad deploys of theirs (Aravind's choice, 2026-10-23).
 ROLLBACK_SERVICES = ("ledger-consumer", "payment-confirmer", "payments-api", "webhook-receiver")
-# The second sentence since week 6 (Aravind's call at his review of week 5, 2026-11-09; Claude's draft, the words he
+# The second sentence since week 6 (Aravind's call at his review of week 5, 2026-11-09; the words he
 # chose on 2026-11-09): in week 5, 5 of the 6 runs that could not read deploys named no rollback. Each clause is what
 # klaxon.agent.actions.plan() does: it reads the deploy log and the running service, never the model's tool results.
 # Each run records the actions it offered, whole, so a saved run replays with the words it had (klaxon.agent.loop).

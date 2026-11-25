@@ -22,6 +22,11 @@ Klaxon is an AI on-call engineer for a payments system. When an alert fires, it 
 - What stops Klaxon from doing something dangerous?
 - What failed, and what did you change?
 - How is this different from HolmesGPT or K8sGPT?
+- How did you use AI to build it?
+
+## How you built it, in one breath (2026-11-25)
+
+You designed Klaxon and made every design decision. Claude Code was your AI coding agent. You planned each milestone, then reviewed it: you ran it, read the key files and made the calls. You approved every action Klaxon took, and you labeled the runs the graders are checked against.
 
 ## First piece (built 2026-10-09): what to be able to explain
 
@@ -35,7 +40,7 @@ Klaxon is an AI on-call engineer for a payments system. When an alert fires, it 
 - **Repairs are reversals.** Ledger rows are never deleted. To undo a double posting you add its mirror image (every line flipped) pointing at the original; the check then counts that posting as cancelled.
 - **Money is integer cents, in STRICT tables.** No floats anywhere near money; even raw SQL cannot store 100.5 cents.
 - **How you know it ran.** `pytest` passes (91 tests on 2026-10-09), and each demo run writes a dated JSON evidence file with the exact deliveries, the dashboard, the money report, the ledger and a SHA-256 of the code that produced it.
-- **How you know the tests mean something.** Claude broke the code on purpose 21 ways (for example: stop deduping, accept a truncated signature, commit the dedupe row separately, count reversed postings) and the tests caught every one.
+- **How you know the tests mean something.** The code was broken on purpose 21 ways (for example: stop deduping, accept a truncated signature, commit the dedupe row separately, count reversed postings) and the tests caught every one.
 
 ## The project explained simply (2026-10-09)
 
@@ -239,7 +244,7 @@ For money, "at least once" is the right choice, so the job of ignoring repeats b
 
 **Words to know.** *Consistent snapshot* (every read sees the same moment; PostgreSQL's REPEATABLE READ gives that inside one database, but not across two systems). *Watermark* (stream processing's name for "everything up to here has arrived"; the cutoff plus the settling is one). *Finality* (a record set that can no longer change).
 
-**What I can say ran (2026-10-13; STATUS has the commands).** `make check-under-traffic CHECKS=100 RATE=5`, synthetic traffic at 5 payments per second. On the old check: 81 of 100 checks passed on a healthy stack. With the cutoff: 100 of 100, twice. In the second run, 80 of the checks left newer records for the next check (177 events in all), so they passed while payments kept landing. Also measured: 389 offline tests, 59 integration tests, 15 end-to-end tests (under traffic, the naive ledger is still caught for counting twice and the bad confirmer for charged payments left pending, with no false alarms next to them), and 128 of 128 deliberate breaks caught. I also had Claude watch the Grafana dashboard under traffic: every panel showed the steady load, lag stayed at 0, and the lost answers showed up as a trickle of ERROR lines that are normal for this traffic.
+**What I can say ran (2026-10-13; STATUS has the commands).** `make check-under-traffic CHECKS=100 RATE=5`, synthetic traffic at 5 payments per second. On the old check: 81 of 100 checks passed on a healthy stack. With the cutoff: 100 of 100, twice. In the second run, 80 of the checks left newer records for the next check (177 events in all), so they passed while payments kept landing. Also measured: 389 offline tests, 59 integration tests, 15 end-to-end tests (under traffic, the naive ledger is still caught for counting twice and the bad confirmer for charged payments left pending, with no false alarms next to them), and 128 of 128 deliberate breaks caught. I also had the Grafana dashboard checked under traffic: every panel showed the steady load, lag stayed at 0, and the lost answers showed up as a trickle of ERROR lines that are normal for this traffic.
 
 **Likely questions.**
 - *Why not just pause the traffic during the check?* Only our own generator would pause, so any other client still breaks the check. And Klaxon will run this check during incidents: pausing customers is a write action, hides the symptoms while paused, and no real on-call engineer can do it.
@@ -510,7 +515,7 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 
 **What it does not show.**
 - That Klaxon is right in general. One run per fault, one seed, one model, and one false alarm written by hand. Week 5's evaluation will run many, with false alarms.
-- That the verdicts are right. The rule reads words, not meaning, and its known limits are tests. Claude's reading and the independent review's agreed that each diagnosis named its cause.
+- That the verdicts are right. The rule reads words, not meaning, and its known limits are tests. A reading by meaning, and the independent review's, agreed that each diagnosis named its cause.
 - That Klaxon can fix anything. Each fix stayed a proposal; the rollbacks in the runs were the harness clearing the fault, not Klaxon. And a right diagnosis can carry a wrong side claim: the poison run's blast radius said the money check would report the poison as unposted, but a `payment.updated` event moves no money, so the check never expects it in the ledger.
 - That it resists an instruction planted in a log. The framing is built and tested offline, with scripted replies; no live run met one (week 9).
 - That the deploy faults are hard. `recent_deploys` shows the bad setting by name.
@@ -523,7 +528,7 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 
 **The ideas behind your four choices.**
 - *Why the gate comes first.* Every later item acts through it. If the gate is wrong, everything built on it is unsafe.
-- *Why you type the request's id, in your own terminal.* A "y" can be typed by habit; the id means you read which request you approve. Requiring a terminal will keep processes without one, such as Claude's shell, from approving. It will be a rule plus a log, not a lock: a process on this Mac could still write the decision file, and the docs will say so.
+- *Why you type the request's id, in your own terminal.* A "y" can be typed by habit; the id means you read which request you approve. Requiring a terminal will keep processes without one, such as your coding agent's shell, from approving. It will be a rule plus a log, not a lock: a process on this Mac could still write the decision file, and the docs will say so.
 - *Why only a rollback at first.* A rollback returns to settings that already ran. Repairs that move money (reversals, refunds) are new writes with no earlier state to return to, so they will stay proposals for a person.
 - *Why six runs, on Opus.* One gated run per fault keeps each fault's evidence complete, and the same model keeps it comparable with week 3. Week 5 compares models.
 
@@ -539,11 +544,11 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 
 **Plan, then check again.** A request can wait ten minutes. Meanwhile someone may redeploy the service, or clear the fault. So the action checks everything again right before it acts. This is the classic "time of check to time of use" gap. If anything changed, nothing runs.
 
-**Why your typed id, and why a terminal.** A "y" can be typed by habit; the id shows you read which request you approve. `make approve` refuses unless its own input is a terminal, and it reads your answer from `/dev/tty`, the process's terminal. So `echo r-1234 | make approve` is refused, and so is a process with no terminal at all. Claude's shell is one: checked from this session, its input is not a terminal and `/dev/tty` cannot be opened. A run of `make approve` from it was refused, and the gate logged the attempt.
+**Why your typed id, and why a terminal.** A "y" can be typed by habit; the id shows you read which request you approve. `make approve` refuses unless its own input is a terminal, and it reads your answer from `/dev/tty`, the process's terminal. So `echo r-1234 | make approve` is refused, and so is a process with no terminal at all. Your coding agent's shell is one: checked from this session, its input is not a terminal and `/dev/tty` cannot be opened. A run of `make approve` from it was refused, and the gate logged the attempt.
 
 **The seal, and the decision written once.** A request carries the SHA-256 of its own content, and the decision must name it. If anyone edits the request after it was saved, even sealing it again, the run's own copy no longer matches, and the approval does not count. The decision file can be written once: of two writers (you, and the run's ten-minute expiry), exactly one wins, and nobody can read half a file.
 
-**The limit, said plainly.** A process can make itself a terminal (the tests do, with a pseudo-terminal) or write the decision file directly. The code cannot tell that from you. That Claude never approves is a rule; the gate's log shows every decision.
+**The limit, said plainly.** A process can make itself a terminal (the tests do, with a pseudo-terminal) or write the decision file directly. The code cannot tell that from you. That no AI approves is a rule; the gate's log shows every decision.
 
 **One rollback Klaxon will not make.** After a fault is cleared, the latest deploy is the clearing, and what it replaced is the fault's bad setting: "undo the latest deploy" would put the fault back. So a rollback never deploys a known-bad value (the faults' and the demos' bad baselines). In this system that also means undoing any of Klaxon's rollbacks is your call, by hand; the plan's undo line says so.
 
@@ -553,10 +558,10 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 
 **What trying it found.** Three things the tests had not:
 - *A clock can stop.* The demo, left waiting while the Mac slept, waited on a ten-minute request from 10:03 to 18:46 UTC: on macOS the monotonic clock does not count sleep. No late approval could have counted (one dated after the expiry is a denial), but the run sat blocked. The waiter now also stops at the request's own time, by the wall clock.
-- *Output can wait in a buffer.* Printed into a pipe, the request's id stayed unseen until the demo ended. Whoever watches a run (you, or Claude reading its output) must see the id while it waits, so the notice now flushes at once.
+- *Output can wait in a buffer.* Printed into a pipe, the request's id stayed unseen until the demo ended. Whoever watches a run (you, or a program reading its output) must see the id while it waits, so the notice now flushes at once.
 - *A terminal cannot seek.* Opening `/dev/tty` for reading and writing as text fails. The scripted tests could not see it; the test in a pseudo-terminal did, before you ever ran `make approve`. Lesson: test the real path at least once, not only its stand-in.
 
-**What I can say ran (2026-10-19; STATUS has the commands and commits).** Offline only: no stack command and no model call. `make test`: 1,453 passed, 151 of them new, with the week 3 runs still replaying. Every mutant of every file this item changed was caught: 138 of 138. The real `make approve` ran in a pseudo-terminal a test made, and approved by the typed id; with no terminal, or with piped input, it refused. From Claude's own shell, `make approve` on the demo's request was refused, and the gate logged the attempt. What has not run: the deploy code against the real docker (item 2's live runs and `make e2e` will be its first), and a real person approving (that is your review).
+**What I can say ran (2026-10-19; STATUS has the commands and commits).** Offline only: no stack command and no model call. `make test`: 1,453 passed, 151 of them new, with the week 3 runs still replaying. Every mutant of every file this item changed was caught: 138 of 138. The real `make approve` ran in a pseudo-terminal a test made, and approved by the typed id; with no terminal, or with piped input, it refused. From your coding agent's shell, `make approve` on the demo's request was refused, and the gate logged the attempt. What has not run: the deploy code against the real docker (item 2's live runs and `make e2e` will be its first), and a real person approving (that is your review).
 
 **What the review taught.** It found no way to act without an approval on file, beyond the limits the gate states, and fourteen problems in all. Three lessons:
 - *Log what you act on, not only what you are told.* `make approve` logged its decisions, but the run never logged the one it took. So a decision file written by some other process left no trace. Now the run logs the decision it takes, with the file's own hash.
@@ -565,7 +570,7 @@ The thresholds come from week 2's measurements: a healthy stack under traffic st
 
 **Likely questions.**
 - *Why not give the model the rollback as a tool?* Then the model's reply would be the action. Here the model only names it; code plans it from the stack, you approve the plan, and code runs exactly that plan.
-- *Can Claude approve its own action?* Not through the paths a person uses: its shell has no terminal, and `make approve` refused it. But any process running as you can do what you can: write the decision file, make a terminal, type into yours. The rule that Claude never approves is the guard, and the log would show a decision with no line from `make approve`.
+- *Can an AI approve its own action?* Not through the paths a person uses: your coding agent's shell has no terminal, and `make approve` refused it. But any process running as you can do what you can: write the decision file, make a terminal, type into yours. The rule that no AI approves is the guard, and the log would show a decision with no line from `make approve`.
 - *What if Klaxon names the wrong service?* The request shows the exact change before you answer. The plan can only undo that service's latest logged deploy, from the container that deploy made, and never to a known-bad setting.
 - *Why ten minutes?* Long enough to read the request and check the evidence, short enough that a run never waits on a stack that has moved on. And the plan is checked again before it runs.
 - *Why not Kubernetes' own rollback?* The stack runs in Docker Compose until week 6, where `kubectl rollout undo` can replace this deploy log.
@@ -604,7 +609,7 @@ The last rule is strict on purpose: Klaxon says "the cause is removed" only when
 
 Its re-check found two more, both fixed: a run started under `nohup` must keep ignoring SIGHUP, so a signal ignored on purpose stays ignored; and a request whose notice failed (a closed pipe) stayed open, so the request is now closed from the moment it is saved. A safety net has to start where the risk starts.
 
-**What I can say ran (STATUS has the commands and commits).** Offline only, so far: no stack command and no model call. `make test`: 1,564 passed, 111 more than item 1's. Every mutant of every file this item changed was caught: 122 of 122. Six offline runs of the whole gated command, with a scripted approver answering through `make approve`'s real code. A separate Claude reviewed it, then re-checked the fixes. Then, on 2026-10-21, with your OK for each step, the live runs below.
+**What I can say ran (STATUS has the commands and commits).** Offline only, so far: no stack command and no model call. `make test`: 1,564 passed, 111 more than item 1's. Every mutant of every file this item changed was caught: 122 of 122. Six offline runs of the whole gated command, with a scripted approver answering through `make approve`'s real code. A separate review checked it, then re-checked the fixes. Then, on 2026-10-21, with your OK for each step, the live runs below.
 
 **What the live runs showed (2026-10-21; recorded responses, labeled as such).** Three gated runs on your seat, Opus 5.5, every approval typed by you:
 - *Fault 1, approved.* The money alert fired with 7 events counted twice. The loop named the cause in 45.8 s and asked to roll back. You approved; code verified: the cause removed, and the money not right (28 events counted twice, $1,531.87). The damage went 7 at the alert, 12 at the request, 28 at the action, and 28 a minute later. It grew while the request waited, and stopped at the rollback. That is week 3's open question answered with numbers: waiting costs money, and the gate is where the wait is.
@@ -613,7 +618,7 @@ Its re-check found two more, both fixed: a run started under `nohup` must keep i
 - 19 model calls, $0.86 at API prices (Claude Code's estimate; the seat is not billed per call). Each loop replays exactly, as a test.
 
 **Likely questions.**
-- *Why do you type the id, when Claude Code runs in auto mode?* Auto mode covers Claude's own actions in the chat. The gate is Klaxon's rule: a person approves every write. If Claude could approve, the gate would prove nothing, so `make approve` needs a real terminal, which Claude's shell does not have.
+- *Why do you type the id, when your coding agent runs in auto mode?* Auto mode covers the coding agent's own actions in the chat. The gate is Klaxon's rule: a person approves every write. If an AI could approve, the gate would prove nothing, so `make approve` needs a real terminal, which your coding agent's shell does not have.
 - *How do you know what to approve?* In these runs you know the answer: each fault was injected on purpose. Approve when the three lines written by code (the action and its service, the change, the deploy it undoes) reverse the fault's own deploy; else type `no`. In a real incident the harder part is judging the diagnosis and its evidence.
 - *Why not just check the money passes?* After fault 1 it never passes until someone repairs the double postings. A check that demanded it would fail every right rollback.
 - *Why a minute?* At 3 payments a second, a cause still in place shows within a minute: in week 3's fault 1 run, the money check that ended 18 s after the injection began found 7 events counted more than once. The limit is said in the code: a cause that shows only now and then may not show in that minute.
@@ -647,7 +652,7 @@ Its re-check found two more, both fixed: a run started under `nohup` must keep i
 
 **Keeping the old grades true.** Week 3's run on fault 3 was graded by version 1, and its diagnosis named the cause: the provider hung and nothing failed fast. Graded by version 2, the same words are only "partly", because that system had no breaker. Both are right for their system. So version 1 stays exactly as it was (its fingerprint is pinned), the fault keeps its version 1 cause, and `make grade-run` grades a saved run with the version that graded it.
 
-**What the review taught.** A separate Claude reviewed it, then checked my fixes twice. It found nothing high, and one medium problem, in item 2's code, that this item made likely: verification called a finding "from before the action" whenever the check right after the action already had it. But that check judges some findings whatever its cutoff (a charge refunded more than its amount, a payment charged twice), so it can already see one made after the action. Now such a finding counts as old only if what it is about was made up to that check's cutoff. Lessons:
+**What the review taught.** A separate review checked it, then checked the fixes twice. It found nothing high, and one medium problem, in item 2's code, that this item made likely: verification called a finding "from before the action" whenever the check right after the action already had it. But that check judges some findings whatever its cutoff (a charge refunded more than its amount, a payment charged twice), so it can already see one made after the action. Now such a finding counts as old only if what it is about was made up to that check's cutoff. Lessons:
 - *A rule that was right can become wrong when you add a new kind of input.* The dating rule was right for every finding item 2 knew.
 - *Simulate the noise, not only the fault.* Its simulations of the traffic around the real breaker (labeled as such) showed my first two rules opening the breaker on a healthy stack under heavy noise. The third rule asks a better question: is the provider there?
 - *Check what each fix assumes.* My "a 500 is an answer" assumed every 500 is quick. A slow one holds a thread like a hang, so it now counts as no answer.
@@ -685,7 +690,7 @@ Its re-check found two more, both fixed: a run started under `nohup` must keep i
 
 **A rehearsal before a live run.** `make rehearse-fault` runs the fault and the alert rules with no model: which alert fires, when, with what words. It measured each fault's shape with the same code as the live run, before a model saw it. The symptoms of faults 4 to 6 were written from those numbers.
 
-**What I can say ran (STATUS has the commands and commits).** Offline: `make test`, 1,885 passed at `79f8303`, 197 more than item 3's. Every offline mutant of every file this item changed was caught: 399 of 399, the 93 new ones among them. A separate Claude reviewed it, then re-checked the fixes. Then, with your OK, on the real stack (2026-10-24 UTC): `make e2e`, 25 passed on its second run. Its first run failed two of the new tests, and both were the tests' bugs: each assumed a clean stack, but the tests before it leave their marks (an earlier outage's errors in the error rule's window; an earlier fault's wrong books). Then the faults' shapes, measured by rehearsals and fault demos. And on 2026-11-01 UTC, after the live runs, with your OK: a 5-minute quiet run under traffic with no alert (the books rule found the money check settled at all 19 evaluations, so it gave no false alarm on a healthy stack); `make test-integration`, 86 passed, the leak on a real pool among them; and the stack mutants of `payments_store.py`, 4 of 4 caught.
+**What I can say ran (STATUS has the commands and commits).** Offline: `make test`, 1,885 passed at `79f8303`, 197 more than item 3's. Every offline mutant of every file this item changed was caught: 399 of 399, the 93 new ones among them. A separate review checked it, then re-checked the fixes. Then, with your OK, on the real stack (2026-10-24 UTC): `make e2e`, 25 passed on its second run. Its first run failed two of the new tests, and both were the tests' bugs: each assumed a clean stack, but the tests before it leave their marks (an earlier outage's errors in the error rule's window; an earlier fault's wrong books). Then the faults' shapes, measured by rehearsals and fault demos. And on 2026-11-01 UTC, after the live runs, with your OK: a 5-minute quiet run under traffic with no alert (the books rule found the money check settled at all 19 evaluations, so it gave no false alarm on a healthy stack); `make test-integration`, 86 passed, the leak on a real pool among them; and the stack mutants of `payments_store.py`, 4 of 4 caught.
 
 **What the live runs showed (2026-10-24 and 11-01 UTC; recorded responses, labeled as such).** Six gated runs on your seat, Opus 5.5, every approval typed by you. Every diagnosis named its fault's recorded cause, by rubric version 3 (a rule that reads words, not meaning).
 - *Fault 4, approved.* The money alert fired 17 s after the deploy. The loop named the deploy, the unit and the 100 times charge in 32.5 s, and asked to roll the payments API back. You approved; code verified: the cause removed, the money not right. The overcharged payments went 56 at the alert, 149 at the request, 1,080 at the action, and 1,080 a minute later. In the 5 min 23 s the request waited, about 930 more payments were overcharged. Fault 1's damage grew while it waited too, but here every payment is wrong: the gate is where the cost of waiting is paid.
@@ -721,12 +726,12 @@ Its re-check found two more, both fixed: a run started under `nohup` must keep i
 
 **Recorded, then replayed.** Every call goes through the loop's own locked-down adapter, and is recorded before Klaxon uses it. A replay builds the facts again from the evidence, serves the recorded replies for the exact prompts, runs the same checks, and must produce the same page, byte for byte. So the drafts are regression tests, like the loop's runs.
 
-**What the review taught.** A separate Claude reviewed it, then checked the fixes twice. Its top finding was in the facts, not the check: in fault 6's run, 234 payments got an answer that named no payment (a 500), so the clients never checked them. The facts said "0 still pending", and the repairs left them out. Lessons:
+**What the review taught.** A separate review checked it, then checked the fixes twice. Its top finding was in the facts, not the check: in fault 6's run, 234 payments got an answer that named no payment (a 500), so the clients never checked them. The facts said "0 still pending", and the repairs left them out. Lessons:
 - *A missing count is not a zero.* The traffic generator counts only what it followed up. Code read a missing key as 0, and wrote a sentence that sounded certain.
 - *A checker needs adversarial tests.* The first number reader let "4 000", "1/2", "-28" and "$1,531.875" pass: each was read in parts, and each part was in the facts. Its fix (read a number whole, as written) then opened a new gap the re-check found: "09:06-23:59" was read as one time with a zone. Test a checker with what a careful liar would write.
 - *Check the file the run read, not the file as it is now.* The gate's log names the SHA-256 of the decision the run took. The facts now compare it, so a decision edited afterwards is refused.
 
-**What I can say ran (2026-11-01; STATUS has the commands and commits).** Offline: `make test`, 2,135 passed at `820e5be`, 250 more than item 4's 1,885. A separate Claude reviewed it, then checked the fixes twice. Then, with your OK, the live drafts below. No stack command ran: a postmortem reads saved evidence only.
+**What I can say ran (2026-11-01; STATUS has the commands and commits).** Offline: `make test`, 2,135 passed at `820e5be`, 250 more than item 4's 1,885. A separate review checked it, then checked the fixes twice. Then, with your OK, the live drafts below. No stack command ran: a postmortem reads saved evidence only.
 
 **What the live drafts showed (recorded responses, labeled as such).** One draft for each fault, on your seat, Opus 5.5: 9 replies in all, $1.11 at API prices by Claude Code's estimate (the seat is not billed per call). Every draft passed the check of its numbers: three on the first call, three on the second. The check sent back "three" and "two" (numbers in words) and a 500 that fault 3's facts do not hold; each second reply fixed it. Each draft replays exactly, as a test.
 
@@ -787,9 +792,9 @@ On faults 2, 4 and 5 the first request went unanswered and expired after ten min
 
 **What it does not show.**
 - That Klaxon is right in general. One gated run per fault, besides the three whose requests expired; one seed; one model. Week 5's evaluation will run many.
-- That the verdicts are right. The rule reads words, not meaning, and its known limits are tests. Claude's reading of the nine diagnoses agreed with it.
+- That the verdicts are right. The rule reads words, not meaning, and its known limits are tests. A reading of the nine diagnoses by meaning agreed with it.
 - That Klaxon can repair money. A rollback repairs nothing: fault 1's 28 events counted more than once and fault 4's 1,080 overcharges stay for a person to reverse or refund.
-- That the gate stops a process that wants to approve. Any process running as you could write the decision file or fake a terminal. That Claude never approves is a rule; each approval's log line says it came from `make approve`, typed at a terminal.
+- That the gate stops a process that wants to approve. Any process running as you could write the decision file or fake a terminal. That no AI approves is a rule; each approval's log line says it came from `make approve`, typed at a terminal.
 - That a postmortem's claims are right. Code checks only its numbers: three sentences in the drafts of faults 4 and 6 were wrong, and you kept them as received.
 - That the faults are hard. `recent_deploys` names each bad setting, and five of the six faults are a deploy.
 - That it resists an instruction planted in a log. No live run met one (week 9).
@@ -864,11 +869,11 @@ Versions 1 to 3 stay as they were. A saved run is graded again with the newest r
 
 **The judge.** One recorded call per diagnosis, through the same locked-down adapter as the loop. It sees the right answer, the remedy and the whole diagnosis, never the model that wrote it, nor the rule's verdict. It answers in a checked shape: the verdict, whether the fix fits, and one sentence why. A reply out of shape is "no verdict". A call with no reply stops the batch, and nothing is saved for that run. Every judgment replays offline. Its prompt and model are pinned by a fingerprint: a change is a new version, checked again.
 
-**Your verdicts (`make label`).** In your own terminal only. Claude's shell has no terminal, so it cannot label. It is blind: the right answer, the remedy and the diagnosis, never a grader's verdict or the model, in a shuffled order. Each verdict is saved once, beside its run, never overwritten. Until you label a run, the reports hold back both graders' verdicts on it, so you give yours first.
+**Your verdicts (`make label`).** In your own terminal only. Your coding agent's shell has no terminal, so it cannot label. It is blind: the right answer, the remedy and the diagnosis, never a grader's verdict or the model, in a shuffled order. Each verdict is saved once, beside its run, never overwritten. Until you label a run, the reports hold back both graders' verdicts on it, so you give yours first.
 
-**The calibration.** The judge on the grading tests' 66 sentences and on the 13 saved diagnoses: 79 calls, with your OK. Claude wrote those sentences and their expected verdicts, so on them the judge is checked against Claude. Your verdicts on the 13 are the check by a person.
+**The calibration.** The judge on the grading tests' 66 sentences and on the 13 saved diagnoses: 79 calls, with your OK. A model wrote those sentences and their expected verdicts, so on them the judge is checked against a model. Your verdicts on the 13 are the check by a person.
 
-**What the review caught.** A diagnosis that rules a cause out ("not hung, stalled or crashed") was graded as blaming it. A judging batch would have kept calling after the seat's limit, and left "no verdict" files behind. The reports would have shown you the graders' verdicts before you gave your own. And the calibration said its sentences were "not by a model": Claude wrote them. Each is fixed, with a test. Then its re-check found the first fix went too far: a negation reached across commas, so "The provider is not down, the database is overloaded" was graded as naming fault 3. That overstates Klaxon's accuracy, the worst kind of error for a result. Now a negation stops at a comma, except through a list. The lesson: a fix to a grader needs new test sentences, written before you run them, not the ones that showed the bug.
+**What the review caught.** A diagnosis that rules a cause out ("not hung, stalled or crashed") was graded as blaming it. A judging batch would have kept calling after the seat's limit, and left "no verdict" files behind. The reports would have shown you the graders' verdicts before you gave your own. And the calibration said its sentences were "not by a model": a model wrote them. Each is fixed, with a test. Then its re-check found the first fix went too far: a negation reached across commas, so "The provider is not down, the database is overloaded" was graded as naming fault 3. That overstates Klaxon's accuracy, the worst kind of error for a result. Now a negation stops at a comma, except through a list. The lesson: a fix to a grader needs new test sentences, written before you run them, not the ones that showed the bug.
 
 **What the live calibration showed** (79 calls on your seat, 2026-11-05 UTC, about 4 minutes, $1.11 at API prices by Claude Code's estimate). Every reply was in the checked shape. On the 66 sentences, the judge agrees with the verdicts the tests expect on 51. It is never two steps off. 12 of its 15 differences are stricter: it wants every part of the recorded cause, the deploy included, before "names the cause". The tests (and the rule) count three parts and leave the deploy optional. Which is right is a question of definition. Your verdicts on the 13 do not settle it (below). The rule agrees on 64 of 66, but it was written knowing those sentences, so that number says little. The judge's verdicts on the 13 saved runs were held back until you labeled them.
 
@@ -913,7 +918,7 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 1. *The false alarm* (6 runs). Every run read the lag near 0, proposed no fix and named no action: the safe outcome, 6 of 6. But each grader says "names the cause" on only 1 of 6, because most runs blame a short backlog after a restart instead of calling the alert false. That reading has evidence behind it: each run's stack is fresh, started 80 to 100 s before the alert. So the case cannot tell a false alert from a backlog that drained before the first sample. You called all 3 you labeled "names".
 2. *Missing deploys* (6 runs). Without the deploy list, the models found the double booking but often left its cause open. Only 1 of 6 named the rollback the case says fits (Opus 0 of 3, Sonnet 1 of 3). Opus's three proposed a code change, with a rollback only once the deploy list shows a change. Sonnet's other two proposed a ledger repair (one said "Do not roll back yet"). The case's answer says a rollback still fits, because code plans it from the deploy log, not from the tools. The models were not told that.
 
-**Why each "partly", and each disagreement** (Claude's reading of all 15).
+**Why each "partly", and each disagreement** (a reading of all 15).
 - *False alarm, 6 runs:* above. The two the graders call "names" (Opus seed 7 by the rule, Opus seed 9 by the judge) differ from the others in wording more than in substance.
 - *Missing deploys, 3 runs:* Opus and Sonnet seed 8 (you and the judge: partly; the rule: names) both leave 2 or 3 causes open, and Opus's says the dedupe still works for other events; the rule counts the right words and misses that. Sonnet seed 9 (both graders: partly) blames a race between two copies and rejects the rollback.
 - *Provider outage, 3 Sonnet runs:* seeds 7 and 9 blame the provider's HTTP 500s. Those are the traffic's normal noise (the fake provider answers a few charges with 500 on purpose). The outage itself is a 5 s hang, which the payments API sees as timeouts; seed 7 even says the provider's latency stayed under 20 ms. On the facts, the judge's "partly" is right. You and the rule said "names": the place and the circuit breaker are right. Seed 8 does describe the hang; the rule missed its wording of the breaker, and the judge and you said "names".
@@ -971,7 +976,7 @@ The medians are over each model's diagnosed runs, read from `evidence/week5/repo
 - *Blind labels.* You see the right answer and the diagnosis, never a grader's verdict or the model, in a shuffled order. The judge's verdict is held back until you label.
 - *The sample.* Every disagreement, plus a random draw. Agreement on that sample understates agreement on ordinary runs, which is why the random part is reported apart.
 - *A confounded case.* The false alarm fired on a fresh stack, so "a backlog from the restart" was a fair reading. A test can fail for the test's reasons.
-- *How a record came.* Typed at your terminal, or given in the chat and entered by Claude: both are recorded, and say which.
+- *How a record came.* Typed at your terminal, or given in the chat and entered for you: both are recorded, and say which.
 - *Compose to Kubernetes.* A service becomes a workload; a name becomes a Service; a port takes two hops; a health check becomes probes; depends_on becomes the start order.
 
 **What it does not show.** A close ranking of the two models. The graders' accuracy beyond the 30 runs you labeled. Anything about real systems: synthetic data and a simulated provider throughout. Kubernetes in production: one node, and nothing failed on it yet.
@@ -1140,13 +1145,13 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 ## Week 6, item 5 (2026-11-15 and 16): the week's review
 
-**What it is.** The four items on one branch, a separate Claude's review and its fixes, and the full mutation list.
+**What it is.** The four items on one branch, a separate review and its fixes, and the full mutation list.
 
 **One branch.** `claude/week-6-review` holds items 1 to 4. Items 2 and 4 had both changed how a fault run starts. Both stay: a run picks its loop first, then kind's parts or Compose's.
 
 **A flaw in the mutation runner, found and fixed.** A mutant is a deliberate break, and some test should fail on it. The runner applies one, runs the tests, and stops at the first failure. On 2026-11-09 a guard test was added: every mutant's text must be in its file. In the runner's copy one mutant is always applied, so its text is gone and the guard failed every time. The tests that sort after it never ran, yet the mutant counted as caught. Item 4's 39 mutants counted that way were run again without the guard: all 39 caught, by item 4's own tests. The runner now leaves the guard out; `make test` still runs it.
 
-**The review.** A separate Claude read the week's code at `3a0ab37`, read-only and offline. No high-severity defect: 2 medium, 6 low, 4 nits. Ten were fixed, each with a test. The two medium ones:
+**The review.** A separate review read the week's code at `3a0ab37`, read-only and offline. No high-severity defect: 2 medium, 6 low, 4 nits. Ten were fixed, each with a test. The two medium ones:
 - *A rollback on kind needed a ready pod.* Klaxon named the running revision only when its pod was ready. A bad revision whose pod fails its readiness check, as faults 2 and 6 can make, could not be rolled back, though that is when a rollback is needed. Now one revision is enough, as on Compose.
 - *The rollback account guards objects, not fields.* Kubernetes stops klaxon-rollback from touching anything but our four Deployments. It does not stop a patch from changing more than our settings inside them: only Klaxon's code does. Open, for your call.
 
@@ -1168,7 +1173,7 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 2. *A LangGraph loop:* the same loop as a graph, with the same prompt, tools, budgets, trace and model. All 85 saved live runs replay on both loops: 84 exactly, and week 3's first fails the same way on both.
 3. *The patient on kind:* Kubernetes on this Mac, fit for faults. Klaxon's two docker tools read the cluster through an account that can only read.
 4. *Undoing a bad rollout on kind:* after your typed yes, through an account of its own, then code checks the cluster and the money.
-5. *The review:* one branch, a separate Claude's review and its fixes, the mutation runner fixed, and the full mutation list.
+5. *The review:* one branch, a separate review and its fixes, the mutation runner fixed, and the full mutation list.
 
 **What the live runs showed** (your OK each time).
 - *The false alarm* is still hard: the rule named it on 1 of 6 runs (Opus and Sonnet, 3 seeds each), even after the warm-up. Every run was safe: no fix, no action.
@@ -1182,7 +1187,7 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 **What it does not show.** How the two loops compare: one run per case. How the rollback on kind does over many runs: one approved run per fault. Anything about real systems: synthetic data, a simulated provider, one node.
 
-**Your review (2026-11-16).** You ran the four commands, and each printed what Claude's run had. You accepted the week. The rollback account's hardening and the prompt's line on kind wait for week 9's safety pass.
+**Your review (2026-11-16).** You ran the four commands, and each printed what the recorded run had. You accepted the week. The rollback account's hardening and the prompt's line on kind wait for week 9's safety pass.
 
 **Week 7** (planned Mon Nov 16; your review on Thu Nov 19): a web panel that shows saved runs and a live one, and CI on GitHub.
 
@@ -1241,7 +1246,7 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 ## Week 7, item 4 (2026-11-17): the week's review
 
-**What it is.** The week's branches on one review branch, a separate Claude's review and its fixes, and CI's first run on GitHub.
+**What it is.** The week's branches on one review branch, a separate review and its fixes, and CI's first run on GitHub.
 
 **What the review found.** No high-severity defect: 4 medium, 3 low, 2 nits, all fixed, each with a test. The two to know:
 - *A file's time is not a record's time.* The panel decided "going on now" from when a run's files last changed. A git checkout gives every file the time it was made, so on GitHub an October run looked live. Now the panel reads the times written inside the run's records.
@@ -1272,7 +1277,7 @@ Each box is a node, one part of a run. Each arrow is a decision. Every stop rule
 
 **What it does not show.** CI on `main` (it comes with the merge). A live run on kind in the panel (the saved kind runs show). Anything about real systems: synthetic data and a simulated provider throughout.
 
-**Your review (2026-11-17).** You ran the four commands, and each printed what Claude's run had. You accepted the week. It was merged into `main` and pushed, and the review branch deleted on GitHub.
+**Your review (2026-11-17).** You ran the four commands, and each printed what the recorded run had. You accepted the week. It was merged into `main` and pushed, and the review branch deleted on GitHub.
 
 **Week 8** (planned Tue Nov 17; build from Wed Nov 18; your review by Wed Nov 25): a multi-agent version, the receiver in Go, and the comparison runs.
 

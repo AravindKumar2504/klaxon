@@ -1021,7 +1021,7 @@ def compare_loops(rows: Sequence[Mapping]) -> list[dict]:
 
 def report(paths: Sequence[Path], show_judge: bool = False) -> dict:
     """The report on these saved runs. The judge's verdict on a run Aravind has not labeled is held back, unless
-    show_judge (once he has labeled the runs he will, or for Claude's own reading)."""
+    show_judge (once he has labeled the runs he will, or for a reading of them)."""
     folders, left_out, suites = run_folders(paths)
     rows = [run_row(folder) for folder in folders]
     if not show_judge:

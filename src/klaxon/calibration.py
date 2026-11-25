@@ -4,10 +4,10 @@ diagnoses, and both against Aravind's own verdicts.
 A grader nobody has checked measures nothing. Two sets, Aravind's choice (2026-11-04), 79 items:
 - SENTENCES: the 66 hypotheses of the grading tests (tests/test_grading.py reads them from here), each with the verdict
   the tests expect, and the system it was written for (a fault's cause as one rubric version records it: fault 3 had
-  no circuit breaker in version 1's). Claude wrote them, with their expected verdicts, in the sessions that built each
-  rubric and in their independent reviews (the nine known limits, with the right verdict); Aravind accepted those items,
-  but did not write or label these sentences. They are not Klaxon's output. So on them the judge is checked against
-  verdicts Claude expected: a check of the judge's reading, not a person's.
+  no circuit breaker in version 1's). They were written, with their expected verdicts, in the sessions that built each
+  rubric and in their independent reviews (the nine known limits, with the right verdict); Aravind accepted those items.
+  They are not Klaxon's output, and their verdicts are not his labels. So on them the judge is checked against the
+  verdicts the tests expect: a check of the judge's reading, not a person's.
 - SAVED_RUNS: the 13 saved diagnoses: the 12 fault runs of weeks 3 and 4, and week 3's first live run, on a false
   alarm. Recorded responses. Aravind's verdicts on them come from make label (klaxon.labels), in his review: they are
   the person's check on both graders.

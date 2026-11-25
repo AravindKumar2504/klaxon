@@ -45,7 +45,7 @@ Decided 2026-10-09: full build by mid-December 2026, then keep improving it afte
 
 It replaces the dates in the table above. Nothing is cut. Each week is planned on its first day and reviewed on its last.
 
-| Dates (2026) | PLAN week | What gets built | Aravind's part |
+| Dates (2026) | PLAN week | What gets built | Aravind's checkpoints |
 |---|---|---|---|
 | Fri Nov 6 to Tue Nov 10 | 5, the rest | Item 3: first results (the 40 runs left, the judge, his labels). Item 4: his postmortem corrections. Item 5: a start on Kubernetes. Item 6: docs | OK the runs; label about 17 runs; type his corrections; review on Tue |
 | Mon Nov 9 to Sun Nov 15 (started early, his choice) | 6 | LangGraph version of the loop; the week 5 review's three changes; Klaxon undoes a bad rollout on Kubernetes (kind) | Plan (done Mon Nov 9); OK the live runs; approve the two rollbacks on kind; label the disagreements; review on Sun |
@@ -59,13 +59,13 @@ How it can go about twice as fast as weeks 4 and 5 (his choice, 2026-11-06):
 - Independent pieces are built in parallel sessions. Live runs and stack steps still go one at a time (one demo stack on this Mac), mostly overnight.
 - He reviews the same day: about 1.5 to 2 hours a day, weekends included.
 - The Mac stays plugged in, with its lid open, on every night with runs.
-- The separate-Claude review and the full mutation run come once per week, not per item.
+- The independent review and the full mutation run come once per week, not per item.
 
-Reminders: scheduled tasks in the Claude app at 9 am and 8 pm, his local time, read this schedule and STATUS, and send him one line each: days left to Dec 7, today's targets, what waits on him, and whether the schedule is on track. They only read.
+Reminders: two scheduled tasks, at 9 am and 8 pm his local time, read this schedule and STATUS and send him one line each: days left to Dec 7, today's targets, what waits for his call, and whether the schedule is on track. They only read.
 
 **Cut order if a week slips:** Terraform first, then the Go service, then the web panel. Keep Kubernetes (it is part of what Klaxon does: undoing a bad rollout). Not used: on 2026-11-06 Aravind chose no scope cut, and the schedule above instead.
 
-**Time budget:** Claude about 2-2.5 hours a day, 6 days a week. Aravind 1-1.5 hours a day: kick off a milestone, do other work while Claude builds, then 30-45 minutes reviewing (run it, read the files Claude points to, make the decisions Claude brings). From 2026-11-06: Aravind about 1.5 to 2 hours a day, weekends included (the schedule above).
+**Time budget:** Aravind 1 to 1.5 hours a day at first; from 2026-11-06, about 1.5 to 2 hours a day, weekends included (the schedule above). For each milestone he plans it, then reviews the result: he runs it, reads the key files and makes the decisions.
 
 ## Course requirements this must satisfy
 

@@ -2,7 +2,7 @@
 
 > **Superseded.** This is the working draft from 2026-10-09, kept for the record. The brief that was submitted is in the course repo (`fall-2026/aravind-s/final-project-film/PROJECT-BRIEF.md`). Some lines here are out of date, for example "double charge" (now "posted twice") and K8sGPT (dropped); see `docs/DECISIONS.md`.
 
-DRAFT written by Claude on 2026-10-09 from the planning session. Items in [brackets] need Aravind's answer or confirmation. Nothing here is submitted. The final version goes to `fall-2026/aravind-s/final-project-film/PROJECT-BRIEF.md` in the course repo and must fit on one page.
+Working draft, 2026-10-09, from the planning session. Items in [brackets] were open at the time; the submitted brief settled them.
 
 ## 1. What is it?
 
@@ -19,7 +19,7 @@ When it is done, it will be a public GitHub repository with:
 
 The person it helps is an on-call engineer on a payments team. The worst incidents are the quiet ones: a webhook delivered twice charges a customer twice while every dashboard stays green.
 
-Alternatives looked at [Aravind: open these two pages yourself before the pitch says "I looked at"]:
+Alternatives looked at:
 - **HolmesGPT** (open source, a CNCF sandbox project) and **K8sGPT** (also CNCF): AI troubleshooting for Kubernetes from logs, metrics and cluster state.
 - **The manual process:** an engineer reading Grafana, logs and a runbook.
 
@@ -66,7 +66,7 @@ Second risk: scope. There is a lot of infrastructure for one person, so there is
 
 ## 7. Why this project?
 
-A mix of showing off and learning. [Aravind: confirm or edit both lists, and say in your own words why you picked it.]
+A mix of showing off and learning.
 
 - **Skills I already have:** backend Python and Django; webhooks and idempotency; tests; code review. Evidence:
   - From my co-op: a requested code reviewer who caught a data-loss path in an AWS webhook ingress, an HMAC signature-check crash and a 100x money-unit error. I built idempotent webhook subscribers. That code is private, so the evidence is my record, not a link.

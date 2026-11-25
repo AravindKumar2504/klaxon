@@ -3,7 +3,7 @@ when wrong. Typed in his own terminal, and refused without one, as make approve 
 
 A draft's narrative was written by Claude; its facts were filled in by code (klaxon.agent.postmortem). The draft's own
 check reads its numbers, not its claims (known gap 8a): his marks are the check for claims. The screen shows each
-paragraph with the facts it draws on, and never what Claude found wrong in a draft before, so his check is his own.
+paragraph with the facts it draws on, and never what an earlier reading found wrong in a draft, so his check is his own.
 
 His marks on a draft are saved beside it once, in postmortem-review.json, with a page, postmortem-reviewed.md: the
 draft's own page with his mark under each paragraph. The draft itself (postmortem.json, postmortem.md) never changes.

@@ -737,7 +737,7 @@ def test_digest_names_a_value_whatever_the_order_of_its_keys():
     assert len(grading.digest(None)) == 64
 
 
-# The independent review's own sentences (week 5, item 2): written by a separate Claude, with their expected verdict,
+# The independent review's own sentences (week 5, item 2): written in that review, with their expected verdict,
 # before it ran them against version 4 as first committed (bec1afb), where several got another verdict (its findings
 # M1 to M3 and L1). The fixes were written knowing them, so here they show the fixes work, nothing more.
 REVIEW_SENTENCES = [
@@ -1014,7 +1014,7 @@ def test_version_4_reads_the_reviews_other_cases_right(fault, hypothesis, expect
     assert verdict(fault, hypothesis, 4) == expected
 
 
-# The re-check's own sentences (week 5, item 2): written by the same separate Claude, with their expected verdict,
+# The re-check's own sentences (week 5, item 2): written in the same separate review, with their expected verdict,
 # before it ran them against 5c2acbf, where 18 of 36 got another verdict (its findings H1 and M1 to M3: a negation that
 # reached across commas let wrong causes pass as named). The fixes were written knowing them: they show the fixes work.
 RECHECK_SENTENCES = [

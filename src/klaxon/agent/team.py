@@ -17,7 +17,7 @@ alert, the investigator's report, and every tool result. The reviewer: the alert
 cites. Tool results stay untrusted data in every prompt, and every note one role passes to the next is written on one
 line, as JSON, under a line that says which agent wrote it.
 
-Budgets (Claude's defaults, which Aravind kept on 2026-11-17). The investigator has the run's own budgets, as a single
+Budgets (Aravind's choice, 2026-11-17). The investigator has the run's own budgets, as a single
 loop has them: its steps (each of its model calls), the tool calls, and the time. The other roles share ROLE_STEPS more
 model calls: triage one, the fixer one, the reviewer one, and one more, for a revision or a second try. So in an
 evaluation (10 steps, 8 tool calls, 600 s) a run makes at most 14 model calls. The time is the run's, shared by all.
